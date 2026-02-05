@@ -1,63 +1,97 @@
-"""Usecase logic for input nodes."""
+"""Input node use case implementation."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from enums import NodeType
-from exceptions import ConflictError, ResourceNotFoundError
+from enums import InputFormat, NodeType
+from exceptions import NodeConfigExistsError, NodeNotFoundError, NodeTypeMismatchError
+from models import InputNode
 from repositories import InputNodeRepository, NodeRepository
-from schemas import InputNodeCreate, InputNodeResponse, InputNodeUpdate
 
 
 class InputNodeUsecase:
-    """Usecase operations for input node configurations."""
+    """Input node business logic."""
 
     def __init__(self) -> None:
-        """Initialize repositories for input node operations."""
+        """Initialize the usecase."""
         self._input_repository = InputNodeRepository()
         self._node_repository = NodeRepository()
 
     async def create_input_node(
-        self, session: AsyncSession, data: InputNodeCreate
-    ) -> InputNodeResponse:
-        """Create an input node configuration."""
-        node = await self._node_repository.get_by(session=session, id=data.node_id)
+        self,
+        session: AsyncSession,
+        node_id: int,
+        format: InputFormat = InputFormat.TEXT,  # noqa: A002
+    ) -> InputNode:
+        """Create an input node configuration.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+            format: The input format.
+
+        Returns:
+            The created input node.
+
+        Raises:
+            NodeNotFoundError: If the node is not found.
+            NodeTypeMismatchError: If the node type is not INPUT.
+            NodeConfigExistsError: If config already exists.
+
+        """
+        node = await self._node_repository.get_by(session=session, id=node_id)
         if not node:
-            resource = "Node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError
         if node.type != NodeType.INPUT:
-            message = "Node type is not INPUT"
-            raise ConflictError(message)
+            raise NodeTypeMismatchError
 
-        existing = await self._input_repository.get_by(
-            session=session, node_id=data.node_id
-        )
+        existing = await self._input_repository.get_by(session=session, node_id=node_id)
         if existing:
-            message = "Input node config already exists"
-            raise ConflictError(message)
+            raise NodeConfigExistsError
 
-        input_node = await self._input_repository.create(
+        return await self._input_repository.create(
             session=session,
-            data={"node_id": data.node_id, "format": data.format},
+            data={"node_id": node_id, "format": format},
         )
-        return InputNodeResponse.model_validate(input_node)
 
-    async def get_input_node(
-        self, session: AsyncSession, node_id: int
-    ) -> InputNodeResponse:
-        """Fetch an input node configuration by node ID."""
+    async def get_input_node(self, session: AsyncSession, node_id: int) -> InputNode:
+        """Fetch an input node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Returns:
+            The input node.
+
+        Raises:
+            NodeNotFoundError: If the input node is not found.
+
+        """
         input_node = await self._input_repository.get_by(
             session=session, node_id=node_id
         )
         if not input_node:
-            resource = "Input node"
-            raise ResourceNotFoundError(resource)
-        return InputNodeResponse.model_validate(input_node)
+            raise NodeNotFoundError
+        return input_node
 
     async def update_input_node(
-        self, session: AsyncSession, node_id: int, data: InputNodeUpdate
-    ) -> InputNodeResponse:
-        """Update an input node configuration by node ID."""
-        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        self, session: AsyncSession, node_id: int, **kwargs: object
+    ) -> InputNode:
+        """Update an input node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+            **kwargs: The fields to update.
+
+        Returns:
+            The updated input node.
+
+        Raises:
+            NodeNotFoundError: If the input node is not found.
+
+        """
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_input_node(session=session, node_id=node_id)
 
@@ -67,15 +101,22 @@ class InputNodeUsecase:
             node_id=node_id,
         )
         if not input_node:
-            resource = "Input node"
-            raise ResourceNotFoundError(resource)
-        return InputNodeResponse.model_validate(input_node)
+            raise NodeNotFoundError
+        return input_node
 
     async def delete_input_node(self, session: AsyncSession, node_id: int) -> None:
-        """Delete an input node configuration by node ID."""
+        """Delete an input node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Raises:
+            NodeNotFoundError: If the input node is not found.
+
+        """
         deleted = await self._input_repository.delete_by(
             session=session, node_id=node_id
         )
         if not deleted:
-            resource = "Input node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError

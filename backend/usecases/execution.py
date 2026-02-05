@@ -1,76 +1,120 @@
-"""Usecase logic for executions."""
+"""Execution use case implementation."""
 
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from enums import ExecutionStatus
-from exceptions import ResourceNotFoundError
+from exceptions import ExecutionNotFoundError, WorkflowNotFoundError
+from models import Execution
 from repositories import ExecutionRepository, WorkflowRepository
-from schemas import ExecutionCreate, ExecutionResponse, ExecutionUpdate
 
 
 class ExecutionUsecase:
-    """Usecase operations for executions."""
+    """Execution business logic."""
 
     def __init__(self) -> None:
-        """Initialize repositories for execution operations."""
+        """Initialize the usecase."""
         self._execution_repository = ExecutionRepository()
         self._workflow_repository = WorkflowRepository()
 
     async def create_execution(
-        self, session: AsyncSession, data: ExecutionCreate
-    ) -> ExecutionResponse:
-        """Create an execution for a workflow."""
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        input_data: dict | None = None,
+        status: ExecutionStatus | None = None,
+    ) -> Execution:
+        """Create an execution for a workflow.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+            input_data: The execution input data.
+            status: The execution status.
+
+        Returns:
+            The created execution.
+
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+
+        """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=data.workflow_id
+            session=session, id=workflow_id
         )
         if not workflow:
-            resource = "Workflow"
-            raise ResourceNotFoundError(resource)
+            raise WorkflowNotFoundError
 
         payload: dict[str, object] = {
-            "workflow_id": data.workflow_id,
-            "input_data": data.input_data,
+            "workflow_id": workflow_id,
+            "input_data": input_data,
         }
-        if data.status is not None:
-            payload["status"] = data.status
+        if status is not None:
+            payload["status"] = status
 
-        execution = await self._execution_repository.create(
+        return await self._execution_repository.create(
             session=session,
             data=payload,
         )
-        return ExecutionResponse.model_validate(execution)
 
     async def get_executions(
         self, session: AsyncSession, workflow_id: int | None = None
-    ) -> list[ExecutionResponse]:
-        """List executions, optionally filtered by workflow."""
+    ) -> list[Execution]:
+        """List executions, optionally filtered by workflow.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+
+        Returns:
+            The list of executions.
+
+        """
         filters = {"workflow_id": workflow_id} if workflow_id else {}
-        return [
-            ExecutionResponse.model_validate(execution)
-            for execution in await self._execution_repository.get_all(
-                session=session, **filters
-            )
-        ]
+        return await self._execution_repository.get_all(session=session, **filters)
 
     async def get_execution(
         self, session: AsyncSession, execution_id: int
-    ) -> ExecutionResponse:
-        """Fetch an execution by ID."""
+    ) -> Execution:
+        """Fetch an execution by ID.
+
+        Args:
+            session: The session.
+            execution_id: The execution ID.
+
+        Returns:
+            The execution.
+
+        Raises:
+            ExecutionNotFoundError: If the execution is not found.
+
+        """
         execution = await self._execution_repository.get_by(
             session=session, id=execution_id
         )
         if not execution:
-            resource = "Execution"
-            raise ResourceNotFoundError(resource)
-        return ExecutionResponse.model_validate(execution)
+            raise ExecutionNotFoundError
+        return execution
 
     async def update_execution(
-        self, session: AsyncSession, execution_id: int, data: ExecutionUpdate
-    ) -> ExecutionResponse:
-        """Update an execution by ID."""
-        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        self, session: AsyncSession, execution_id: int, **kwargs: object
+    ) -> Execution:
+        """Update an execution by ID.
+
+        Args:
+            session: The session.
+            execution_id: The execution ID.
+            **kwargs: The fields to update.
+
+        Returns:
+            The updated execution.
+
+        Raises:
+            ExecutionNotFoundError: If the execution is not found.
+
+        """
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_execution(session=session, execution_id=execution_id)
 
@@ -84,15 +128,22 @@ class ExecutionUsecase:
             id=execution_id,
         )
         if not execution:
-            resource = "Execution"
-            raise ResourceNotFoundError(resource)
-        return ExecutionResponse.model_validate(execution)
+            raise ExecutionNotFoundError
+        return execution
 
     async def delete_execution(self, session: AsyncSession, execution_id: int) -> None:
-        """Delete an execution by ID."""
+        """Delete an execution by ID.
+
+        Args:
+            session: The session.
+            execution_id: The execution ID.
+
+        Raises:
+            ExecutionNotFoundError: If the execution is not found.
+
+        """
         deleted = await self._execution_repository.delete_by(
             session=session, id=execution_id
         )
         if not deleted:
-            resource = "Execution"
-            raise ResourceNotFoundError(resource)
+            raise ExecutionNotFoundError

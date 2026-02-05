@@ -9,57 +9,80 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies import db
 from dependencies import edge as edge_dependency
 from schemas import EdgeCreate, EdgeResponse, EdgeUpdate
-from usecases import EdgeUsecase
 
 router = APIRouter(prefix="/edges", tags=["Edges"])
 
 
 @router.post(path="", status_code=status.HTTP_201_CREATED)
 async def create_edge(
-    data: Annotated[EdgeCreate, Body(default=...)],
-    session: Annotated[AsyncSession, Depends(db.get_session)],
-    usecase: Annotated[EdgeUsecase, Depends(edge_dependency.get_edge_usecase)],
+    data: Annotated[EdgeCreate, Body(description="Data for creating an edge")],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        edge_dependency.EdgeUsecase,
+        Depends(dependency=edge_dependency.get_edge_usecase),
+    ],
 ) -> EdgeResponse:
     """Create a new edge."""
-    return await usecase.create_edge(session=session, data=data)
+    return EdgeResponse.model_validate(
+        await usecase.create_edge(session=session, **data.model_dump())
+    )
 
 
 @router.get(path="")
 async def list_edges(
-    session: Annotated[AsyncSession, Depends(db.get_session)],
-    usecase: Annotated[EdgeUsecase, Depends(edge_dependency.get_edge_usecase)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        edge_dependency.EdgeUsecase,
+        Depends(dependency=edge_dependency.get_edge_usecase),
+    ],
     workflow_id: Annotated[int | None, Query()] = None,
 ) -> list[EdgeResponse]:
     """List edges, optionally filtered by workflow."""
-    return await usecase.get_edges(session=session, workflow_id=workflow_id)
+    return [
+        EdgeResponse.model_validate(edge)
+        for edge in await usecase.get_edges(session=session, workflow_id=workflow_id)
+    ]
 
 
 @router.get(path="/{edge_id}")
 async def get_edge(
-    edge_id: Annotated[int, Path(default=..., gt=0)],
-    session: Annotated[AsyncSession, Depends(db.get_session)],
-    usecase: Annotated[EdgeUsecase, Depends(edge_dependency.get_edge_usecase)],
+    edge_id: Annotated[int, Path(description="Edge ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        edge_dependency.EdgeUsecase,
+        Depends(dependency=edge_dependency.get_edge_usecase),
+    ],
 ) -> EdgeResponse:
     """Fetch a single edge by ID."""
-    return await usecase.get_edge(session=session, edge_id=edge_id)
+    return EdgeResponse.model_validate(
+        await usecase.get_edge(session=session, edge_id=edge_id)
+    )
 
 
 @router.patch(path="/{edge_id}")
 async def update_edge(
-    edge_id: Annotated[int, Path(default=..., gt=0)],
-    data: Annotated[EdgeUpdate, Body(default=...)],
-    session: Annotated[AsyncSession, Depends(db.get_session)],
-    usecase: Annotated[EdgeUsecase, Depends(edge_dependency.get_edge_usecase)],
+    edge_id: Annotated[int, Path(description="Edge ID", gt=0)],
+    data: Annotated[EdgeUpdate, Body(description="Data for updating an edge")],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        edge_dependency.EdgeUsecase,
+        Depends(dependency=edge_dependency.get_edge_usecase),
+    ],
 ) -> EdgeResponse:
     """Update an edge by ID."""
-    return await usecase.update_edge(session=session, edge_id=edge_id, data=data)
+    return EdgeResponse.model_validate(
+        await usecase.update_edge(session=session, edge_id=edge_id, **data.model_dump())
+    )
 
 
 @router.delete(path="/{edge_id}", status_code=status.HTTP_202_ACCEPTED)
 async def delete_edge(
-    edge_id: Annotated[int, Path(default=..., gt=0)],
-    session: Annotated[AsyncSession, Depends(db.get_session)],
-    usecase: Annotated[EdgeUsecase, Depends(edge_dependency.get_edge_usecase)],
+    edge_id: Annotated[int, Path(description="Edge ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        edge_dependency.EdgeUsecase,
+        Depends(dependency=edge_dependency.get_edge_usecase),
+    ],
 ) -> JSONResponse:
     """Delete an edge by ID."""
     await usecase.delete_edge(session=session, edge_id=edge_id)

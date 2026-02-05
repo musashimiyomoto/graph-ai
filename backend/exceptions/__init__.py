@@ -1,18 +1,29 @@
 """Custom exception types for the API."""
 
 from exceptions.auth import AuthCredentialsError
-from exceptions.bad_request import BadRequestError
 from exceptions.base import BaseError
-from exceptions.conflict import ConflictError
-from exceptions.not_found import ResourceNotFoundError
+from exceptions.edge import EdgeNodeMismatchError, EdgeNotFoundError
+from exceptions.execution import ExecutionNotFoundError
+from exceptions.llm_provider import LLMProviderNotFoundError
+from exceptions.node import (
+    NodeConfigExistsError,
+    NodeNotFoundError,
+    NodeTypeMismatchError,
+)
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
+from exceptions.workflow import WorkflowNotFoundError
 
 __all__ = [
     "AuthCredentialsError",
-    "BadRequestError",
     "BaseError",
-    "ConflictError",
-    "ResourceNotFoundError",
+    "EdgeNodeMismatchError",
+    "EdgeNotFoundError",
+    "ExecutionNotFoundError",
+    "LLMProviderNotFoundError",
+    "NodeConfigExistsError",
+    "NodeNotFoundError",
+    "NodeTypeMismatchError",
     "UserAlreadyExistsError",
     "UserNotFoundError",
+    "WorkflowNotFoundError",
 ]

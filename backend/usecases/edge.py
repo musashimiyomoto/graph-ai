@@ -1,86 +1,135 @@
-"""Usecase logic for edges."""
+"""Edge use case implementation."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import BadRequestError, ResourceNotFoundError
+from exceptions import (
+    EdgeNodeMismatchError,
+    EdgeNotFoundError,
+    NodeNotFoundError,
+    WorkflowNotFoundError,
+)
+from models import Edge
 from repositories import EdgeRepository, NodeRepository, WorkflowRepository
-from schemas import EdgeCreate, EdgeResponse, EdgeUpdate
 
 
 class EdgeUsecase:
-    """Usecase operations for edges."""
+    """Edge business logic."""
 
     def __init__(self) -> None:
-        """Initialize repositories for edge operations."""
+        """Initialize the usecase."""
         self._edge_repository = EdgeRepository()
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
 
     async def create_edge(
-        self, session: AsyncSession, data: EdgeCreate
-    ) -> EdgeResponse:
-        """Create an edge between nodes in a workflow."""
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        source_node_id: int,
+        target_node_id: int,
+    ) -> Edge:
+        """Create an edge between nodes in a workflow.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+            source_node_id: The source node ID.
+            target_node_id: The target node ID.
+
+        Returns:
+            The created edge.
+
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+            NodeNotFoundError: If the source or target node is not found.
+            EdgeNodeMismatchError: If the nodes do not belong to the workflow.
+
+        """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=data.workflow_id
+            session=session, id=workflow_id
         )
         if not workflow:
-            resource = "Workflow"
-            raise ResourceNotFoundError(resource)
+            raise WorkflowNotFoundError
 
         source_node = await self._node_repository.get_by(
-            session=session, id=data.source_node_id
+            session=session, id=source_node_id
         )
         if not source_node:
-            resource = "Source node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError
 
         target_node = await self._node_repository.get_by(
-            session=session, id=data.target_node_id
+            session=session, id=target_node_id
         )
         if not target_node:
-            resource = "Target node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError
 
-        if source_node.workflow_id != data.workflow_id:
-            message = "Source node does not belong to workflow"
-            raise BadRequestError(message)
-        if target_node.workflow_id != data.workflow_id:
-            message = "Target node does not belong to workflow"
-            raise BadRequestError(message)
+        if source_node.workflow_id != workflow_id:
+            raise EdgeNodeMismatchError
+        if target_node.workflow_id != workflow_id:
+            raise EdgeNodeMismatchError
 
-        edge = await self._edge_repository.create(
+        return await self._edge_repository.create(
             session=session,
             data={
-                "workflow_id": data.workflow_id,
-                "source_node_id": data.source_node_id,
-                "target_node_id": data.target_node_id,
+                "workflow_id": workflow_id,
+                "source_node_id": source_node_id,
+                "target_node_id": target_node_id,
             },
         )
-        return EdgeResponse.model_validate(edge)
 
     async def get_edges(
         self, session: AsyncSession, workflow_id: int | None = None
-    ) -> list[EdgeResponse]:
-        """List edges, optionally filtered by workflow."""
-        filters = {"workflow_id": workflow_id} if workflow_id else {}
-        return [
-            EdgeResponse.model_validate(edge)
-            for edge in await self._edge_repository.get_all(session=session, **filters)
-        ]
+    ) -> list[Edge]:
+        """List edges, optionally filtered by workflow.
 
-    async def get_edge(self, session: AsyncSession, edge_id: int) -> EdgeResponse:
-        """Fetch an edge by ID."""
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+
+        Returns:
+            The list of edges.
+
+        """
+        filters = {"workflow_id": workflow_id} if workflow_id else {}
+        return await self._edge_repository.get_all(session=session, **filters)
+
+    async def get_edge(self, session: AsyncSession, edge_id: int) -> Edge:
+        """Fetch an edge by ID.
+
+        Args:
+            session: The session.
+            edge_id: The edge ID.
+
+        Returns:
+            The edge.
+
+        Raises:
+            EdgeNotFoundError: If the edge is not found.
+
+        """
         edge = await self._edge_repository.get_by(session=session, id=edge_id)
         if not edge:
-            resource = "Edge"
-            raise ResourceNotFoundError(resource)
-        return EdgeResponse.model_validate(edge)
+            raise EdgeNotFoundError
+        return edge
 
     async def update_edge(
-        self, session: AsyncSession, edge_id: int, data: EdgeUpdate
-    ) -> EdgeResponse:
-        """Update an edge by ID."""
-        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        self, session: AsyncSession, edge_id: int, **kwargs: object
+    ) -> Edge:
+        """Update an edge by ID.
+
+        Args:
+            session: The session.
+            edge_id: The edge ID.
+            **kwargs: The fields to update.
+
+        Returns:
+            The updated edge.
+
+        Raises:
+            EdgeNotFoundError: If the edge is not found.
+
+        """
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_edge(session=session, edge_id=edge_id)
 
@@ -90,13 +139,20 @@ class EdgeUsecase:
             id=edge_id,
         )
         if not edge:
-            resource = "Edge"
-            raise ResourceNotFoundError(resource)
-        return EdgeResponse.model_validate(edge)
+            raise EdgeNotFoundError
+        return edge
 
     async def delete_edge(self, session: AsyncSession, edge_id: int) -> None:
-        """Delete an edge by ID."""
+        """Delete an edge by ID.
+
+        Args:
+            session: The session.
+            edge_id: The edge ID.
+
+        Raises:
+            EdgeNotFoundError: If the edge is not found.
+
+        """
         deleted = await self._edge_repository.delete_by(session=session, id=edge_id)
         if not deleted:
-            resource = "Edge"
-            raise ResourceNotFoundError(resource)
+            raise EdgeNotFoundError

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserBase(BaseModel):
@@ -20,12 +20,9 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     """User response schema."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int = Field(default=..., description="ID of the user", gt=0)
 
     created_at: datetime = Field(default=..., description="Created at")
     updated_at: datetime = Field(default=..., description="Updated at")
-
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True

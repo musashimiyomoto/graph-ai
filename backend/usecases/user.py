@@ -19,5 +19,8 @@ class UserUsecase:
             session: The session.
             user_id: The user id.
 
+        Raises:
+            UserNotFoundError: If the user is not found.
+
         """
         await self._user_repository.delete_by(session=session, id=user_id)

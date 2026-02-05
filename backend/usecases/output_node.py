@@ -1,63 +1,99 @@
-"""Usecase logic for output nodes."""
+"""Output node use case implementation."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from enums import NodeType
-from exceptions import ConflictError, ResourceNotFoundError
+from enums import NodeType, OutputFormat
+from exceptions import NodeConfigExistsError, NodeNotFoundError, NodeTypeMismatchError
+from models import OutputNode
 from repositories import NodeRepository, OutputNodeRepository
-from schemas import OutputNodeCreate, OutputNodeResponse, OutputNodeUpdate
 
 
 class OutputNodeUsecase:
-    """Usecase operations for output node configurations."""
+    """Output node business logic."""
 
     def __init__(self) -> None:
-        """Initialize repositories for output node operations."""
+        """Initialize the usecase."""
         self._output_repository = OutputNodeRepository()
         self._node_repository = NodeRepository()
 
     async def create_output_node(
-        self, session: AsyncSession, data: OutputNodeCreate
-    ) -> OutputNodeResponse:
-        """Create an output node configuration."""
-        node = await self._node_repository.get_by(session=session, id=data.node_id)
+        self,
+        session: AsyncSession,
+        node_id: int,
+        format: OutputFormat = OutputFormat.TEXT,  # noqa: A002
+    ) -> OutputNode:
+        """Create an output node configuration.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+            format: The output format.
+
+        Returns:
+            The created output node.
+
+        Raises:
+            NodeNotFoundError: If the node is not found.
+            NodeTypeMismatchError: If the node type is not OUTPUT.
+            NodeConfigExistsError: If config already exists.
+
+        """
+        node = await self._node_repository.get_by(session=session, id=node_id)
         if not node:
-            resource = "Node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError
         if node.type != NodeType.OUTPUT:
-            message = "Node type is not OUTPUT"
-            raise ConflictError(message)
+            raise NodeTypeMismatchError
 
         existing = await self._output_repository.get_by(
-            session=session, node_id=data.node_id
+            session=session, node_id=node_id
         )
         if existing:
-            message = "Output node config already exists"
-            raise ConflictError(message)
+            raise NodeConfigExistsError
 
-        output_node = await self._output_repository.create(
+        return await self._output_repository.create(
             session=session,
-            data={"node_id": data.node_id, "format": data.format},
+            data={"node_id": node_id, "format": format},
         )
-        return OutputNodeResponse.model_validate(output_node)
 
-    async def get_output_node(
-        self, session: AsyncSession, node_id: int
-    ) -> OutputNodeResponse:
-        """Fetch an output node configuration by node ID."""
+    async def get_output_node(self, session: AsyncSession, node_id: int) -> OutputNode:
+        """Fetch an output node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Returns:
+            The output node.
+
+        Raises:
+            NodeNotFoundError: If the output node is not found.
+
+        """
         output_node = await self._output_repository.get_by(
             session=session, node_id=node_id
         )
         if not output_node:
-            resource = "Output node"
-            raise ResourceNotFoundError(resource)
-        return OutputNodeResponse.model_validate(output_node)
+            raise NodeNotFoundError
+        return output_node
 
     async def update_output_node(
-        self, session: AsyncSession, node_id: int, data: OutputNodeUpdate
-    ) -> OutputNodeResponse:
-        """Update an output node configuration by node ID."""
-        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        self, session: AsyncSession, node_id: int, **kwargs: object
+    ) -> OutputNode:
+        """Update an output node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+            **kwargs: The fields to update.
+
+        Returns:
+            The updated output node.
+
+        Raises:
+            NodeNotFoundError: If the output node is not found.
+
+        """
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_output_node(session=session, node_id=node_id)
 
@@ -67,15 +103,22 @@ class OutputNodeUsecase:
             node_id=node_id,
         )
         if not output_node:
-            resource = "Output node"
-            raise ResourceNotFoundError(resource)
-        return OutputNodeResponse.model_validate(output_node)
+            raise NodeNotFoundError
+        return output_node
 
     async def delete_output_node(self, session: AsyncSession, node_id: int) -> None:
-        """Delete an output node configuration by node ID."""
+        """Delete an output node configuration by node ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Raises:
+            NodeNotFoundError: If the output node is not found.
+
+        """
         deleted = await self._output_repository.delete_by(
             session=session, node_id=node_id
         )
         if not deleted:
-            resource = "Output node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError

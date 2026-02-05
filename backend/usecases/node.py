@@ -1,65 +1,114 @@
-"""Usecase logic for nodes."""
+"""Node use case implementation."""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import ResourceNotFoundError
+from enums import NodeType
+from exceptions import NodeNotFoundError, WorkflowNotFoundError
+from models import Node
 from repositories import NodeRepository, WorkflowRepository
-from schemas import NodeCreate, NodeResponse, NodeUpdate
 
 
 class NodeUsecase:
-    """Usecase operations for nodes."""
+    """Node business logic."""
 
     def __init__(self) -> None:
-        """Initialize repositories for node operations."""
+        """Initialize the usecase."""
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
 
     async def create_node(
-        self, session: AsyncSession, data: NodeCreate
-    ) -> NodeResponse:
-        """Create a node within a workflow."""
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        type: NodeType,  # noqa: A002
+        position_x: float = 0.0,
+        position_y: float = 0.0,
+    ) -> Node:
+        """Create a node within a workflow.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+            type: The node type.
+            position_x: The X position on canvas.
+            position_y: The Y position on canvas.
+
+        Returns:
+            The created node.
+
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+
+        """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=data.workflow_id
+            session=session, id=workflow_id
         )
         if not workflow:
-            resource = "Workflow"
-            raise ResourceNotFoundError(resource)
+            raise WorkflowNotFoundError
 
-        node = await self._node_repository.create(
+        return await self._node_repository.create(
             session=session,
             data={
-                "workflow_id": data.workflow_id,
-                "type": data.type,
-                "position_x": data.position_x,
-                "position_y": data.position_y,
+                "workflow_id": workflow_id,
+                "type": type,
+                "position_x": position_x,
+                "position_y": position_y,
             },
         )
-        return NodeResponse.model_validate(node)
 
     async def get_nodes(
         self, session: AsyncSession, workflow_id: int | None = None
-    ) -> list[NodeResponse]:
-        """List nodes, optionally filtered by workflow."""
-        filters = {"workflow_id": workflow_id} if workflow_id else {}
-        return [
-            NodeResponse.model_validate(node)
-            for node in await self._node_repository.get_all(session=session, **filters)
-        ]
+    ) -> list[Node]:
+        """List nodes, optionally filtered by workflow.
 
-    async def get_node(self, session: AsyncSession, node_id: int) -> NodeResponse:
-        """Fetch a node by ID."""
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+
+        Returns:
+            The list of nodes.
+
+        """
+        filters = {"workflow_id": workflow_id} if workflow_id else {}
+        return await self._node_repository.get_all(session=session, **filters)
+
+    async def get_node(self, session: AsyncSession, node_id: int) -> Node:
+        """Fetch a node by ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Returns:
+            The node.
+
+        Raises:
+            NodeNotFoundError: If the node is not found.
+
+        """
         node = await self._node_repository.get_by(session=session, id=node_id)
         if not node:
-            resource = "Node"
-            raise ResourceNotFoundError(resource)
-        return NodeResponse.model_validate(node)
+            raise NodeNotFoundError
+        return node
 
     async def update_node(
-        self, session: AsyncSession, node_id: int, data: NodeUpdate
-    ) -> NodeResponse:
-        """Update a node by ID."""
-        update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+        self, session: AsyncSession, node_id: int, **kwargs: object
+    ) -> Node:
+        """Update a node by ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+            **kwargs: The fields to update.
+
+        Returns:
+            The updated node.
+
+        Raises:
+            NodeNotFoundError: If the node is not found.
+
+        """
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_node(session=session, node_id=node_id)
 
@@ -69,13 +118,20 @@ class NodeUsecase:
             id=node_id,
         )
         if not node:
-            resource = "Node"
-            raise ResourceNotFoundError(resource)
-        return NodeResponse.model_validate(node)
+            raise NodeNotFoundError
+        return node
 
     async def delete_node(self, session: AsyncSession, node_id: int) -> None:
-        """Delete a node by ID."""
+        """Delete a node by ID.
+
+        Args:
+            session: The session.
+            node_id: The node ID.
+
+        Raises:
+            NodeNotFoundError: If the node is not found.
+
+        """
         deleted = await self._node_repository.delete_by(session=session, id=node_id)
         if not deleted:
-            resource = "Node"
-            raise ResourceNotFoundError(resource)
+            raise NodeNotFoundError
