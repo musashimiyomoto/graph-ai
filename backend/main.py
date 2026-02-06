@@ -1,4 +1,4 @@
-"""Backend entrypoint."""
+"""Graph AI Backend entrypoint."""
 
 import logging
 
@@ -11,11 +11,8 @@ from routers import (
     edge,
     execution,
     health,
-    input_node,
-    llm_node,
     llm_provider,
     node,
-    output_node,
     user,
     workflow,
 )
@@ -27,7 +24,16 @@ app = FastAPI(title="Graph AI Backend")
 
 @app.exception_handler(BaseError)
 async def handle_base_error(_: Request, exc: BaseError) -> JSONResponse:
-    """Convert domain errors into JSON responses."""
+    """Handle domain errors as JSON responses.
+
+    Args:
+        _: The incoming request.
+        exc: The domain error.
+
+    Returns:
+        A JSON response with the error detail.
+
+    """
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
@@ -39,6 +45,3 @@ app.include_router(node.router)
 app.include_router(edge.router)
 app.include_router(execution.router)
 app.include_router(llm_provider.router)
-app.include_router(input_node.router)
-app.include_router(llm_node.router)
-app.include_router(output_node.router)

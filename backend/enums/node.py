@@ -9,15 +9,3 @@ class NodeType(StrEnum):
     INPUT = auto()
     LLM = auto()
     OUTPUT = auto()
-
-
-class InputFormat(StrEnum):
-    """Input node payload formats."""
-
-    TEXT = auto()
-
-
-class OutputFormat(StrEnum):
-    """Output node payload formats."""
-
-    TEXT = auto()

@@ -1,10 +1,11 @@
 """Node models."""
 
-from sqlalchemy import Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import Enum, Float, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from enums import InputFormat, NodeType, OutputFormat
-from models import Base, BaseWithID
+from enums import NodeType
+from models import BaseWithID
 
 
 class Node(BaseWithID):
@@ -23,6 +24,15 @@ class Node(BaseWithID):
         nullable=False,
         comment="Node type",
     )
+
+    data: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default="{}",
+        nullable=False,
+        comment="Node configuration data",
+    )
+
     position_x: Mapped[float] = mapped_column(
         Float,
         default=0.0,
@@ -32,73 +42,4 @@ class Node(BaseWithID):
         Float,
         default=0.0,
         comment="Y position on canvas",
-    )
-
-
-class InputNode(Base):
-    """Input node configuration."""
-
-    __tablename__ = "input_nodes"
-
-    node_id: Mapped[int] = mapped_column(
-        ForeignKey("nodes.id", ondelete="CASCADE"),
-        primary_key=True,
-        comment="Parent node ID",
-    )
-
-    format: Mapped[InputFormat] = mapped_column(
-        Enum(InputFormat),
-        default=InputFormat.TEXT,
-        comment="Input format type",
-    )
-
-
-class LLMNode(Base):
-    """LLM node configuration."""
-
-    __tablename__ = "llm_nodes"
-
-    node_id: Mapped[int] = mapped_column(
-        ForeignKey("nodes.id", ondelete="CASCADE"),
-        primary_key=True,
-        comment="Parent node ID",
-    )
-    llm_provider_id: Mapped[int] = mapped_column(
-        ForeignKey("llm_providers.id", ondelete="RESTRICT"),
-        nullable=False,
-        comment="LLM provider ID",
-    )
-
-    model: Mapped[str] = mapped_column(
-        String(128),
-        nullable=False,
-        comment="Model identifier (e.g., gpt-4)",
-    )
-    temperature: Mapped[float] = mapped_column(
-        Float,
-        default=0.7,
-        comment="Sampling temperature (0.0-2.0)",
-    )
-    max_tokens: Mapped[int] = mapped_column(
-        Integer,
-        default=1024,
-        comment="Max tokens in response",
-    )
-
-
-class OutputNode(Base):
-    """Output node configuration."""
-
-    __tablename__ = "output_nodes"
-
-    node_id: Mapped[int] = mapped_column(
-        ForeignKey("nodes.id", ondelete="CASCADE"),
-        primary_key=True,
-        comment="Parent node ID",
-    )
-
-    format: Mapped[OutputFormat] = mapped_column(
-        Enum(OutputFormat),
-        default=OutputFormat.TEXT,
-        comment="Output format type",
     )

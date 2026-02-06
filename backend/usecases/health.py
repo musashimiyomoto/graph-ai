@@ -4,11 +4,13 @@ import asyncio
 from http import HTTPStatus
 
 import httpx
+import redis.asyncio
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from sessions import async_session
 from settings import chroma_settings, prefect_settings
+from utils.redis import redis_client
 
 
 class HealthUsecase:
@@ -62,6 +64,18 @@ class HealthUsecase:
         except httpx.HTTPError:
             return False
 
+    async def check_redis(self) -> bool:
+        """Check Redis connectivity.
+
+        Returns:
+            True if Redis is healthy, False otherwise.
+
+        """
+        try:
+            return await redis_client.ping()
+        except redis.RedisError:
+            return False
+
     async def health(self) -> dict[str, bool]:
         """Check all services concurrently.
 
@@ -71,6 +85,7 @@ class HealthUsecase:
         """
         tasks = [
             ("postgres", self.check_postgres()),
+            ("redis", self.check_redis()),
             ("chroma", self.check_chroma()),
             ("prefect", self.check_prefect()),
         ]
