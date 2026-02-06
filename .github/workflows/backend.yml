@@ -7,7 +7,7 @@ on:
     branches: [ master ]
 
 jobs:
-  lint-and-test:
+  lint:
     runs-on: ubuntu-latest
 
     defaults:
@@ -27,10 +27,32 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync
 
       - name: Run ruff
-        run: ruff check .
+        run: uv run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Run tests
-        run: pytest
+        run: uv run pytest tests/

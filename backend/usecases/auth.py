@@ -13,7 +13,7 @@ from exceptions import (
 from models import User
 from repositories import UserRepository
 from settings import auth_settings
-from utils.crypto import pwd_context
+from utils.crypto import hash_password, verify_password
 
 
 class AuthUsecase:
@@ -96,7 +96,7 @@ class AuthUsecase:
         if (
             not user
             or not user.hashed_password
-            or not pwd_context.verify(secret=password, hash=user.hashed_password)
+            or not verify_password(password=password, hashed=user.hashed_password)
         ):
             raise AuthCredentialsError
 
@@ -207,5 +207,5 @@ class AuthUsecase:
 
         return await self._user_repository.create(
             session=session,
-            data={"email": email, "hashed_password": pwd_context.hash(secret=password)},
+            data={"email": email, "hashed_password": hash_password(password=password)},
         )

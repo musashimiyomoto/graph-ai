@@ -7,7 +7,7 @@ import pytest
 from settings import auth_settings
 from tests.factories import UserFactory
 from tests.test_api.base import BaseTestCase
-from utils.crypto import pwd_context
+from utils.crypto import hash_password
 
 
 class TestAuthRegister(BaseTestCase):
@@ -54,7 +54,7 @@ class TestAuthLogin(BaseTestCase):
         await UserFactory.create_async(
             session=self.session,
             email=user_data["email"],
-            hashed_password=pwd_context.hash(user_data["password"]),
+            hashed_password=hash_password(user_data["password"]),
         )
 
         response = await self.client.post(

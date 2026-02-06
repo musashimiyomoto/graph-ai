@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from settings import auth_settings
 from tests.factories.user import UserFactory
-from utils.crypto import pwd_context
+from utils.crypto import hash_password
 
 
 class BaseTestCase:
@@ -51,7 +51,7 @@ class BaseTestCase:
         user = await UserFactory.create_async(
             session=self.session,
             email=email,
-            hashed_password=pwd_context.hash(password),
+            hashed_password=hash_password(password),
         )
 
         response = await self.client.post(
