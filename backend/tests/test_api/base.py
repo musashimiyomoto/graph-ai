@@ -25,9 +25,7 @@ class BaseTestCase:
         self.session = test_session
         self.client = test_client
 
-    async def assert_response_ok(
-        self, response: Response
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    async def assert_response_ok(self, response: Response) -> dict:
         """Assert a response has an OK/ACCEPTED status and return JSON."""
         if response.status_code not in {HTTPStatus.OK, HTTPStatus.ACCEPTED}:
             message = (
@@ -35,6 +33,20 @@ class BaseTestCase:
             )
             pytest.fail(message)
         return response.json()
+
+    async def assert_response_dict(self, response: Response) -> dict[str, Any]:
+        """Assert response OK and JSON object."""
+        data = await self.assert_response_ok(response=response)
+        if not isinstance(data, dict):
+            pytest.fail("Expected response to be an object")
+        return data
+
+    async def assert_response_list(self, response: Response) -> list[dict[str, Any]]:
+        """Assert response OK and JSON array of objects."""
+        data = await self.assert_response_ok(response=response)
+        if not isinstance(data, list):
+            pytest.fail("Expected response to be a list")
+        return [item for item in data if isinstance(item, dict)]
 
     def assert_has_keys(self, payload: Mapping[str, object], keys: set[str]) -> None:
         """Assert a mapping contains the required keys."""

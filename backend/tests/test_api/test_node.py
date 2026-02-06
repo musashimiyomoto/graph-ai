@@ -32,9 +32,7 @@ class TestNodeCreate(BaseTestCase):
 
         response = await self.client.post(url=self.url, json=payload, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected node response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
             {"id", "workflow_id", "type", "data", "position_x", "position_y"},
@@ -75,10 +73,8 @@ class TestNodeList(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, list):
-            pytest.fail("Expected node list response to be a list")
-        ids = {item.get("id") for item in data if isinstance(item, dict)}
+        data = await self.assert_response_list(response=response)
+        ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected nodes to appear in list")
 
@@ -104,9 +100,7 @@ class TestNodeGet(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected node response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["id"] != node.id:
             pytest.fail("Node id did not match")
 
@@ -139,9 +133,7 @@ class TestNodeUpdate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected node response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["position_x"] != new_x or data["position_y"] != new_y:
             pytest.fail("Node positions were not updated")
 

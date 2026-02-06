@@ -7,10 +7,10 @@ from models.node import Node
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 
-class NodeFactory(AsyncSQLAlchemyModelFactory):
+class NodeFactory(AsyncSQLAlchemyModelFactory[Node]):
     """Factory for creating Node instances."""
 
-    class Meta:  # type: ignore[assignment]
+    class Meta:
         """Factory meta configuration."""
 
         model = Node

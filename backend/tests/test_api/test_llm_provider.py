@@ -30,9 +30,7 @@ class TestLLMProviderCreate(BaseTestCase):
 
         response = await self.client.post(url=self.url, json=payload, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected provider response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
             {"id", "user_id", "name", "type", "base_url", "is_default"},
@@ -70,11 +68,8 @@ class TestLLMProviderList(BaseTestCase):
 
         response = await self.client.get(url=self.url, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, list):
-            pytest.fail("Expected provider list response to be a list")
-
-        ids = {item.get("id") for item in data if isinstance(item, dict)}
+        data = await self.assert_response_list(response=response)
+        ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected providers to appear in list")
         if other_provider.id in ids:
@@ -99,9 +94,7 @@ class TestLLMProviderGet(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected provider response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["id"] != provider.id:
             pytest.fail("Provider id did not match")
 
@@ -126,9 +119,7 @@ class TestLLMProviderUpdate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected provider response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["name"] != new_name:
             pytest.fail("Provider name was not updated")
         if data["is_default"] is not True:

@@ -70,9 +70,7 @@ class BaseRepository[Model: object]:
 
         """
         result = await session.execute(
-            statement=select(self.model)
-            .filter_by(**filters)
-            .order_by(self.model.id.asc())
+            statement=select(self.model).filter_by(**filters)
         )
 
         return list(result.scalars().all())

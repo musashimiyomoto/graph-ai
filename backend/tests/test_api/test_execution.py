@@ -28,9 +28,7 @@ class TestExecutionCreate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected execution response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(data, {"id", "workflow_id", "status", "started_at"})
         if data["workflow_id"] != workflow.id:
             pytest.fail("Execution workflow_id did not match request")
@@ -64,11 +62,8 @@ class TestExecutionList(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, list):
-            pytest.fail("Expected execution list response to be a list")
-
-        ids = {item.get("id") for item in data if isinstance(item, dict)}
+        data = await self.assert_response_list(response=response)
+        ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected executions to appear in list")
 
@@ -94,9 +89,7 @@ class TestExecutionGet(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected execution response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["id"] != execution.id:
             pytest.fail("Execution id did not match")
 
@@ -126,9 +119,7 @@ class TestExecutionUpdate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected execution response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["status"] != ExecutionStatus.SUCCESS:
             pytest.fail("Execution status was not updated")
         if data.get("finished_at") is None:

@@ -17,9 +17,7 @@ class TestUserMe(BaseTestCase):
 
         response = await self.client.get(url=self.url, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected user response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(data, {"id", "email", "created_at", "updated_at"})
         if data["id"] != user["id"]:
             pytest.fail("Response id did not match user id")

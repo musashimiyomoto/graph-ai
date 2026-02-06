@@ -26,9 +26,7 @@ class TestAuthRegister(BaseTestCase):
 
         response = await self.client.post(url=self.url, json=payload)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected user response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(data, {"id", "email", "created_at", "updated_at"})
         if data["email"] != payload["email"]:
             pytest.fail("Response email did not match request")
@@ -61,9 +59,7 @@ class TestAuthLogin(BaseTestCase):
             json={"email": user_data["email"], "password": user_data["password"]},
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected token response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(data, {"access_token", "token_type"})
         if data["token_type"] != auth_settings.token_type:
             pytest.fail("Token type did not match expected value")

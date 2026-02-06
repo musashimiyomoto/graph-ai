@@ -4,10 +4,10 @@ from models.edge import Edge
 from tests.factories.base import AsyncSQLAlchemyModelFactory
 
 
-class EdgeFactory(AsyncSQLAlchemyModelFactory):
+class EdgeFactory(AsyncSQLAlchemyModelFactory[Edge]):
     """Factory for creating Edge instances."""
 
-    class Meta:  # type: ignore[assignment]
+    class Meta:
         """Factory meta configuration."""
 
         model = Edge

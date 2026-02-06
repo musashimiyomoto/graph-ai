@@ -42,9 +42,7 @@ class TestEdgeCreate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected edge response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
             {"id", "workflow_id", "source_node_id", "target_node_id"},
@@ -101,11 +99,8 @@ class TestEdgeList(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, list):
-            pytest.fail("Expected edge list response to be a list")
-
-        ids = {item.get("id") for item in data if isinstance(item, dict)}
+        data = await self.assert_response_list(response=response)
+        ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected edges to appear in list")
 
@@ -144,9 +139,7 @@ class TestEdgeGet(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected edge response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["id"] != edge.id:
             pytest.fail("Edge id did not match")
 
@@ -191,9 +184,7 @@ class TestEdgeUpdate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected edge response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["target_node_id"] != new_target.id:
             pytest.fail("Edge target node was not updated")
 

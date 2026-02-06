@@ -22,9 +22,7 @@ class TestWorkflowCreate(BaseTestCase):
 
         response = await self.client.post(url=self.url, json=payload, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected workflow response to be an object")
+        data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
             {"id", "owner_id", "name", "created_at", "updated_at"},
@@ -58,11 +56,8 @@ class TestWorkflowList(BaseTestCase):
 
         response = await self.client.get(url=self.url, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, list):
-            pytest.fail("Expected workflow list response to be a list")
-
-        ids = {item.get("id") for item in data if isinstance(item, dict)}
+        data = await self.assert_response_list(response=response)
+        ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected workflows to appear in list")
         if other_workflow.id in ids:
@@ -87,9 +82,7 @@ class TestWorkflowGet(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected workflow response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["id"] != workflow.id:
             pytest.fail("Workflow id did not match")
 
@@ -114,9 +107,7 @@ class TestWorkflowUpdate(BaseTestCase):
             headers=headers,
         )
 
-        data = await self.assert_response_ok(response=response)
-        if not isinstance(data, dict):
-            pytest.fail("Expected workflow response to be an object")
+        data = await self.assert_response_dict(response=response)
         if data["name"] != new_name:
             pytest.fail("Workflow name was not updated")
 

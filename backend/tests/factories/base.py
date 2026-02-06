@@ -1,23 +1,27 @@
 """Base factory for async SQLAlchemy model creation."""
 
-import factory
+from typing import TypeVar, cast
+
+from factory.alchemy import SQLAlchemyModelFactory
 from faker import Faker
 from sqlalchemy.ext.asyncio import AsyncSession
 
 fake = Faker("en_US")
 
+ModelT = TypeVar("ModelT")
 
-class AsyncSQLAlchemyModelFactory(factory.alchemy.SQLAlchemyModelFactory):
+
+class AsyncSQLAlchemyModelFactory(SQLAlchemyModelFactory):
     """Factory base that supports async session creation."""
 
-    class Meta:  # type: ignore[assignment]
+    class Meta:
         """Factory meta configuration."""
 
         abstract = True
         sqlalchemy_session_persistence = "commit"
 
     @classmethod
-    async def create_async(cls, session: AsyncSession, **kwargs: object) -> object:
+    async def create_async(cls, session: AsyncSession, **kwargs: object) -> ModelT:
         """Build and persist an instance via an async session.
 
         Args:
@@ -32,4 +36,4 @@ class AsyncSQLAlchemyModelFactory(factory.alchemy.SQLAlchemyModelFactory):
         session.add(instance)
         await session.commit()
         await session.refresh(instance)
-        return instance
+        return cast("ModelT", instance)
