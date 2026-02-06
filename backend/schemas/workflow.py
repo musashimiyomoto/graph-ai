@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class WorkflowCreate(BaseModel):
     """Payload for creating a workflow."""
 
-    owner_id: int = Field(default=..., description="Owner user ID", gt=0)
     name: str = Field(default=..., description="Workflow name")
 
 

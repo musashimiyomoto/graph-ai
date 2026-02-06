@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from dependencies import health as health_dependency
+from dependencies import health
 from schemas import HealthResponse, ServiceHealthResponse
 from usecases import HealthUsecase
 
@@ -20,7 +20,7 @@ async def liveness() -> JSONResponse:
 
 @router.get(path="/readiness")
 async def readiness(
-    usecase: Annotated[HealthUsecase, Depends(health_dependency.get_health_usecase)],
+    usecase: Annotated[HealthUsecase, Depends(health.get_health_usecase)],
 ) -> HealthResponse:
     """Return readiness status for downstream services."""
     health = await usecase.health()

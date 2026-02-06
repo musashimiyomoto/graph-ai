@@ -6,9 +6,9 @@ from tests.test_api.base import BaseTestCase
 
 
 class TestUserMe(BaseTestCase):
-    """Tests for GET /user/me."""
+    """Tests for GET /users/me."""
 
-    url = "/user/me"
+    url = "/users/me"
 
     @pytest.mark.asyncio
     async def test_ok(self) -> None:
@@ -17,15 +17,18 @@ class TestUserMe(BaseTestCase):
 
         response = await self.client.get(url=self.url, headers=headers)
 
-        data = await self.assert_response_ok(response=response)
-        assert data["id"] == user["id"]
-        assert data["email"] == user["email"]
+        data = await self.assert_response_dict(response=response)
+        self.assert_has_keys(data, {"id", "email", "created_at", "updated_at"})
+        if data["id"] != user["id"]:
+            pytest.fail("Response id did not match user id")
+        if data["email"] != user["email"]:
+            pytest.fail("Response email did not match user email")
 
 
 class TestUserMeDelete(BaseTestCase):
-    """Tests for DELETE /user/me."""
+    """Tests for DELETE /users/me."""
 
-    url = "/user/me"
+    url = "/users/me"
 
     @pytest.mark.asyncio
     async def test_ok(self) -> None:

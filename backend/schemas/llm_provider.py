@@ -8,7 +8,6 @@ from enums import LLMProviderType
 class LLMProviderCreate(BaseModel):
     """Payload for creating an LLM provider."""
 
-    user_id: int = Field(default=..., description="Owner user ID", gt=0)
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
     api_key: str = Field(default=..., description="Encrypted API key")

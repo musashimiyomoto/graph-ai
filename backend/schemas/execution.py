@@ -8,20 +8,10 @@ from enums import ExecutionStatus
 
 
 class ExecutionCreate(BaseModel):
-    """Payload for creating an execution."""
+    """Payload for launching a workflow execution."""
 
     workflow_id: int = Field(default=..., description="Workflow ID", gt=0)
-    status: ExecutionStatus | None = Field(default=None, description="Execution status")
     input_data: dict | None = Field(default=None, description="Execution input")
-
-
-class ExecutionUpdate(BaseModel):
-    """Payload for updating an execution."""
-
-    status: ExecutionStatus | None = Field(default=None, description="Execution status")
-    output_data: dict | None = Field(default=None, description="Execution output")
-    error: str | None = Field(default=None, description="Error message")
-    finished_at: datetime | None = Field(default=None, description="Finished at")
 
 
 class ExecutionResponse(BaseModel):

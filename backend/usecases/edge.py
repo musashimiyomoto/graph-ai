@@ -24,6 +24,7 @@ class EdgeUsecase:
     async def create_edge(
         self,
         session: AsyncSession,
+        user_id: int,
         workflow_id: int,
         source_node_id: int,
         target_node_id: int,
@@ -32,6 +33,7 @@ class EdgeUsecase:
 
         Args:
             session: The session.
+            user_id: The owner user ID.
             workflow_id: The workflow ID.
             source_node_id: The source node ID.
             target_node_id: The target node ID.
@@ -46,7 +48,7 @@ class EdgeUsecase:
 
         """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=workflow_id
+            session=session, id=workflow_id, owner_id=user_id
         )
         if not workflow:
             raise WorkflowNotFoundError
@@ -78,48 +80,69 @@ class EdgeUsecase:
         )
 
     async def get_edges(
-        self, session: AsyncSession, workflow_id: int | None = None
+        self, session: AsyncSession, user_id: int, workflow_id: int
     ) -> list[Edge]:
-        """List edges, optionally filtered by workflow.
+        """List edges for a workflow.
 
         Args:
             session: The session.
+            user_id: The owner user ID.
             workflow_id: The workflow ID.
 
         Returns:
             The list of edges.
 
-        """
-        filters = {"workflow_id": workflow_id} if workflow_id else {}
-        return await self._edge_repository.get_all(session=session, **filters)
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
 
-    async def get_edge(self, session: AsyncSession, edge_id: int) -> Edge:
+        """
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=workflow_id, owner_id=user_id
+        )
+        if not workflow:
+            raise WorkflowNotFoundError
+
+        return await self._edge_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
+
+    async def get_edge(self, session: AsyncSession, edge_id: int, user_id: int) -> Edge:
         """Fetch an edge by ID.
 
         Args:
             session: The session.
             edge_id: The edge ID.
+            user_id: The owner user ID.
 
         Returns:
             The edge.
 
         Raises:
             EdgeNotFoundError: If the edge is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
         edge = await self._edge_repository.get_by(session=session, id=edge_id)
         if not edge:
             raise EdgeNotFoundError
+
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=edge.workflow_id, owner_id=user_id
+        )
+        if not workflow:
+            raise WorkflowNotFoundError
+
         return edge
 
     async def update_edge(
-        self, session: AsyncSession, edge_id: int, **kwargs: object
+        self, session: AsyncSession, edge_id: int, user_id: int, **kwargs: object
     ) -> Edge:
         """Update an edge by ID.
 
         Args:
             session: The session.
             edge_id: The edge ID.
+            user_id: The owner user ID.
             **kwargs: The fields to update.
 
         Returns:
@@ -127,11 +150,34 @@ class EdgeUsecase:
 
         Raises:
             EdgeNotFoundError: If the edge is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
+        edge = await self.get_edge(session=session, edge_id=edge_id, user_id=user_id)
+
         update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
-            return await self.get_edge(session=session, edge_id=edge_id)
+            return edge
+
+        source_node_id = update_data.get("source_node_id", edge.source_node_id)
+        target_node_id = update_data.get("target_node_id", edge.target_node_id)
+
+        source_node = await self._node_repository.get_by(
+            session=session, id=source_node_id
+        )
+        if not source_node:
+            raise NodeNotFoundError
+
+        target_node = await self._node_repository.get_by(
+            session=session, id=target_node_id
+        )
+        if not target_node:
+            raise NodeNotFoundError
+
+        if source_node.workflow_id != edge.workflow_id:
+            raise EdgeNodeMismatchError
+        if target_node.workflow_id != edge.workflow_id:
+            raise EdgeNodeMismatchError
 
         edge = await self._edge_repository.update_by(
             session=session,
@@ -140,19 +186,26 @@ class EdgeUsecase:
         )
         if not edge:
             raise EdgeNotFoundError
+
         return edge
 
-    async def delete_edge(self, session: AsyncSession, edge_id: int) -> None:
+    async def delete_edge(
+        self, session: AsyncSession, edge_id: int, user_id: int
+    ) -> None:
         """Delete an edge by ID.
 
         Args:
             session: The session.
             edge_id: The edge ID.
+            user_id: The owner user ID.
 
         Raises:
             EdgeNotFoundError: If the edge is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
+        await self.get_edge(session=session, edge_id=edge_id, user_id=user_id)
+
         deleted = await self._edge_repository.delete_by(session=session, id=edge_id)
         if not deleted:
             raise EdgeNotFoundError

@@ -3,7 +3,7 @@
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from .base import BaseSettings
+from settings.base import BaseSettings
 
 
 class AuthSettings(BaseSettings):
@@ -17,7 +17,6 @@ class AuthSettings(BaseSettings):
         default=30, title="Access token expire minutes"
     )
     token_type: str = Field(default="Bearer", title="Token type")
-    verify_code_ttl: int = Field(default=60, title="Verify email code ttl")
 
 
 auth_settings = AuthSettings()

@@ -1,7 +1,5 @@
 """Graph AI Backend entrypoint."""
 
-import logging
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -17,12 +15,10 @@ from routers import (
     workflow,
 )
 
-logger = logging.getLogger(__name__)
-
 app = FastAPI(title="Graph AI Backend")
 
 
-@app.exception_handler(BaseError)
+@app.exception_handler(exc_class_or_status_code=BaseError)
 async def handle_base_error(_: Request, exc: BaseError) -> JSONResponse:
     """Handle domain errors as JSON responses.
 
@@ -37,11 +33,11 @@ async def handle_base_error(_: Request, exc: BaseError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
-app.include_router(auth.router)
-app.include_router(health.router)
-app.include_router(user.router)
-app.include_router(workflow.router)
-app.include_router(node.router)
-app.include_router(edge.router)
-app.include_router(execution.router)
-app.include_router(llm_provider.router)
+app.include_router(router=health.router)
+app.include_router(router=auth.router)
+app.include_router(router=user.router)
+app.include_router(router=workflow.router)
+app.include_router(router=node.router)
+app.include_router(router=edge.router)
+app.include_router(router=execution.router)
+app.include_router(router=llm_provider.router)

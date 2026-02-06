@@ -1,12 +1,15 @@
 SHELL := /bin/bash
 
-.PHONY: check format test migrate run
+.PHONY: check format typecheck test migrate run
 
 check:
 	uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
 
 format:
 	uv run ruff format --force-exclude --exit-non-zero-on-format
+
+typecheck:
+	cd backend && uv run ty check .
 
 test:
 	cd backend && uv run pytest tests/
