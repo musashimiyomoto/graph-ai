@@ -6,7 +6,7 @@ from models.workflow import Workflow
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 
-class WorkflowFactory(AsyncSQLAlchemyModelFactory[Workflow]):
+class WorkflowFactory(AsyncSQLAlchemyModelFactory):
     """Factory for creating Workflow instances."""
 
     class Meta:

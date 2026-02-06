@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import LLMProviderNotFoundError, UserNotFoundError
+from exceptions import LLMProviderNotFoundError
 from models import LLMProvider
 from repositories import LLMProviderRepository, UserRepository
 
@@ -35,14 +35,9 @@ class LLMProviderUsecase:
             UserNotFoundError: If the owner user is not found.
 
         """
-        user = await self._user_repository.get_by(session=session, id=user_id)
-        if not user:
-            raise UserNotFoundError
-
-        kwargs["user_id"] = user_id
         return await self._provider_repository.create(
             session=session,
-            data=kwargs,
+            data={**kwargs, "user_id": user_id},
         )
 
     async def get_providers(
@@ -82,6 +77,7 @@ class LLMProviderUsecase:
         )
         if not provider:
             raise LLMProviderNotFoundError
+
         return provider
 
     async def update_provider(
@@ -102,20 +98,20 @@ class LLMProviderUsecase:
             LLMProviderNotFoundError: If the LLM provider is not found.
 
         """
+        provider = await self.get_provider(
+            session=session, provider_id=provider_id, user_id=user_id
+        )
+
         update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
-            return await self.get_provider(
-                session=session, provider_id=provider_id, user_id=user_id
-            )
+            return provider
 
         provider = await self._provider_repository.update_by(
-            session=session,
-            data=update_data,
-            id=provider_id,
-            user_id=user_id,
+            session=session, data=update_data, id=provider_id
         )
         if not provider:
             raise LLMProviderNotFoundError
+
         return provider
 
     async def delete_provider(

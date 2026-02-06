@@ -27,7 +27,7 @@ async def delete_user(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> JSONResponse:
     """Delete the current user."""
-    await usecase.delete_by(session=session, user_id=current_user.id)
+    await usecase.delete_user(session=session, user_id=current_user.id)
     return JSONResponse(
         content={"detail": "User deleted successfully"},
         status_code=status.HTTP_202_ACCEPTED,

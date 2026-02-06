@@ -5,7 +5,7 @@ from models.execution import Execution
 from tests.factories.base import AsyncSQLAlchemyModelFactory
 
 
-class ExecutionFactory(AsyncSQLAlchemyModelFactory[Execution]):
+class ExecutionFactory(AsyncSQLAlchemyModelFactory):
     """Factory for creating Execution instances."""
 
     class Meta:

@@ -42,7 +42,7 @@ async def list_executions(
         Depends(dependency=execution.get_execution_usecase),
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-    workflow_id: Annotated[int | None, Query()] = None,
+    workflow_id: Annotated[int, Query(gt=0)],
 ) -> list[ExecutionResponse]:
     """List executions, optionally filtered by workflow."""
     return [

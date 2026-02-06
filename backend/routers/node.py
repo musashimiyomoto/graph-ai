@@ -38,7 +38,7 @@ async def list_nodes(
         Depends(dependency=node.get_node_usecase),
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-    workflow_id: Annotated[int | None, Query()] = None,
+    workflow_id: Annotated[int, Query(gt=0)],
 ) -> list[NodeResponse]:
     """List nodes, optionally filtered by workflow."""
     return [

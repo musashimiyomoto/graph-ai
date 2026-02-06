@@ -32,13 +32,13 @@ async def create_edge(
 
 @router.get(path="")
 async def list_edges(
+    workflow_id: Annotated[int, Query(gt=0)],
     session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
     usecase: Annotated[
         edge.EdgeUsecase,
         Depends(dependency=edge.get_edge_usecase),
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-    workflow_id: Annotated[int | None, Query()] = None,
 ) -> list[EdgeResponse]:
     """List edges, optionally filtered by workflow."""
     return [

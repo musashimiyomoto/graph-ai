@@ -7,7 +7,7 @@ from models.user import User
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 
-class UserFactory(AsyncSQLAlchemyModelFactory[User]):
+class UserFactory(AsyncSQLAlchemyModelFactory):
     """Factory for creating User instances."""
 
     class Meta:

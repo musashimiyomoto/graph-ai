@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import UserNotFoundError, WorkflowNotFoundError
+from exceptions import WorkflowNotFoundError
 from models import Workflow
 from repositories import UserRepository, WorkflowRepository
 
@@ -28,14 +28,7 @@ class WorkflowUsecase:
         Returns:
             The created workflow.
 
-        Raises:
-            UserNotFoundError: If the owner user is not found.
-
         """
-        owner = await self._user_repository.get_by(session=session, id=user_id)
-        if not owner:
-            raise UserNotFoundError
-
         return await self._workflow_repository.create(
             session=session,
             data={"owner_id": user_id, "name": name},
@@ -80,6 +73,7 @@ class WorkflowUsecase:
         )
         if not workflow:
             raise WorkflowNotFoundError
+
         return workflow
 
     async def update_workflow(
@@ -100,11 +94,13 @@ class WorkflowUsecase:
             WorkflowNotFoundError: If the workflow is not found.
 
         """
+        workflow = await self.get_workflow(
+            session=session, workflow_id=workflow_id, user_id=user_id
+        )
+
         update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
-            return await self.get_workflow(
-                session=session, workflow_id=workflow_id, user_id=user_id
-            )
+            return workflow
 
         workflow = await self._workflow_repository.update_by(
             session=session,
@@ -114,6 +110,7 @@ class WorkflowUsecase:
         )
         if not workflow:
             raise WorkflowNotFoundError
+
         return workflow
 
     async def delete_workflow(

@@ -1,10 +1,9 @@
 """Node use case implementation."""
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from exceptions import NodeNotFoundError, WorkflowNotFoundError
-from models import Node, Workflow
+from models import Node
 from repositories import NodeRepository, WorkflowRepository
 
 
@@ -48,9 +47,9 @@ class NodeUsecase:
         )
 
     async def get_nodes(
-        self, session: AsyncSession, user_id: int, workflow_id: int | None = None
+        self, session: AsyncSession, user_id: int, workflow_id: int
     ) -> list[Node]:
-        """List nodes, optionally filtered by workflow.
+        """List nodes for a workflow.
 
         Args:
             session: The session.
@@ -60,25 +59,19 @@ class NodeUsecase:
         Returns:
             The list of nodes.
 
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+
         """
-        if workflow_id is not None:
-            workflow = await self._workflow_repository.get_by(
-                session=session, id=workflow_id, owner_id=user_id
-            )
-            if not workflow:
-                raise WorkflowNotFoundError
-
-        statement = (
-            select(Node)
-            .join(Workflow, Node.workflow_id == Workflow.id)
-            .where(Workflow.owner_id == user_id)
-            .order_by(Node.id.asc())
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=workflow_id, owner_id=user_id
         )
-        if workflow_id is not None:
-            statement = statement.where(Node.workflow_id == workflow_id)
+        if not workflow:
+            raise WorkflowNotFoundError
 
-        result = await session.execute(statement=statement)
-        return list(result.scalars().all())
+        return await self._node_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
 
     async def get_node(self, session: AsyncSession, node_id: int, user_id: int) -> Node:
         """Fetch a node by ID.
@@ -93,16 +86,19 @@ class NodeUsecase:
 
         Raises:
             NodeNotFoundError: If the node is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
-        result = await session.execute(
-            statement=select(Node)
-            .join(Workflow, Node.workflow_id == Workflow.id)
-            .where(Node.id == node_id, Workflow.owner_id == user_id)
-        )
-        node = result.scalar_one_or_none()
+        node = await self._node_repository.get_by(session=session, id=node_id)
         if not node:
             raise NodeNotFoundError
+
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=node.workflow_id, owner_id=user_id
+        )
+        if not workflow:
+            raise WorkflowNotFoundError
+
         return node
 
     async def update_node(
@@ -121,15 +117,17 @@ class NodeUsecase:
 
         Raises:
             NodeNotFoundError: If the node is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
+        await self.get_node(session=session, node_id=node_id, user_id=user_id)
+
         update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
             return await self.get_node(
                 session=session, node_id=node_id, user_id=user_id
             )
 
-        await self.get_node(session=session, node_id=node_id, user_id=user_id)
         node = await self._node_repository.update_by(
             session=session,
             data=update_data,
@@ -137,6 +135,7 @@ class NodeUsecase:
         )
         if not node:
             raise NodeNotFoundError
+
         return node
 
     async def delete_node(
@@ -151,9 +150,11 @@ class NodeUsecase:
 
         Raises:
             NodeNotFoundError: If the node is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
         await self.get_node(session=session, node_id=node_id, user_id=user_id)
+
         deleted = await self._node_repository.delete_by(session=session, id=node_id)
         if not deleted:
             raise NodeNotFoundError

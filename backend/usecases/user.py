@@ -2,6 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from exceptions import UserNotFoundError
 from repositories import UserRepository
 
 
@@ -12,7 +13,7 @@ class UserUsecase:
         """Initialize the usecase."""
         self._user_repository = UserRepository()
 
-    async def delete_by(self, session: AsyncSession, user_id: int) -> None:
+    async def delete_user(self, session: AsyncSession, user_id: int) -> None:
         """Delete a user by id.
 
         Args:
@@ -23,4 +24,6 @@ class UserUsecase:
             UserNotFoundError: If the user is not found.
 
         """
-        await self._user_repository.delete_by(session=session, id=user_id)
+        deleted = await self._user_repository.delete_by(session=session, id=user_id)
+        if not deleted:
+            raise UserNotFoundError

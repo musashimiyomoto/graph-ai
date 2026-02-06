@@ -9,7 +9,7 @@ from models.llm_provider import LLMProvider
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 
-class LLMProviderFactory(AsyncSQLAlchemyModelFactory[LLMProvider]):
+class LLMProviderFactory(AsyncSQLAlchemyModelFactory):
     """Factory for creating LLMProvider instances."""
 
     class Meta:

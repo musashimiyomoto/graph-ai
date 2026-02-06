@@ -2,12 +2,11 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from enums import ExecutionStatus
 from exceptions import ExecutionNotFoundError, WorkflowNotFoundError
-from models import Execution, Workflow
+from models import Execution
 from repositories import ExecutionRepository, WorkflowRepository
 
 
@@ -62,9 +61,9 @@ class ExecutionUsecase:
         )
 
     async def get_executions(
-        self, session: AsyncSession, user_id: int, workflow_id: int | None = None
+        self, session: AsyncSession, user_id: int, workflow_id: int
     ) -> list[Execution]:
-        """List executions, optionally filtered by workflow.
+        """List executions for a workflow.
 
         Args:
             session: The session.
@@ -74,25 +73,19 @@ class ExecutionUsecase:
         Returns:
             The list of executions.
 
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+
         """
-        if workflow_id is not None:
-            workflow = await self._workflow_repository.get_by(
-                session=session, id=workflow_id, owner_id=user_id
-            )
-            if not workflow:
-                raise WorkflowNotFoundError
-
-        statement = (
-            select(Execution)
-            .join(Workflow, Execution.workflow_id == Workflow.id)
-            .where(Workflow.owner_id == user_id)
-            .order_by(Execution.id.asc())
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=workflow_id, owner_id=user_id
         )
-        if workflow_id is not None:
-            statement = statement.where(Execution.workflow_id == workflow_id)
+        if not workflow:
+            raise WorkflowNotFoundError
 
-        result = await session.execute(statement=statement)
-        return list(result.scalars().all())
+        return await self._execution_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
 
     async def get_execution(
         self, session: AsyncSession, execution_id: int, user_id: int
@@ -109,16 +102,21 @@ class ExecutionUsecase:
 
         Raises:
             ExecutionNotFoundError: If the execution is not found.
+            WorkflowNotFoundError: If the workflow is not found.
 
         """
-        result = await session.execute(
-            statement=select(Execution)
-            .join(Workflow, Execution.workflow_id == Workflow.id)
-            .where(Execution.id == execution_id, Workflow.owner_id == user_id)
+        execution = await self._execution_repository.get_by(
+            session=session, id=execution_id
         )
-        execution = result.scalar_one_or_none()
         if not execution:
             raise ExecutionNotFoundError
+
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=execution.workflow_id, owner_id=user_id
+        )
+        if not workflow:
+            raise WorkflowNotFoundError
+
         return execution
 
     async def update_execution(
@@ -139,15 +137,14 @@ class ExecutionUsecase:
             ExecutionNotFoundError: If the execution is not found.
 
         """
-        update_data = {k: v for k, v in kwargs.items() if v is not None}
-        if not update_data:
-            return await self.get_execution(
-                session=session, execution_id=execution_id, user_id=user_id
-            )
-
-        await self.get_execution(
+        execution = await self.get_execution(
             session=session, execution_id=execution_id, user_id=user_id
         )
+
+        update_data = {k: v for k, v in kwargs.items() if v is not None}
+        if not update_data:
+            return execution
+
         status = update_data.get("status")
         if status in {ExecutionStatus.SUCCESS, ExecutionStatus.FAILED}:
             finished_at = datetime.now(tz=UTC).replace(tzinfo=None)
@@ -160,6 +157,7 @@ class ExecutionUsecase:
         )
         if not execution:
             raise ExecutionNotFoundError
+
         return execution
 
     async def delete_execution(
@@ -179,6 +177,7 @@ class ExecutionUsecase:
         await self.get_execution(
             session=session, execution_id=execution_id, user_id=user_id
         )
+
         deleted = await self._execution_repository.delete_by(
             session=session, id=execution_id
         )
