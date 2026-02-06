@@ -48,8 +48,8 @@ async def list_llm_providers(
 ) -> list[LLMProviderResponse]:
     """List LLM providers for the current user."""
     return [
-        LLMProviderResponse.model_validate(provider)
-        for provider in await usecase.get_llm_providers(
+        LLMProviderResponse.model_validate(llm_provider)
+        for llm_provider in await usecase.get_llm_providers(
             session=session, user_id=current_user.id
         )
     ]
