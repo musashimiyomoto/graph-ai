@@ -2,14 +2,13 @@
 
 ## Overview
 
-Graph AI — monorepo with a layered Python backend (FastAPI + SQLAlchemy + PostgreSQL).
-Frontend will be added later.
+Graph AI — monorepo with a layered Python backend (FastAPI + SQLAlchemy + PostgreSQL) and a React frontend (Vite + TypeScript + Tailwind CSS).
 
 ## Project layout
 
 ```
 backend/          # Python 3.12 FastAPI backend
-# frontend/      # TBD
+frontend/         # React 19 + Vite + TypeScript + Tailwind CSS 4
 ```
 
 ## General rules
@@ -28,22 +27,22 @@ backend/          # Python 3.12 FastAPI backend
 # All commands run from the repo root
 
 # Lint (ruff check with autofix)
-make check
+make back-check
 
 # Format
-make format
+make back-format
 
 # Type check (ty)
-make typecheck
+make back-typecheck
 
 # Tests (pytest with testcontainers, requires Docker)
-make test
+make back-test
 
 # Run all checks
-make check && make format && make typecheck && make test
+make back-check && make back-format && make back-typecheck && make back-test
 
 # Generate Alembic migration
-make migrate MSG="describe the change"
+make back-migrate MSG="describe the change"
 
 # Start the app (docker compose)
 make run
@@ -136,7 +135,7 @@ Each domain entity (edge, node, workflow, user, etc.) follows the same pattern:
 After ANY code change, run:
 
 ```bash
-make check && make format && make typecheck && make test
+make back-check && make back-format && make back-typecheck && make back-test
 ```
 
 All four must pass before considering work complete.
@@ -145,4 +144,80 @@ All four must pass before considering work complete.
 
 # Frontend
 
-> TBD — frontend not yet implemented. Fill in this section when the frontend stack is chosen.
+## Commands
+
+```bash
+# All commands run from the repo root
+
+# Install dependencies
+cd frontend && npm install
+
+# Dev server (port 3000)
+cd frontend && npm run dev
+
+# Lint (ESLint)
+make front-lint
+
+# Type check
+make front-typecheck
+
+# Production build
+make front-build
+```
+
+## Structure
+
+```
+frontend/
+├── public/              # Static assets served as-is
+├── src/
+│   ├── main.tsx         # Entry point, renders <App />
+│   ├── App.tsx          # Root component
+│   ├── index.css        # Tailwind CSS import
+│   └── vite-env.d.ts    # Vite client types
+├── index.html           # HTML entry point
+├── vite.config.ts       # Vite config (React + Tailwind plugins, API proxy)
+├── eslint.config.js     # ESLint flat config
+├── tsconfig.json        # TypeScript project references
+├── tsconfig.app.json    # App TypeScript config
+└── tsconfig.node.json   # Node/Vite TypeScript config
+```
+
+## Tech stack
+
+- **React 19** with functional components and hooks.
+- **Vite 7** for dev server and bundling.
+- **TypeScript** with strict mode.
+- **Tailwind CSS 4** via `@tailwindcss/vite` plugin (no `tailwind.config` file needed).
+- **ESLint** with `typescript-eslint`, `react-hooks`, and `react-refresh` plugins.
+
+## Code style
+
+- Functional components only — no class components.
+- Use named exports for components: `export function MyComponent() {}`.
+- Props defined as inline `{ prop }: { prop: Type }` for simple components, separate `interface` for complex ones.
+- Strict TypeScript — no `any`, no `@ts-ignore`.
+- Tailwind utility classes for all styling — no CSS modules, no inline `style`.
+- File naming: `PascalCase.tsx` for components, `camelCase.ts` for utilities/hooks.
+- One component per file.
+- Imports: react → third-party → local, separated by blank lines.
+
+## API proxy
+
+Vite dev server proxies `/api` requests to `http://api:5000` (Docker) or `http://localhost:5000` (local).
+
+## Docker
+
+- **Dockerfile**: `node:24-alpine`, runs `npm run dev` with hot reload.
+- **docker-compose.yml**: `frontend` service on port `3000`, volume-mounts `src/` for HMR.
+- Ignore files (`.gitignore`, `.dockerignore`) are managed at the repo root.
+
+## Verification
+
+After ANY frontend code change, run:
+
+```bash
+make front-lint && make front-typecheck && make front-build
+```
+
+All three must pass before considering work complete.
