@@ -26,3 +26,21 @@ repos:
         require_serial: true
         language: unsupported
         types: [python]
+
+      - id: eslint
+        name: eslint
+        entry: npx eslint
+        require_serial: true
+        language: node
+        additional_dependencies: []
+        files: ^frontend/
+        types_or: [javascript, jsx, ts, tsx]
+
+      - id: tsc
+        name: tsc
+        entry: bash -c 'cd frontend && npx tsc -b'
+        require_serial: true
+        language: system
+        files: ^frontend/
+        types_or: [ts, tsx]
+        pass_filenames: false

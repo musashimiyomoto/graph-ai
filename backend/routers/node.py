@@ -49,24 +49,6 @@ async def list_nodes(
     ]
 
 
-@router.get(path="/{node_id}")
-async def get_node(
-    node_id: Annotated[int, Path(description="Node ID", gt=0)],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        node.NodeUsecase,
-        Depends(dependency=node.get_node_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> NodeResponse:
-    """Fetch a node by ID."""
-    return NodeResponse.model_validate(
-        await usecase.get_node(
-            session=session, node_id=node_id, user_id=current_user.id
-        )
-    )
-
-
 @router.patch(path="/{node_id}")
 async def update_node(
     node_id: Annotated[int, Path(description="Node ID", gt=0)],

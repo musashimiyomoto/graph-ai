@@ -64,29 +64,3 @@ class TestExecutionList(BaseTestCase):
         ids = {item.get("id") for item in data}
         if first.id not in ids or second.id not in ids:
             pytest.fail("Expected executions to appear in list")
-
-
-class TestExecutionGet(BaseTestCase):
-    """Tests for GET /executions/{execution_id}."""
-
-    url = "/executions"
-
-    @pytest.mark.asyncio
-    async def test_ok(self) -> None:
-        """Successful request returns execution data."""
-        user, headers = await self.create_user_and_get_token()
-        workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
-        )
-        execution = await ExecutionFactory.create_async(
-            session=self.session, workflow_id=workflow.id
-        )
-
-        response = await self.client.get(
-            url=f"{self.url}/{execution.id}",
-            headers=headers,
-        )
-
-        data = await self.assert_response_dict(response=response)
-        if data["id"] != execution.id:
-            pytest.fail("Execution id did not match")

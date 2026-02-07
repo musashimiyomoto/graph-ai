@@ -1,7 +1,6 @@
 """Node API tests."""
 
 import uuid
-from http import HTTPStatus
 
 import pytest
 
@@ -79,32 +78,6 @@ class TestNodeList(BaseTestCase):
             pytest.fail("Expected nodes to appear in list")
 
 
-class TestNodeGet(BaseTestCase):
-    """Tests for GET /nodes/{node_id}."""
-
-    url = "/nodes"
-
-    @pytest.mark.asyncio
-    async def test_ok(self) -> None:
-        """Successful request returns node data."""
-        user, headers = await self.create_user_and_get_token()
-        workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
-        )
-        node = await NodeFactory.create_async(
-            session=self.session, workflow_id=workflow.id
-        )
-
-        response = await self.client.get(
-            url=f"{self.url}/{node.id}",
-            headers=headers,
-        )
-
-        data = await self.assert_response_dict(response=response)
-        if data["id"] != node.id:
-            pytest.fail("Node id did not match")
-
-
 class TestNodeUpdate(BaseTestCase):
     """Tests for PATCH /nodes/{node_id}."""
 
@@ -162,8 +135,11 @@ class TestNodeDelete(BaseTestCase):
         await self.assert_response_ok(response=response)
 
         fetch = await self.client.get(
-            url=f"{self.url}/{node.id}",
+            url=self.url,
+            params={"workflow_id": workflow.id},
             headers=headers,
         )
-        if fetch.status_code != HTTPStatus.NOT_FOUND:
-            pytest.fail("Expected deleted node to return 404")
+        data = await self.assert_response_list(response=fetch)
+        ids = {item.get("id") for item in data}
+        if node.id in ids:
+            pytest.fail("Expected deleted node to not appear in list")

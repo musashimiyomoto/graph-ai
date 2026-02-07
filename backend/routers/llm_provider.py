@@ -55,24 +55,6 @@ async def list_llm_providers(
     ]
 
 
-@router.get(path="/{provider_id}")
-async def get_llm_provider(
-    provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        llm_provider.LLMProviderUsecase,
-        Depends(dependency=llm_provider.get_llm_provider_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> LLMProviderResponse:
-    """Fetch an LLM provider by ID."""
-    return LLMProviderResponse.model_validate(
-        await usecase.get_llm_provider(
-            session=session, provider_id=provider_id, user_id=current_user.id
-        )
-    )
-
-
 @router.patch(path="/{provider_id}")
 async def update_llm_provider(
     provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],

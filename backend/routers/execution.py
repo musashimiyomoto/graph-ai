@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, execution
@@ -50,21 +50,3 @@ async def list_executions(
             session=session, user_id=current_user.id, workflow_id=workflow_id
         )
     ]
-
-
-@router.get(path="/{execution_id}")
-async def get_execution(
-    execution_id: Annotated[int, Path(description="Execution ID", gt=0)],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        execution.ExecutionUsecase,
-        Depends(dependency=execution.get_execution_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> ExecutionResponse:
-    """Fetch an execution by ID."""
-    return ExecutionResponse.model_validate(
-        await usecase.get_execution(
-            session=session, execution_id=execution_id, user_id=current_user.id
-        )
-    )
