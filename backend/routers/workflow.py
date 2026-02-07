@@ -48,24 +48,6 @@ async def list_workflows(
     ]
 
 
-@router.get(path="/{workflow_id}")
-async def get_workflow(
-    workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        workflow.WorkflowUsecase,
-        Depends(dependency=workflow.get_workflow_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> WorkflowResponse:
-    """Fetch a workflow by ID."""
-    return WorkflowResponse.model_validate(
-        await usecase.get_workflow(
-            session=session, workflow_id=workflow_id, user_id=current_user.id
-        )
-    )
-
-
 @router.patch(path="/{workflow_id}")
 async def update_workflow(
     workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],

@@ -2,7 +2,6 @@
 
 import secrets
 import uuid
-from http import HTTPStatus
 
 import pytest
 
@@ -76,29 +75,6 @@ class TestLLMProviderList(BaseTestCase):
             pytest.fail("Unexpected provider from another user in list")
 
 
-class TestLLMProviderGet(BaseTestCase):
-    """Tests for GET /llm-providers/{provider_id}."""
-
-    url = "/llm-providers"
-
-    @pytest.mark.asyncio
-    async def test_ok(self) -> None:
-        """Successful request returns provider data."""
-        user, headers = await self.create_user_and_get_token()
-        provider = await LLMProviderFactory.create_async(
-            session=self.session, user_id=user["id"]
-        )
-
-        response = await self.client.get(
-            url=f"{self.url}/{provider.id}",
-            headers=headers,
-        )
-
-        data = await self.assert_response_dict(response=response)
-        if data["id"] != provider.id:
-            pytest.fail("Provider id did not match")
-
-
 class TestLLMProviderUpdate(BaseTestCase):
     """Tests for PATCH /llm-providers/{provider_id}."""
 
@@ -147,8 +123,10 @@ class TestLLMProviderDelete(BaseTestCase):
         await self.assert_response_ok(response=response)
 
         fetch = await self.client.get(
-            url=f"{self.url}/{provider.id}",
+            url=self.url,
             headers=headers,
         )
-        if fetch.status_code != HTTPStatus.NOT_FOUND:
-            pytest.fail("Expected deleted provider to return 404")
+        data = await self.assert_response_list(response=fetch)
+        ids = {item.get("id") for item in data}
+        if provider.id in ids:
+            pytest.fail("Expected deleted provider to not appear in list")

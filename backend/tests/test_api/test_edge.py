@@ -1,7 +1,5 @@
 """Edge API tests."""
 
-from http import HTTPStatus
-
 import pytest
 
 from enums import NodeType
@@ -105,45 +103,6 @@ class TestEdgeList(BaseTestCase):
             pytest.fail("Expected edges to appear in list")
 
 
-class TestEdgeGet(BaseTestCase):
-    """Tests for GET /edges/{edge_id}."""
-
-    url = "/edges"
-
-    @pytest.mark.asyncio
-    async def test_ok(self) -> None:
-        """Successful request returns edge data."""
-        user, headers = await self.create_user_and_get_token()
-        workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
-        )
-        source = await NodeFactory.create_async(
-            session=self.session,
-            workflow_id=workflow.id,
-            type=NodeType.INPUT,
-        )
-        target = await NodeFactory.create_async(
-            session=self.session,
-            workflow_id=workflow.id,
-            type=NodeType.OUTPUT,
-        )
-        edge = await EdgeFactory.create_async(
-            session=self.session,
-            workflow_id=workflow.id,
-            source_node_id=source.id,
-            target_node_id=target.id,
-        )
-
-        response = await self.client.get(
-            url=f"{self.url}/{edge.id}",
-            headers=headers,
-        )
-
-        data = await self.assert_response_dict(response=response)
-        if data["id"] != edge.id:
-            pytest.fail("Edge id did not match")
-
-
 class TestEdgeUpdate(BaseTestCase):
     """Tests for PATCH /edges/{edge_id}."""
 
@@ -226,8 +185,11 @@ class TestEdgeDelete(BaseTestCase):
         await self.assert_response_ok(response=response)
 
         fetch = await self.client.get(
-            url=f"{self.url}/{edge.id}",
+            url=self.url,
+            params={"workflow_id": workflow.id},
             headers=headers,
         )
-        if fetch.status_code != HTTPStatus.NOT_FOUND:
-            pytest.fail("Expected deleted edge to return 404")
+        data = await self.assert_response_list(response=fetch)
+        ids = {item.get("id") for item in data}
+        if edge.id in ids:
+            pytest.fail("Expected deleted edge to not appear in list")

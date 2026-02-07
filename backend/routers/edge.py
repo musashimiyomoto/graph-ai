@@ -49,24 +49,6 @@ async def list_edges(
     ]
 
 
-@router.get(path="/{edge_id}")
-async def get_edge(
-    edge_id: Annotated[int, Path(description="Edge ID", gt=0)],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        edge.EdgeUsecase,
-        Depends(dependency=edge.get_edge_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> EdgeResponse:
-    """Fetch a single edge by ID."""
-    return EdgeResponse.model_validate(
-        await usecase.get_edge(
-            session=session, edge_id=edge_id, user_id=current_user.id
-        )
-    )
-
-
 @router.patch(path="/{edge_id}")
 async def update_edge(
     edge_id: Annotated[int, Path(description="Edge ID", gt=0)],

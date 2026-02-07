@@ -1,7 +1,6 @@
 """Workflow API tests."""
 
 import uuid
-from http import HTTPStatus
 
 import pytest
 
@@ -64,29 +63,6 @@ class TestWorkflowList(BaseTestCase):
             pytest.fail("Unexpected workflow from another user in list")
 
 
-class TestWorkflowGet(BaseTestCase):
-    """Tests for GET /workflows/{workflow_id}."""
-
-    url = "/workflows"
-
-    @pytest.mark.asyncio
-    async def test_ok(self) -> None:
-        """Successful request returns workflow data."""
-        user, headers = await self.create_user_and_get_token()
-        workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
-        )
-
-        response = await self.client.get(
-            url=f"{self.url}/{workflow.id}",
-            headers=headers,
-        )
-
-        data = await self.assert_response_dict(response=response)
-        if data["id"] != workflow.id:
-            pytest.fail("Workflow id did not match")
-
-
 class TestWorkflowUpdate(BaseTestCase):
     """Tests for PATCH /workflows/{workflow_id}."""
 
@@ -133,8 +109,10 @@ class TestWorkflowDelete(BaseTestCase):
         await self.assert_response_ok(response=response)
 
         fetch = await self.client.get(
-            url=f"{self.url}/{workflow.id}",
+            url=self.url,
             headers=headers,
         )
-        if fetch.status_code != HTTPStatus.NOT_FOUND:
-            pytest.fail("Expected deleted workflow to return 404")
+        data = await self.assert_response_list(response=fetch)
+        ids = {item.get("id") for item in data}
+        if workflow.id in ids:
+            pytest.fail("Expected deleted workflow to not appear in list")
