@@ -90,7 +90,7 @@ export function WorkflowSidebar({
       <div>
         <div className="pixel-section-title">Nodes</div>
         <div className="mt-3 grid grid-cols-1 gap-2">
-          {(['INPUT', 'LLM', 'OUTPUT'] as NodeType[]).map((type) => (
+          {(['input', 'llm', 'output'] as NodeType[]).map((type) => (
             <button
               key={type}
               type="button"
