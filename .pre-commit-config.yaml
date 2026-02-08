@@ -13,32 +13,32 @@ repos:
       - id: trailing-whitespace
   - repo: local
     hooks:
-      - id: back-check
-        name: back check
-        entry: make back-check
+      - id: back-lint
+        name: back lint
+        entry: make back-lint
         require_serial: true
-        language: unsupported
-        types: [python]
-
-      - id: back-typecheck
-        name: back typecheck
-        entry: make back-typecheck
-        require_serial: true
-        language: unsupported
+        language: system
         types: [python]
 
       - id: back-format
         name: back format
         entry: make back-format
         require_serial: true
-        language: unsupported
+        language: system
         types: [python]
 
-      - id: front-check
-        name: front check
-        entry: make front-check
+      - id: back-typecheck
+        name: back typecheck
+        entry: make back-typecheck
         require_serial: true
-        language: node
+        language: system
+        types: [python]
+
+      - id: front-lint
+        name: front lint
+        entry: make front-lint
+        require_serial: true
+        language: system
         types_or: [javascript, jsx, ts, tsx]
 
       - id: front-typecheck

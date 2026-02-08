@@ -20,33 +20,46 @@ Visual graph-based AI workflow builder — FastAPI + React + PostgreSQL.
 - Node.js 24
 - Docker & Docker Compose
 
-## Quick Start
+## Quick Start (Docker)
 
 ```bash
-cp .env.example .env
 make run
 ```
 
-| Service     | URL                    |
-| ----------- | ---------------------- |
-| Frontend    | http://localhost:3000   |
-| Swagger     | http://localhost:5000/docs |
-| Prefect     | http://localhost:4200   |
+This copies `.env.example` → `.env` and runs `docker compose up --build`.
 
-## Development
+| Service  | URL                        |
+| -------- | -------------------------- |
+| Frontend | http://localhost:3000       |
+| Swagger  | http://localhost:5000/docs  |
+| Prefect  | http://localhost:4200       |
+
+## Local Development
 
 ```bash
-# Backend
-make back-check             # Lint (ruff)
-make back-format            # Format (ruff)
+# Install dependencies & pre-commit hooks
+make setup
+
+# Start all services
+make run
+```
+
+### Backend
+
+```bash
+make back-lint              # Lint (ruff --fix)
+make back-format            # Format (ruff format)
 make back-typecheck         # Type check (ty)
 make back-test              # Tests (pytest + testcontainers)
-make back-migrate MSG="MSG" # Create Migration
+make back-migrate MSG="…"   # Generate Alembic migration
+```
 
-# Frontend
-make front-lint        # ESLint
-make front-typecheck   # TypeScript
-make front-build       # Production build
+### Frontend
+
+```bash
+make front-lint             # Lint (eslint)
+make front-typecheck        # Type check (tsc)
+make front-build            # Production build (vite)
 ```
 
 ## Tech Stack

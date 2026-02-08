@@ -27,7 +27,7 @@ frontend/         # React 19 + Vite + TypeScript + Tailwind CSS 4
 # All commands run from the repo root
 
 # Lint (ruff check with autofix)
-make back-check
+make back-lint
 
 # Format
 make back-format
@@ -39,7 +39,7 @@ make back-typecheck
 make back-test
 
 # Run all checks
-make back-check && make back-format && make back-typecheck && make back-test
+make back-lint && make back-format && make back-typecheck && make back-test
 
 # Generate Alembic migration
 make back-migrate MSG="describe the change"
@@ -135,7 +135,7 @@ Each domain entity (edge, node, workflow, user, etc.) follows the same pattern:
 After ANY code change, run:
 
 ```bash
-make back-check && make back-format && make back-typecheck && make back-test
+make back-lint && make back-format && make back-typecheck && make back-test
 ```
 
 All four must pass before considering work complete.
@@ -158,10 +158,10 @@ cd frontend && npm run dev
 # Lint (ESLint)
 make front-lint
 
-# Type check
+# Type check (tsc)
 make front-typecheck
 
-# Production build
+# Production build (vite)
 make front-build
 ```
 

@@ -1,12 +1,12 @@
 SHELL := /bin/bash
 
-.PHONY: back-check back-format back-typecheck back-test back-migrate \
-        front-check front-typecheck front-build \
-        start run
+.PHONY: back-lint back-format back-typecheck back-test back-migrate \
+        front-lint front-typecheck front-build \
+        setup run
 
 # ── Backend ──────────────────────────────────────────────
 
-back-check:
+back-lint:
 	cd backend && uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
 
 back-format:
@@ -29,7 +29,7 @@ back-migrate:
 
 # ── Frontend ─────────────────────────────────────────────
 
-front-check:
+front-lint:
 	cd frontend && npm run lint
 
 front-typecheck:
@@ -40,7 +40,7 @@ front-build:
 
 # ── Common ───────────────────────────────────────────────
 
-start:
+setup:
 	command -v uv >/dev/null || pip install uv
 	command -v pre-commit >/dev/null || pip install pre-commit
 	cd backend && uv sync
