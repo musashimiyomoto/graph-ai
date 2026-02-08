@@ -15,3 +15,15 @@ class NodeNotFoundError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
+
+
+class NodeDataValidationError(BaseError):
+    """Raised when node data fails validation."""
+
+    def __init__(
+        self,
+        message: str = "Invalid node data",
+        status_code: HTTPStatus = HTTPStatus.UNPROCESSABLE_ENTITY,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)

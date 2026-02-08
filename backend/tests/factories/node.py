@@ -3,6 +3,7 @@
 from factory.declarations import LazyAttribute
 
 from enums import NodeType
+from enums.node import InputNodeFormat
 from models.node import Node
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
@@ -17,6 +18,8 @@ class NodeFactory(AsyncSQLAlchemyModelFactory):
 
     workflow_id = None
     type = NodeType.INPUT
-    data = LazyAttribute(lambda _obj: {"label": fake.word()})
+    data = LazyAttribute(
+        lambda _obj: {"label": fake.word(), "format": InputNodeFormat.TXT},
+    )
     position_x = 0.0
     position_y = 0.0

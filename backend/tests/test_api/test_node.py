@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from enums import NodeType
+from enums.node import InputNodeFormat
 from tests.factories import NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
@@ -24,7 +25,10 @@ class TestNodeCreate(BaseTestCase):
         payload = {
             "workflow_id": workflow.id,
             "type": NodeType.INPUT,
-            "data": {"label": f"node-{uuid.uuid4().hex[:8]}"},
+            "data": {
+                "label": f"node-{uuid.uuid4().hex[:8]}",
+                "format": InputNodeFormat.TXT,
+            },
             "position_x": 10.0,
             "position_y": 20.0,
         }
@@ -99,7 +103,10 @@ class TestNodeUpdate(BaseTestCase):
         response = await self.client.patch(
             url=f"{self.url}/{node.id}",
             json={
-                "data": {"label": f"node-{uuid.uuid4().hex[:8]}"},
+                "data": {
+                    "label": f"node-{uuid.uuid4().hex[:8]}",
+                    "format": InputNodeFormat.TXT,
+                },
                 "position_x": new_x,
                 "position_y": new_y,
             },

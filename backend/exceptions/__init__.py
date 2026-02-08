@@ -5,7 +5,7 @@ from exceptions.base import BaseError
 from exceptions.edge import EdgeNodeMismatchError, EdgeNotFoundError
 from exceptions.execution import ExecutionNotFoundError
 from exceptions.llm_provider import LLMProviderNotFoundError
-from exceptions.node import NodeNotFoundError
+from exceptions.node import NodeDataValidationError, NodeNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
 from exceptions.workflow import WorkflowNotFoundError
 
@@ -16,6 +16,7 @@ __all__ = [
     "EdgeNotFoundError",
     "ExecutionNotFoundError",
     "LLMProviderNotFoundError",
+    "NodeDataValidationError",
     "NodeNotFoundError",
     "UserAlreadyExistsError",
     "UserNotFoundError",

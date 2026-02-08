@@ -2,7 +2,12 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import NodeNotFoundError, WorkflowNotFoundError
+from enums import NodeDataSpec, NodeType
+from exceptions import (
+    NodeDataValidationError,
+    NodeNotFoundError,
+    WorkflowNotFoundError,
+)
 from models import Node
 from repositories import NodeRepository, WorkflowRepository
 
@@ -14,6 +19,25 @@ class NodeUsecase:
         """Initialize the usecase."""
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
+
+    def _validate_node_data(self, node_type: NodeType, data: dict) -> dict:
+        """Validate node data for a specific node type.
+
+        Args:
+            node_type: The node type.
+            data: The raw node data.
+
+        Returns:
+            The sanitized node data.
+
+        Raises:
+            NodeDataValidationError: If the data is invalid.
+
+        """
+        try:
+            return NodeDataSpec[node_type.name].validate(data=data)
+        except ValueError as exc:
+            raise NodeDataValidationError(message=str(exc)) from exc
 
     async def create_node(
         self,
@@ -40,6 +64,16 @@ class NodeUsecase:
         )
         if not workflow:
             raise WorkflowNotFoundError
+
+        node_type = kwargs.get("type")
+        if not isinstance(node_type, NodeType):
+            raise NodeDataValidationError(message="Node type is required.")
+
+        raw_data = kwargs.get("data", {})
+        if not isinstance(raw_data, dict):
+            raise NodeDataValidationError(message="Node data must be an object.")
+
+        kwargs["data"] = self._validate_node_data(node_type=node_type, data=raw_data)
 
         return await self._node_repository.create(
             session=session,
@@ -120,13 +154,19 @@ class NodeUsecase:
             WorkflowNotFoundError: If the workflow is not found.
 
         """
-        await self.get_node(session=session, node_id=node_id, user_id=user_id)
+        node = await self.get_node(session=session, node_id=node_id, user_id=user_id)
 
         update_data = {k: v for k, v in kwargs.items() if v is not None}
         if not update_data:
-            return await self.get_node(
-                session=session, node_id=node_id, user_id=user_id
-            )
+            return node
+
+        incoming_data = update_data.get("data", {})
+        if not isinstance(incoming_data, dict):
+            raise NodeDataValidationError(message="Node data must be an object.")
+
+        update_data["data"] = self._validate_node_data(
+            node_type=node.type, data=node.data | incoming_data
+        )
 
         node = await self._node_repository.update_by(
             session=session,
