@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 
+import { UserMenu } from './UserMenu'
+
 interface AppShellProps {
   email: string
   workflowName: string
@@ -8,6 +10,7 @@ interface AppShellProps {
   loading: boolean
   onRun: () => void
   onLogout: () => void
+  onDeleteAccount: () => void
   children: ReactNode
 }
 
@@ -19,6 +22,7 @@ export function AppShell({
   loading,
   onRun,
   onLogout,
+  onDeleteAccount,
   children,
 }: AppShellProps) {
   return (
@@ -42,14 +46,15 @@ export function AppShell({
           >
             {loading ? 'Running...' : 'Run'}
           </button>
-          <div className="pixel-user">{email || 'me@graph.ai'}</div>
-          <button type="button" className="pixel-link" onClick={onLogout}>
-            Logout
-          </button>
+          <UserMenu
+            email={email}
+            onLogout={onLogout}
+            onDeleteAccount={onDeleteAccount}
+          />
         </div>
       </header>
       {error ? <div className="pixel-banner">{error}</div> : null}
-      <main className="grid h-[calc(100vh-112px)] grid-cols-[280px_1fr_320px] gap-3 px-4 pb-4">
+      <main className="grid h-[calc(100vh-84px)] grid-cols-[280px_1fr_320px] gap-3 px-4 pt-4 pb-4">
         {children}
       </main>
     </div>

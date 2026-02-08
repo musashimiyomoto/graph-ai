@@ -10,8 +10,8 @@ jspm_packages/
 !.yarn/versions
 
 # Build output
-frontend/dist/
-frontend/dist-ssr/
+dist/
+dist-ssr/
 *.tsbuildinfo
 
 # Debug logs

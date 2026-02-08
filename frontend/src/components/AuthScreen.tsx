@@ -37,9 +37,6 @@ export function AuthScreen({
           <h1 className="font-pixel text-3xl uppercase">
             Pixel Flow Studio
           </h1>
-          <p className="text-base text-[var(--muted)]">
-            Минималистичный редактор для workflows с n8n vibe.
-          </p>
         </div>
 
         <div className="pixel-panel w-full max-w-md">

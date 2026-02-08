@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { NodeType, Workflow } from '../lib/types'
+import { InputIcon, LlmIcon, OutputIcon } from './NodeIcons'
 
 interface WorkflowSidebarProps {
   workflows: Workflow[]
@@ -22,9 +23,35 @@ export function WorkflowSidebar({
   onAddNode,
 }: WorkflowSidebarProps) {
   const [draftName, setDraftName] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingId !== null) {
+      editRef.current?.focus()
+      editRef.current?.select()
+    }
+  }, [editingId])
+
+  function startEditing(workflow: Workflow) {
+    setEditingId(workflow.id)
+    setEditingName(workflow.name)
+  }
+
+  function commitEdit() {
+    if (editingId !== null && editingName.trim()) {
+      onRenameWorkflow(editingId, editingName.trim())
+    }
+    setEditingId(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+  }
 
   return (
-    <aside className="pixel-panel flex h-full flex-col gap-6">
+    <aside className="pixel-panel flex h-full flex-col gap-6 overflow-y-auto">
       <div>
         <div className="pixel-section-title">Workflows</div>
         <div className="mt-3 flex gap-2">
@@ -33,13 +60,21 @@ export function WorkflowSidebar({
             placeholder="New workflow"
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && draftName.trim()) {
+                onCreateWorkflow(draftName)
+                setDraftName('')
+              }
+            }}
           />
           <button
             type="button"
             className="pixel-button small"
             onClick={() => {
-              onCreateWorkflow(draftName)
-              setDraftName('')
+              if (draftName.trim()) {
+                onCreateWorkflow(draftName)
+                setDraftName('')
+              }
             }}
           >
             Add
@@ -48,7 +83,7 @@ export function WorkflowSidebar({
         <div className="mt-4 flex flex-col gap-2">
           {workflows.length === 0 ? (
             <div className="text-xs text-[var(--muted)]">
-              Пока нет workflows. Создай первый.
+              No workflows yet. Create your first one.
             </div>
           ) : null}
           {workflows.map((workflow) => (
@@ -56,25 +91,40 @@ export function WorkflowSidebar({
               key={workflow.id}
               className={`pixel-card ${workflow.id === activeWorkflowId ? 'is-active' : ''}`}
             >
-              <button
-                type="button"
-                className="flex-1 text-left"
-                onClick={() => onSelectWorkflow(workflow.id)}
-              >
-                {workflow.name}
-              </button>
-              <button
-                type="button"
-                className="pixel-icon"
-                onClick={() =>
-                  onRenameWorkflow(
-                    workflow.id,
-                    window.prompt('Rename workflow', workflow.name) ?? workflow.name,
-                  )
-                }
-              >
-                Edit
-              </button>
+              {editingId === workflow.id ? (
+                <input
+                  ref={editRef}
+                  className="pixel-input flex-1"
+                  value={editingName}
+                  onChange={(event) => setEditingName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      commitEdit()
+                    }
+                    if (event.key === 'Escape') {
+                      cancelEdit()
+                    }
+                  }}
+                  onBlur={commitEdit}
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex-1 text-left"
+                    onClick={() => onSelectWorkflow(workflow.id)}
+                  >
+                    {workflow.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-icon"
+                    onClick={() => startEditing(workflow)}
+                  >
+                    Edit
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className="pixel-icon danger"
@@ -90,14 +140,23 @@ export function WorkflowSidebar({
       <div>
         <div className="pixel-section-title">Nodes</div>
         <div className="mt-3 grid grid-cols-1 gap-2">
-          {(['input', 'llm', 'output'] as NodeType[]).map((type) => (
+          {([
+            { type: 'input' as NodeType, Icon: InputIcon, label: 'Input' },
+            { type: 'llm' as NodeType, Icon: LlmIcon, label: 'LLM' },
+            { type: 'output' as NodeType, Icon: OutputIcon, label: 'Output' },
+          ]).map(({ type, Icon, label }) => (
             <button
               key={type}
               type="button"
-              className="pixel-button ghost"
+              className="pixel-button ghost flex items-center gap-2"
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData('application/graphai-node-type', type)
+                event.dataTransfer.effectAllowed = 'move'
+              }}
               onClick={() => onAddNode(type)}
             >
-              + {type}
+              <Icon /> {label}
             </button>
           ))}
         </div>

@@ -67,6 +67,10 @@ export async function getMe(): Promise<UserProfile> {
   return request<UserProfile>('/users/me')
 }
 
+export async function deleteMe(): Promise<void> {
+  await request('/users/me', { method: 'DELETE' })
+}
+
 export async function getWorkflows(): Promise<Workflow[]> {
   return request<Workflow[]>('/workflows')
 }
@@ -117,6 +121,10 @@ export async function updateNode(
   })
 }
 
+export async function deleteNode(nodeId: number): Promise<void> {
+  await request(`/nodes/${nodeId}`, { method: 'DELETE' })
+}
+
 export async function getEdges(
   workflowId: number,
 ): Promise<EdgeResponse[]> {
@@ -134,6 +142,12 @@ export async function createEdge(
 
 export async function deleteEdge(edgeId: number): Promise<void> {
   await request(`/edges/${edgeId}`, { method: 'DELETE' })
+}
+
+export async function getExecutions(
+  workflowId: number,
+): Promise<Execution[]> {
+  return request<Execution[]>(`/executions?workflow_id=${workflowId}`)
 }
 
 export async function createExecution(

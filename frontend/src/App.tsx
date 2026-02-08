@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Edge, Node as FlowNode } from 'reactflow'
+import type { Edge, Node as FlowNode, NodeChange } from 'reactflow'
+import { applyNodeChanges } from 'reactflow'
 
 import { AuthScreen } from './components/AuthScreen'
 import { AppShell } from './components/AppShell'
@@ -12,8 +13,11 @@ import {
   createNode,
   createWorkflow,
   deleteEdge,
+  deleteMe,
+  deleteNode,
   deleteWorkflow,
   getEdges,
+  getExecutions,
   getMe,
   getNodes,
   getWorkflows,
@@ -44,6 +48,8 @@ export function App() {
   const [edges, setEdges] = useState<Edge[]>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [runInput, setRunInput] = useState<string>('{}')
+  const [executions, setExecutions] = useState<Execution[]>([])
+  const [executionsLoading, setExecutionsLoading] = useState<boolean>(false)
   const [lastExecution, setLastExecution] = useState<Execution | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
@@ -70,6 +76,15 @@ export function App() {
     setLastExecution(null)
     setError(null)
   }, [])
+
+  const handleDeleteAccount = useCallback(async (): Promise<void> => {
+    try {
+      await deleteMe()
+      handleLogout()
+    } catch (err) {
+      setError((err as ApiError).message)
+    }
+  }, [handleLogout])
 
   const handleError = useCallback(
     (err: ApiError): void => {
@@ -113,14 +128,31 @@ export function App() {
       .finally(() => setLoading(false))
   }, [handleError, token])
 
+  const fetchExecutions = useCallback(
+    async (workflowId: number): Promise<void> => {
+      setExecutionsLoading(true)
+      try {
+        const items = await getExecutions(workflowId)
+        setExecutions(items)
+      } catch (err) {
+        handleError(err as ApiError)
+      } finally {
+        setExecutionsLoading(false)
+      }
+    },
+    [handleError],
+  )
+
   useEffect(() => {
     if (!token || !activeWorkflowId) {
       setNodes([])
       setEdges([])
+      setExecutions([])
       return
     }
 
     setLoading(true)
+    void fetchExecutions(activeWorkflowId)
     Promise.all([
       getNodes(activeWorkflowId),
       getEdges(activeWorkflowId),
@@ -128,7 +160,7 @@ export function App() {
       setNodes(
         nodeItems.map((node) => ({
           id: String(node.id),
-          type: 'default',
+          type: node.type,
           position: { x: node.position_x, y: node.position_y },
           data: {
             ...node.data,
@@ -147,7 +179,7 @@ export function App() {
     })
       .catch((err: ApiError) => handleError(err))
       .finally(() => setLoading(false))
-  }, [activeWorkflowId, handleError, token])
+  }, [activeWorkflowId, fetchExecutions, handleError, token])
 
   async function handleLogin(emailValue: string, password: string): Promise<void> {
     setLoading(true)
@@ -252,7 +284,7 @@ export function App() {
         ...prev,
         {
           id: String(created.id),
-          type: 'default',
+          type: created.type,
           position: { x: created.position_x, y: created.position_y },
           data: {
             ...created.data,
@@ -267,6 +299,57 @@ export function App() {
       handleError(err as ApiError)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDropNode(type: string, position: { x: number; y: number }): Promise<void> {
+    if (!activeWorkflowId) {
+      return
+    }
+    setLoading(true)
+    try {
+      const payload: NodeCreatePayload = {
+        workflow_id: activeWorkflowId,
+        type: type as NodeType,
+        data: { label: `${type} node` },
+        position_x: position.x,
+        position_y: position.y,
+      }
+      const created = await createNode(payload)
+      setNodes((prev) => [
+        ...prev,
+        {
+          id: String(created.id),
+          type: created.type,
+          position: { x: created.position_x, y: created.position_y },
+          data: {
+            ...created.data,
+            label: created.data?.label ?? `${created.type} node`,
+            nodeType: created.type,
+          },
+        },
+      ])
+      setSelectedNodeId(String(created.id))
+      setError(null)
+    } catch (err) {
+      handleError(err as ApiError)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDeleteNode(nodeId: string): Promise<void> {
+    try {
+      await deleteNode(Number(nodeId))
+      setNodes((prev) => prev.filter((n) => n.id !== nodeId))
+      setEdges((prev) =>
+        prev.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      )
+      if (selectedNodeId === nodeId) {
+        setSelectedNodeId(null)
+      }
+    } catch (err) {
+      handleError(err as ApiError)
     }
   }
 
@@ -298,6 +381,13 @@ export function App() {
       setLoading(false)
     }
   }
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((prev) => applyNodeChanges(changes, prev))
+    },
+    [],
+  )
 
   async function handleMoveNode(nodeId: string, x: number, y: number): Promise<void> {
     try {
@@ -359,6 +449,7 @@ export function App() {
       const parsed = runInput.trim() ? (JSON.parse(runInput) as object) : null
       const execution = await createExecution(activeWorkflowId, parsed)
       setLastExecution(execution)
+      void fetchExecutions(activeWorkflowId)
       setError(null)
     } catch (err) {
       handleError(err as ApiError)
@@ -387,6 +478,7 @@ export function App() {
       loading={loading}
       onRun={handleRun}
       onLogout={handleLogout}
+      onDeleteAccount={handleDeleteAccount}
     >
       <WorkflowSidebar
         workflows={workflows}
@@ -400,15 +492,19 @@ export function App() {
       <GraphCanvas
         nodes={nodes}
         edges={edges}
-        selectedNodeId={selectedNodeId}
         onSelectNode={setSelectedNodeId}
+        onNodesChange={handleNodesChange}
         onMoveNode={handleMoveNode}
         onConnect={handleConnect}
         onDeleteEdge={handleDeleteEdge}
+        onDropNode={handleDropNode}
+        onDeleteNode={handleDeleteNode}
       />
       <InspectorPanel
         node={selectedNode}
         runInput={runInput}
+        executions={executions}
+        executionsLoading={executionsLoading}
         onChangeRunInput={setRunInput}
         onSaveNode={handleUpdateNodeData}
       />

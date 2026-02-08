@@ -1,8 +1,13 @@
 import type { Node as FlowNode } from 'reactflow'
 
+import type { Execution } from '../lib/types'
+import { ExecutionList } from './ExecutionList'
+
 interface InspectorPanelProps {
   node: FlowNode | null
   runInput: string
+  executions: Execution[]
+  executionsLoading: boolean
   onChangeRunInput: (value: string) => void
   onSaveNode: (id: string, data: Record<string, unknown>) => void
 }
@@ -10,6 +15,8 @@ interface InspectorPanelProps {
 export function InspectorPanel({
   node,
   runInput,
+  executions,
+  executionsLoading,
   onChangeRunInput,
   onSaveNode,
 }: InspectorPanelProps) {
@@ -30,12 +37,12 @@ export function InspectorPanel({
         <div className="pixel-section-title">Inspector</div>
         {!node ? (
           <div className="mt-4 text-xs text-[var(--muted)]">
-            Выбери ноду, чтобы настроить её параметры.
+            Select a node to configure its parameters.
           </div>
         ) : (
           <div className="mt-4 flex flex-col gap-3">
             <div className="text-xs text-[var(--muted)]">
-              Тип: <span className="text-[var(--accent)]">{nodeType}</span>
+              Type: <span className="text-[var(--accent)]">{nodeType}</span>
             </div>
             <label className="pixel-label">
               Label
@@ -117,7 +124,14 @@ export function InspectorPanel({
           onChange={(event) => onChangeRunInput(event.target.value)}
         />
         <div className="mt-2 text-xs text-[var(--muted)]">
-          JSON payload отправится в `executions`.
+          JSON payload will be sent to `executions`.
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="pixel-section-title">Execution History</div>
+        <div className="mt-3">
+          <ExecutionList executions={executions} loading={executionsLoading} />
         </div>
       </div>
     </aside>

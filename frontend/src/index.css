@@ -68,6 +68,8 @@ body {
 .pixel-button:hover {
   transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.6);
+  background: #5dffd0;
+  cursor: pointer;
 }
 
 .pixel-button.small {
@@ -83,10 +85,24 @@ body {
   text-transform: none;
 }
 
+.pixel-button.ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(53, 255, 188, 0.5);
+  color: var(--accent);
+  transform: none;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
+}
+
 .pixel-link {
   font-size: 0.8rem;
   text-transform: uppercase;
   color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.pixel-link:hover {
+  color: var(--danger);
 }
 
 .pixel-pill {
@@ -140,6 +156,13 @@ body {
   padding: 8px;
   text-transform: uppercase;
   font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pixel-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .pixel-tab.is-active {
@@ -154,6 +177,12 @@ body {
   border: 2px solid rgba(255, 255, 255, 0.1);
   padding: 8px;
   background: rgba(255, 255, 255, 0.02);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pixel-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .pixel-card.is-active {
@@ -165,11 +194,23 @@ body {
   text-transform: uppercase;
   padding: 4px 6px;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pixel-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .pixel-icon.danger {
   color: var(--danger);
   border-color: rgba(255, 86, 120, 0.4);
+}
+
+.pixel-icon.danger:hover {
+  background: rgba(255, 86, 120, 0.15);
+  border-color: rgba(255, 86, 120, 0.7);
 }
 
 .pixel-canvas {
@@ -193,7 +234,14 @@ body {
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
 }
 
-.react-flow__node.selected {
+.react-flow__node {
+  background: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+.react-flow__node.selected .pixel-node {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(53, 255, 188, 0.4);
 }
@@ -201,4 +249,14 @@ body {
 .react-flow__controls-button {
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.2);
+  fill: var(--text);
+  color: var(--text);
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.react-flow__controls {
+  box-shadow: 0 4px 12px var(--shadow);
 }

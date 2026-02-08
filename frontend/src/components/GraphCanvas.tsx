@@ -1,36 +1,130 @@
-import type { Connection, Edge, Node as FlowNode } from 'reactflow'
-import ReactFlow, { Background, Controls } from 'reactflow'
+import { useCallback, useState } from 'react'
+import type { Connection, Edge, EdgeMouseHandler, Node as FlowNode, NodeChange, NodeMouseHandler } from 'reactflow'
+import ReactFlow, { Background, Controls, ReactFlowProvider, useReactFlow } from 'reactflow'
+
+import { InputNode, LlmNode, OutputNode } from './CustomNodes'
+import { ContextMenu } from './NodeContextMenu'
+
+const nodeTypes = { input: InputNode, llm: LlmNode, output: OutputNode }
 
 interface GraphCanvasProps {
   nodes: FlowNode[]
   edges: Edge[]
-  selectedNodeId: string | null
   onSelectNode: (id: string | null) => void
+  onNodesChange: (changes: NodeChange[]) => void
   onMoveNode: (id: string, x: number, y: number) => void
   onConnect: (sourceId: string, targetId: string) => void
   onDeleteEdge: (edgeId: string) => void
+  onDropNode: (type: string, position: { x: number; y: number }) => void
+  onDeleteNode: (id: string) => void
 }
 
-export function GraphCanvas({
+interface ContextMenuState {
+  id: string
+  label: string
+  type: 'node' | 'edge'
+  x: number
+  y: number
+}
+
+function GraphCanvasInner({
   nodes,
   edges,
-  selectedNodeId,
   onSelectNode,
+  onNodesChange,
   onMoveNode,
   onConnect,
   onDeleteEdge,
+  onDropNode,
+  onDeleteNode,
 }: GraphCanvasProps) {
+  const { screenToFlowPosition } = useReactFlow()
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }, [])
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault()
+      const type = event.dataTransfer.getData('application/graphai-node-type')
+      if (!type) {
+        return
+      }
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      })
+      onDropNode(type, position)
+    },
+    [screenToFlowPosition, onDropNode],
+  )
+
+  const handleNodeContextMenu: NodeMouseHandler = useCallback(
+    (event, node) => {
+      event.preventDefault()
+      setContextMenu({
+        id: node.id,
+        label: (node.data as { label?: string }).label ?? node.id,
+        type: 'node',
+        x: event.clientX,
+        y: event.clientY,
+      })
+    },
+    [],
+  )
+
+  const handleEdgeContextMenu: EdgeMouseHandler = useCallback(
+    (event, edge) => {
+      event.preventDefault()
+      const sourceName = (nodes.find((n) => n.id === edge.source)?.data?.label as string) ?? edge.source
+      const targetName = (nodes.find((n) => n.id === edge.target)?.data?.label as string) ?? edge.target
+      setContextMenu({
+        id: edge.id,
+        label: `${sourceName} → ${targetName}`,
+        type: 'edge',
+        x: event.clientX,
+        y: event.clientY,
+      })
+    },
+    [nodes],
+  )
+
+  const handleDeleteFromMenu = useCallback(() => {
+    if (!contextMenu) {
+      return
+    }
+    if (contextMenu.type === 'node') {
+      onDeleteNode(contextMenu.id)
+    } else {
+      onDeleteEdge(contextMenu.id)
+    }
+    setContextMenu(null)
+  }, [contextMenu, onDeleteNode, onDeleteEdge])
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
   return (
-    <section className="pixel-canvas h-full">
+    <section className="pixel-canvas relative h-full">
       <ReactFlow
-        nodes={nodes.map((node) => ({
-          ...node,
-          selected: node.id === selectedNodeId,
-          className: 'pixel-node',
-        }))}
+        nodes={nodes}
         edges={edges}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
-        onPaneClick={() => onSelectNode(null)}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onNodeClick={(_, node) => {
+          onSelectNode(node.id)
+          setContextMenu(null)
+        }}
+        onPaneClick={() => {
+          onSelectNode(null)
+          setContextMenu(null)
+        }}
+        onNodeContextMenu={handleNodeContextMenu}
+        onEdgeContextMenu={handleEdgeContextMenu}
         onNodeDragStop={(_, node) =>
           onMoveNode(node.id, node.position.x, node.position.y)
         }
@@ -39,18 +133,31 @@ export function GraphCanvas({
             onConnect(params.source, params.target)
           }
         }}
-        onEdgesChange={(changes) => {
-          changes.forEach((change) => {
-            if (change.type === 'remove') {
-              onDeleteEdge(String(change.id))
-            }
-          })
-        }}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        proOptions={{ hideAttribution: true }}
         fitView
       >
         <Background gap={24} color="rgba(255,255,255,0.08)" />
         <Controls />
       </ReactFlow>
+      {contextMenu ? (
+        <ContextMenu
+          label={contextMenu.label}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onDelete={handleDeleteFromMenu}
+          onClose={closeContextMenu}
+        />
+      ) : null}
     </section>
+  )
+}
+
+export function GraphCanvas(props: GraphCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <GraphCanvasInner {...props} />
+    </ReactFlowProvider>
   )
 }
