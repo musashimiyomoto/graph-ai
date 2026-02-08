@@ -10,10 +10,6 @@ jobs:
   lint:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: backend
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,21 +23,20 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
-        run: uv sync
+        run: cd backend && uv sync
 
-      - name: Run ruff
-        run: uv run ruff check .
+      - name: Lint
+        run: make back-lint
 
-      - name: Run ty
-        run: uv run ty check .
+      - name: Format check
+        run: make back-format
+
+      - name: Type check
+        run: make back-typecheck
 
   test:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: backend
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,7 +50,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
-        run: uv sync
+        run: cd backend && uv sync
 
-      - name: Run tests
-        run: uv run pytest tests/
+      - name: Test
+        run: make back-test

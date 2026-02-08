@@ -37,11 +37,7 @@ This copies `.env.example` → `.env` and runs `docker compose up --build`.
 ## Local Development
 
 ```bash
-# Install dependencies & pre-commit hooks
 make setup
-
-# Start all services
-make run
 ```
 
 ### Backend
