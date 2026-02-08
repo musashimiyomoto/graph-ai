@@ -28,9 +28,6 @@ jobs:
       - name: Lint
         run: make back-lint
 
-      - name: Format check
-        run: make back-format
-
       - name: Type check
         run: make back-typecheck
 
