@@ -13,30 +13,37 @@ repos:
       - id: trailing-whitespace
   - repo: local
     hooks:
-      - id: ruff-check
-        name: ruff check
-        entry: uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
+      - id: back-check
+        name: back check
+        entry: make back-check
         require_serial: true
         language: unsupported
         types: [python]
 
-      - id: ruff-format
-        name: ruff format
-        entry: uv run ruff format --force-exclude --exit-non-zero-on-format
+      - id: back-typecheck
+        name: back typecheck
+        entry: make back-typecheck
         require_serial: true
         language: unsupported
         types: [python]
 
-      - id: eslint
-        name: eslint
-        entry: npx eslint
+      - id: back-format
+        name: back format
+        entry: make back-format
+        require_serial: true
+        language: unsupported
+        types: [python]
+
+      - id: front-check
+        name: front check
+        entry: make front-check
         require_serial: true
         language: node
         types_or: [javascript, jsx, ts, tsx]
 
-      - id: tsc
-        name: tsc
-        entry: bash -c 'cd frontend && npx tsc -b'
+      - id: front-typecheck
+        name: front typecheck
+        entry: make front-typecheck
         require_serial: true
         language: system
         types_or: [ts, tsx]

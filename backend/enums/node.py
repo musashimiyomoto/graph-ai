@@ -2,7 +2,6 @@
 
 from enum import Enum, StrEnum, auto
 
-from enums.llm_provider import LLMProviderType
 from enums.validator import ValidatorType
 
 
@@ -37,9 +36,9 @@ class NodeDataSpec(Enum):
     )
     LLM = (
         {"name": "label", "validators": {_V.MIN_LENGTH: 1}},
-        {"name": "llm_provider", "validators": {_V.SELECT: list(LLMProviderType)}},
+        {"name": "llm_provider", "validators": {}},
         {"name": "model", "validators": {}},
-        {"name": "prompt", "validators": {}},
+        {"name": "system_prompt", "validators": {}},
         {"name": "temperature", "validators": {_V.GE: 0.0, _V.LE: 2.0}},
     )
     OUTPUT = (

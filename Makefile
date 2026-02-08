@@ -1,16 +1,16 @@
 SHELL := /bin/bash
 
 .PHONY: back-check back-format back-typecheck back-test back-migrate \
-        front-lint front-typecheck front-build \
+        front-check front-typecheck front-build \
         start run
 
 # ── Backend ──────────────────────────────────────────────
 
 back-check:
-	uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
+	cd backend && uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
 
 back-format:
-	uv run ruff format --force-exclude --exit-non-zero-on-format
+	cd backend && uv run ruff format --force-exclude --exit-non-zero-on-format
 
 back-typecheck:
 	cd backend && uv run ty check .
@@ -29,7 +29,7 @@ back-migrate:
 
 # ── Frontend ─────────────────────────────────────────────
 
-front-lint:
+front-check:
 	cd frontend && npm run lint
 
 front-typecheck:
