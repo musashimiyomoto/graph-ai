@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 .PHONY: back-check back-format back-typecheck back-test back-migrate \
         front-lint front-typecheck front-build \
-        run
+        start run
 
 # ── Backend ──────────────────────────────────────────────
 
@@ -39,6 +39,13 @@ front-build:
 	cd frontend && npm run build
 
 # ── Common ───────────────────────────────────────────────
+
+start:
+	command -v uv >/dev/null || pip install uv
+	command -v pre-commit >/dev/null || pip install pre-commit
+	cd backend && uv sync
+	cd frontend && npm install
+	pre-commit install
 
 run:
 	cp .env.example .env && docker compose up --build
