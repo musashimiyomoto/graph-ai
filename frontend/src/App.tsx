@@ -19,6 +19,7 @@ import {
   getEdges,
   getExecutions,
   getMe,
+  getNodeFields,
   getNodes,
   getWorkflows,
   login,
@@ -31,11 +32,31 @@ import type {
   ApiError,
   Execution,
   NodeCreatePayload,
+  NodeField,
   NodeType,
   Workflow,
 } from './lib/types'
 
 const TOKEN_KEY = 'graph_ai_token'
+
+function buildDefaultData(
+  fields: NodeField[],
+  label: string,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {}
+  for (const field of fields) {
+    if (field.name === 'label') {
+      data.label = label
+    } else if (field.validators.select?.length) {
+      data[field.name] = field.validators.select[0]
+    } else if (field.validators.ge !== undefined) {
+      data[field.name] = field.validators.ge
+    } else {
+      data[field.name] = ''
+    }
+  }
+  return data
+}
 
 export function App() {
   const [token, setTokenState] = useState<string | null>(
@@ -272,10 +293,11 @@ export function App() {
     }
     setLoading(true)
     try {
+      const fields = await getNodeFields(type)
       const payload: NodeCreatePayload = {
         workflow_id: activeWorkflowId,
         type,
-        data: { label: `${type} node` },
+        data: buildDefaultData(fields, `${type} node`),
         position_x: 120 + nodes.length * 36,
         position_y: 120 + nodes.length * 36,
       }
@@ -308,10 +330,12 @@ export function App() {
     }
     setLoading(true)
     try {
+      const nodeType = type as NodeType
+      const fields = await getNodeFields(nodeType)
       const payload: NodeCreatePayload = {
         workflow_id: activeWorkflowId,
-        type: type as NodeType,
-        data: { label: `${type} node` },
+        type: nodeType,
+        data: buildDefaultData(fields, `${type} node`),
         position_x: position.x,
         position_y: position.y,
       }
@@ -359,7 +383,9 @@ export function App() {
   ): Promise<void> {
     setLoading(true)
     try {
-      const updated = await updateNode(Number(nodeId), { data })
+      const { nodeType: _nodeType, ...cleanData } = data
+      void _nodeType
+      const updated = await updateNode(Number(nodeId), { data: cleanData })
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
@@ -440,13 +466,14 @@ export function App() {
     }
   }
 
-  async function handleRun(): Promise<void> {
+  async function handleRun(input: string): Promise<void> {
     if (!activeWorkflowId) {
       return
     }
+    setRunInput(input)
     setLoading(true)
     try {
-      const parsed = runInput.trim() ? (JSON.parse(runInput) as object) : null
+      const parsed = input.trim() ? (JSON.parse(input) as object) : null
       const execution = await createExecution(activeWorkflowId, parsed)
       setLastExecution(execution)
       void fetchExecutions(activeWorkflowId)
@@ -479,6 +506,10 @@ export function App() {
       onRun={handleRun}
       onLogout={handleLogout}
       onDeleteAccount={handleDeleteAccount}
+      executions={executions}
+      executionsLoading={executionsLoading}
+      runInput={runInput}
+      onError={handleError}
     >
       <WorkflowSidebar
         workflows={workflows}
@@ -502,10 +533,6 @@ export function App() {
       />
       <InspectorPanel
         node={selectedNode}
-        runInput={runInput}
-        executions={executions}
-        executionsLoading={executionsLoading}
-        onChangeRunInput={setRunInput}
         onSaveNode={handleUpdateNodeData}
       />
     </AppShell>

@@ -2,8 +2,13 @@ import type {
   EdgeCreatePayload,
   EdgeResponse,
   Execution,
+  LlmModel,
+  LlmProvider,
+  LlmProviderCreatePayload,
   NodeCreatePayload,
+  NodeField,
   NodeResponse,
+  NodeType,
   NodeUpdatePayload,
   TokenResponse,
   UserProfile,
@@ -125,6 +130,12 @@ export async function deleteNode(nodeId: number): Promise<void> {
   await request(`/nodes/${nodeId}`, { method: 'DELETE' })
 }
 
+export async function getNodeFields(
+  nodeType: NodeType,
+): Promise<NodeField[]> {
+  return request<NodeField[]>(`/nodes/fields?node_type=${nodeType}`)
+}
+
 export async function getEdges(
   workflowId: number,
 ): Promise<EdgeResponse[]> {
@@ -158,4 +169,27 @@ export async function createExecution(
     method: 'POST',
     body: JSON.stringify({ workflow_id: workflowId, input_data: inputData }),
   })
+}
+
+export async function getLlmProviders(): Promise<LlmProvider[]> {
+  return request<LlmProvider[]>('/llm-providers')
+}
+
+export async function createLlmProvider(
+  payload: LlmProviderCreatePayload,
+): Promise<LlmProvider> {
+  return request<LlmProvider>('/llm-providers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteLlmProvider(providerId: number): Promise<void> {
+  await request(`/llm-providers/${providerId}`, { method: 'DELETE' })
+}
+
+export async function getLlmProviderModels(
+  providerId: number,
+): Promise<LlmModel[]> {
+  return request<LlmModel[]>(`/llm-providers/${providerId}/models`)
 }

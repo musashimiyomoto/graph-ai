@@ -69,6 +69,39 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface NodeFieldValidator {
+  min_length?: number
+  select?: string[]
+  ge?: number
+  le?: number
+}
+
+export interface NodeField {
+  name: string
+  validators: NodeFieldValidator
+}
+
+export interface LlmProvider {
+  id: number
+  user_id: number
+  name: string
+  type: string
+  base_url: string | null
+  is_default: boolean
+}
+
+export interface LlmProviderCreatePayload {
+  name: string
+  type: string
+  api_key: string
+  base_url?: string
+  is_default?: boolean
+}
+
+export interface LlmModel {
+  name: string
+}
+
 export interface ApiError {
   message: string
   status: number

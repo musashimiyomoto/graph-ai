@@ -1,27 +1,183 @@
+import { useEffect, useState } from 'react'
 import type { Node as FlowNode } from 'reactflow'
 
-import type { Execution } from '../lib/types'
-import { ExecutionList } from './ExecutionList'
+import { getLlmProviderModels, getLlmProviders, getNodeFields } from '../lib/api'
+import type {
+  LlmModel,
+  LlmProvider,
+  NodeField,
+  NodeType,
+} from '../lib/types'
 
 interface InspectorPanelProps {
   node: FlowNode | null
-  runInput: string
-  executions: Execution[]
-  executionsLoading: boolean
-  onChangeRunInput: (value: string) => void
   onSaveNode: (id: string, data: Record<string, unknown>) => void
+}
+
+function FieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: NodeField
+  value: unknown
+  onChange: (value: string | number) => void
+}) {
+  const { validators } = field
+
+  if (validators.select) {
+    return (
+      <select
+        className="pixel-input"
+        value={String(value ?? validators.select[0] ?? '')}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {validators.select.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  if (validators.ge !== undefined || validators.le !== undefined) {
+    return (
+      <input
+        className="pixel-input"
+        type="number"
+        value={Number(value ?? validators.ge ?? 0)}
+        onChange={(event) => onChange(Number(event.target.value))}
+        min={validators.ge}
+        max={validators.le}
+        step={0.1}
+      />
+    )
+  }
+
+  if (field.name.includes('prompt')) {
+    return (
+      <textarea
+        className="pixel-textarea"
+        value={String(value ?? '')}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    )
+  }
+
+  return (
+    <input
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  )
+}
+
+function ProviderSelect({
+  providers,
+  value,
+  onChange,
+}: {
+  providers: LlmProvider[]
+  value: unknown
+  onChange: (value: string) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">-- select provider --</option>
+      {providers.map((provider) => (
+        <option key={provider.id} value={provider.name}>
+          {provider.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function ModelSelect({
+  models,
+  value,
+  onChange,
+}: {
+  models: LlmModel[]
+  value: unknown
+  onChange: (value: string) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">-- select model --</option>
+      {models.map((model) => (
+        <option key={model.name} value={model.name}>
+          {model.name}
+        </option>
+      ))}
+    </select>
+  )
 }
 
 export function InspectorPanel({
   node,
-  runInput,
-  executions,
-  executionsLoading,
-  onChangeRunInput,
   onSaveNode,
 }: InspectorPanelProps) {
-  const nodeType = (node?.data?.nodeType as string | undefined) ?? 'INPUT'
+  const nodeType = (node?.data?.nodeType as NodeType | undefined) ?? null
   const nodeData = (node?.data as Record<string, unknown>) ?? {}
+  const [fields, setFields] = useState<NodeField[]>([])
+  const [providers, setProviders] = useState<LlmProvider[]>([])
+  const [models, setModels] = useState<LlmModel[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!nodeType) {
+      void Promise.resolve().then(() => {
+        if (!cancelled) setFields([])
+      })
+      return () => { cancelled = true }
+    }
+    void getNodeFields(nodeType)
+      .then((data) => { if (!cancelled) setFields(data) })
+      .catch(() => { if (!cancelled) setFields([]) })
+    return () => { cancelled = true }
+  }, [nodeType])
+
+  useEffect(() => {
+    let cancelled = false
+    if (nodeType !== 'llm') {
+      void Promise.resolve().then(() => {
+        if (!cancelled) setProviders([])
+      })
+      return () => { cancelled = true }
+    }
+    void getLlmProviders()
+      .then((data) => { if (!cancelled) setProviders(data) })
+      .catch(() => { if (!cancelled) setProviders([]) })
+    return () => { cancelled = true }
+  }, [nodeType])
+
+  const selectedProviderName = String(nodeData['llm_provider'] ?? '')
+  const selectedProvider = providers.find((p) => p.name === selectedProviderName)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!selectedProvider) {
+      void Promise.resolve().then(() => {
+        if (!cancelled) setModels([])
+      })
+      return () => { cancelled = true }
+    }
+    void getLlmProviderModels(selectedProvider.id)
+      .then((data) => { if (!cancelled) setModels(data) })
+      .catch(() => { if (!cancelled) setModels([]) })
+    return () => { cancelled = true }
+  }, [selectedProvider])
 
   function updateField(key: string, value: string | number) {
     if (!node) {
@@ -29,6 +185,44 @@ export function InspectorPanel({
     }
     const updated = { ...nodeData, [key]: value }
     onSaveNode(node.id, updated)
+  }
+
+  function handleProviderChange(providerName: string) {
+    if (!node) {
+      return
+    }
+    const updated = { ...nodeData, llm_provider: providerName, model: '' }
+    onSaveNode(node.id, updated)
+  }
+
+  function renderField(field: NodeField) {
+    if (field.name === 'llm_provider') {
+      return (
+        <ProviderSelect
+          providers={providers}
+          value={nodeData[field.name]}
+          onChange={handleProviderChange}
+        />
+      )
+    }
+
+    if (field.name === 'model') {
+      return (
+        <ModelSelect
+          models={models}
+          value={nodeData[field.name]}
+          onChange={(value) => updateField(field.name, value)}
+        />
+      )
+    }
+
+    return (
+      <FieldInput
+        field={field}
+        value={nodeData[field.name]}
+        onChange={(value) => updateField(field.name, value)}
+      />
+    )
   }
 
   return (
@@ -44,96 +238,17 @@ export function InspectorPanel({
             <div className="text-xs text-[var(--muted)]">
               Type: <span className="text-[var(--accent)]">{nodeType}</span>
             </div>
-            <label className="pixel-label">
-              Label
-              <input
-                className="pixel-input"
-                value={(nodeData.label as string) ?? ''}
-                onChange={(event) => updateField('label', event.target.value)}
-              />
-            </label>
-            {nodeType === 'INPUT' ? (
-              <label className="pixel-label">
-                Sample Input
-                <textarea
-                  className="pixel-textarea"
-                  value={(nodeData.sample_input as string) ?? ''}
-                  onChange={(event) =>
-                    updateField('sample_input', event.target.value)
-                  }
-                />
+            {fields.map((field) => (
+              <label key={field.name} className="pixel-label">
+                {field.name.replace(/_/g, ' ')}
+                {renderField(field)}
               </label>
-            ) : null}
-            {nodeType === 'LLM' ? (
-              <>
-                <label className="pixel-label">
-                  Model
-                  <input
-                    className="pixel-input"
-                    value={(nodeData.model as string) ?? ''}
-                    onChange={(event) => updateField('model', event.target.value)}
-                  />
-                </label>
-                <label className="pixel-label">
-                  Prompt
-                  <textarea
-                    className="pixel-textarea"
-                    value={(nodeData.prompt as string) ?? ''}
-                    onChange={(event) =>
-                      updateField('prompt', event.target.value)
-                    }
-                  />
-                </label>
-                <label className="pixel-label">
-                  Temperature
-                  <input
-                    className="pixel-input"
-                    type="number"
-                    value={Number(nodeData.temperature ?? 0.7)}
-                    onChange={(event) =>
-                      updateField('temperature', Number(event.target.value))
-                    }
-                    min={0}
-                    max={2}
-                    step={0.1}
-                  />
-                </label>
-              </>
-            ) : null}
-            {nodeType === 'OUTPUT' ? (
-              <label className="pixel-label">
-                Output Key
-                <input
-                  className="pixel-input"
-                  value={(nodeData.output_key as string) ?? ''}
-                  onChange={(event) =>
-                    updateField('output_key', event.target.value)
-                  }
-                />
-              </label>
-            ) : null}
+            ))}
           </div>
         )}
       </div>
 
-      <div>
-        <div className="pixel-section-title">Run Input</div>
-        <textarea
-          className="pixel-textarea mt-3 min-h-[160px]"
-          value={runInput}
-          onChange={(event) => onChangeRunInput(event.target.value)}
-        />
-        <div className="mt-2 text-xs text-[var(--muted)]">
-          JSON payload will be sent to `executions`.
-        </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="pixel-section-title">Execution History</div>
-        <div className="mt-3">
-          <ExecutionList executions={executions} loading={executionsLoading} />
-        </div>
-      </div>
     </aside>
   )
 }
