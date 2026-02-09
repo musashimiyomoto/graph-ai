@@ -5,9 +5,33 @@ import uuid
 import pytest
 
 from enums import NodeType
-from enums.node import InputNodeFormat
+from enums.node import InputNodeFormat, OutputNodeFormat
 from tests.factories import NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
+
+NODE_DATA_BY_TYPE: dict[NodeType, dict] = {
+    NodeType.INPUT: {
+        "label": f"node-{uuid.uuid4().hex[:8]}",
+        "format": InputNodeFormat.TXT,
+    },
+    NodeType.LLM: {
+        "label": f"node-{uuid.uuid4().hex[:8]}",
+        "llm_provider": "openai",
+        "model": "gpt-4",
+        "system_prompt": "You are a helpful assistant.",
+        "temperature": 0.7,
+    },
+    NodeType.OUTPUT: {
+        "label": f"node-{uuid.uuid4().hex[:8]}",
+        "format": OutputNodeFormat.TXT,
+    },
+}
+
+EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
+    NodeType.INPUT: {"label", "format"},
+    NodeType.LLM: {"label", "llm_provider", "model", "system_prompt", "temperature"},
+    NodeType.OUTPUT: {"label", "format"},
+}
 
 
 class TestNodeCreate(BaseTestCase):
@@ -16,7 +40,8 @@ class TestNodeCreate(BaseTestCase):
     url = "/nodes"
 
     @pytest.mark.asyncio
-    async def test_ok(self) -> None:
+    @pytest.mark.parametrize("node_type", list(NodeType))
+    async def test_ok(self, node_type: NodeType) -> None:
         """Successful creation returns node data."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
@@ -24,11 +49,8 @@ class TestNodeCreate(BaseTestCase):
         )
         payload = {
             "workflow_id": workflow.id,
-            "type": NodeType.INPUT,
-            "data": {
-                "label": f"node-{uuid.uuid4().hex[:8]}",
-                "format": InputNodeFormat.TXT,
-            },
+            "type": node_type,
+            "data": NODE_DATA_BY_TYPE[node_type],
             "position_x": 10.0,
             "position_y": 20.0,
         }
@@ -42,8 +64,8 @@ class TestNodeCreate(BaseTestCase):
         )
         if data["workflow_id"] != workflow.id:
             pytest.fail("Node workflow_id did not match request")
-        if data["type"] != NodeType.INPUT:
-            pytest.fail("Node type did not match request")
+        if data["type"] != node_type:
+            pytest.fail(f"Node type did not match: {data['type']} != {node_type}")
 
 
 class TestNodeList(BaseTestCase):
@@ -68,6 +90,7 @@ class TestNodeList(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=NodeType.OUTPUT,
+            data=NODE_DATA_BY_TYPE[NodeType.OUTPUT],
         )
 
         response = await self.client.get(
@@ -88,16 +111,17 @@ class TestNodeFields(BaseTestCase):
     url = "/nodes/fields"
 
     @pytest.mark.asyncio
-    async def test_ok(self) -> None:
+    @pytest.mark.parametrize("node_type", list(NodeType))
+    async def test_ok(self, node_type: NodeType) -> None:
         """Returns fields only for the requested node type."""
-        response = await self.client.get(
-            url=self.url, params={"node_type": NodeType.INPUT}
-        )
+        response = await self.client.get(url=self.url, params={"node_type": node_type})
 
         data = await self.assert_response_list(response=response)
         field_names = {field["name"] for field in data}
-        if "label" not in field_names or "format" not in field_names:
-            pytest.fail(f"Expected 'label' and 'format' fields, got {field_names}")
+        expected = EXPECTED_FIELDS_BY_TYPE[node_type]
+        if not expected.issubset(field_names):
+            missing = expected - field_names
+            pytest.fail(f"Missing expected fields for {node_type}: {missing}")
 
 
 class TestNodeUpdate(BaseTestCase):
@@ -106,14 +130,18 @@ class TestNodeUpdate(BaseTestCase):
     url = "/nodes"
 
     @pytest.mark.asyncio
-    async def test_ok(self) -> None:
+    @pytest.mark.parametrize("node_type", list(NodeType))
+    async def test_ok(self, node_type: NodeType) -> None:
         """Successful update returns updated node data."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
         )
         node = await NodeFactory.create_async(
-            session=self.session, workflow_id=workflow.id
+            session=self.session,
+            workflow_id=workflow.id,
+            type=node_type,
+            data=NODE_DATA_BY_TYPE[node_type],
         )
         new_x = 42.0
         new_y = 24.0
@@ -121,10 +149,7 @@ class TestNodeUpdate(BaseTestCase):
         response = await self.client.patch(
             url=f"{self.url}/{node.id}",
             json={
-                "data": {
-                    "label": f"node-{uuid.uuid4().hex[:8]}",
-                    "format": InputNodeFormat.TXT,
-                },
+                "data": NODE_DATA_BY_TYPE[node_type],
                 "position_x": new_x,
                 "position_y": new_y,
             },
@@ -142,14 +167,18 @@ class TestNodeDelete(BaseTestCase):
     url = "/nodes"
 
     @pytest.mark.asyncio
-    async def test_ok(self) -> None:
+    @pytest.mark.parametrize("node_type", list(NodeType))
+    async def test_ok(self, node_type: NodeType) -> None:
         """Successful delete removes the node."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
         )
         node = await NodeFactory.create_async(
-            session=self.session, workflow_id=workflow.id
+            session=self.session,
+            workflow_id=workflow.id,
+            type=node_type,
+            data=NODE_DATA_BY_TYPE[node_type],
         )
 
         response = await self.client.delete(
