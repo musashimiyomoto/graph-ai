@@ -36,3 +36,9 @@ class LLMProviderResponse(BaseModel):
     type: LLMProviderType = Field(default=..., description="Provider type")
     base_url: str | None = Field(default=None, description="Custom base URL")
     is_default: bool = Field(default=..., description="Is default provider")
+
+
+class LLMProviderModelResponse(BaseModel):
+    """Response model for an LLM provider model."""
+
+    name: str = Field(default=..., description="Model name")

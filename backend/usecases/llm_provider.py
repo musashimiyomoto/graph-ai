@@ -1,8 +1,9 @@
 """LLM provider use case implementation."""
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from exceptions import LLMProviderNotFoundError
+from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
 from models import LLMProvider
 from repositories import LLMProviderRepository, UserRepository
 
@@ -135,3 +136,34 @@ class LLMProviderUsecase:
         )
         if not deleted:
             raise LLMProviderNotFoundError
+
+    async def get_models(
+        self, session: AsyncSession, provider_id: int, user_id: int
+    ) -> list[dict[str, str]]:
+        """Fetch available models from an LLM provider.
+
+        Args:
+            session: The session.
+            provider_id: The provider ID.
+            user_id: The owner user ID.
+
+        Returns:
+            A list of model info dicts with 'name' key.
+
+        Raises:
+            LLMProviderNotFoundError: If the provider is not found.
+            LLMProviderConnectionError: If the provider is unreachable.
+
+        """
+        provider = await self.get_llm_provider(
+            session=session, provider_id=provider_id, user_id=user_id
+        )
+        base_url = provider.base_url or "http://ollama:11434"
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{base_url}/api/tags", timeout=10.0)
+                response.raise_for_status()
+                data = response.json()
+                return [{"name": m["name"]} for m in data.get("models", [])]
+        except httpx.HTTPError as exc:
+            raise LLMProviderConnectionError from exc

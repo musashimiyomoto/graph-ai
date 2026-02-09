@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies import auth, db, llm_provider
 from schemas import (
     LLMProviderCreate,
+    LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
     UserResponse,
@@ -96,3 +97,22 @@ async def delete_llm_provider(
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED, content={"detail": "LLM provider deleted"}
     )
+
+
+@router.get(path="/{provider_id}/models")
+async def list_provider_models(
+    provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        llm_provider.LLMProviderUsecase,
+        Depends(dependency=llm_provider.get_llm_provider_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> list[LLMProviderModelResponse]:
+    """List available models for an LLM provider."""
+    return [
+        LLMProviderModelResponse.model_validate(model)
+        for model in await usecase.get_models(
+            session=session, provider_id=provider_id, user_id=current_user.id
+        )
+    ]

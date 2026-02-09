@@ -6,6 +6,7 @@ from schemas.execution import ExecutionCreate, ExecutionResponse
 from schemas.health import HealthResponse, ServiceHealthResponse
 from schemas.llm_provider import (
     LLMProviderCreate,
+    LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "ExecutionResponse",
     "HealthResponse",
     "LLMProviderCreate",
+    "LLMProviderModelResponse",
     "LLMProviderResponse",
     "LLMProviderUpdate",
     "Login",
