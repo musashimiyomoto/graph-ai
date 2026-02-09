@@ -11,6 +11,7 @@ from schemas.llm_provider import (
 )
 from schemas.node import (
     NodeCreate,
+    NodeFieldResponse,
     NodeResponse,
     NodeUpdate,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "LLMProviderUpdate",
     "Login",
     "NodeCreate",
+    "NodeFieldResponse",
     "NodeResponse",
     "NodeUpdate",
     "ServiceHealthResponse",

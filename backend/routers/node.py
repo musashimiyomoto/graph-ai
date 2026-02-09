@@ -7,7 +7,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, node
-from schemas import NodeCreate, NodeResponse, NodeUpdate, UserResponse
+from enums import NodeType
+from schemas import (
+    NodeCreate,
+    NodeFieldResponse,
+    NodeResponse,
+    NodeUpdate,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/nodes", tags=["Nodes"])
 
@@ -46,6 +53,21 @@ async def list_nodes(
         for node in await usecase.get_nodes(
             session=session, user_id=current_user.id, workflow_id=workflow_id
         )
+    ]
+
+
+@router.get(path="/fields")
+async def list_node_fields(
+    node_type: Annotated[NodeType, Query(description="Filter by node type")],
+    usecase: Annotated[
+        node.NodeUsecase,
+        Depends(dependency=node.get_node_usecase),
+    ],
+) -> list[NodeFieldResponse]:
+    """List data field definitions for node types."""
+    return [
+        NodeFieldResponse.model_validate(field)
+        for field in usecase.get_node_fields(node_type=node_type)
     ]
 
 

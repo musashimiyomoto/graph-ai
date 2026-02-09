@@ -40,3 +40,10 @@ class NodeResponse(BaseModel):
     data: dict[str, Any] = Field(default=..., description="Node configuration data")
     position_x: float = Field(default=..., description="X position on canvas")
     position_y: float = Field(default=..., description="Y position on canvas")
+
+
+class NodeFieldResponse(BaseModel):
+    """Response model for a single node data field."""
+
+    name: str = Field(default=..., description="Field name")
+    validators: dict = Field(default=..., description="Field validators")

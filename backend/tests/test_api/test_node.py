@@ -82,6 +82,24 @@ class TestNodeList(BaseTestCase):
             pytest.fail("Expected nodes to appear in list")
 
 
+class TestNodeFields(BaseTestCase):
+    """Tests for GET /nodes/fields."""
+
+    url = "/nodes/fields"
+
+    @pytest.mark.asyncio
+    async def test_ok(self) -> None:
+        """Returns fields only for the requested node type."""
+        response = await self.client.get(
+            url=self.url, params={"node_type": NodeType.INPUT}
+        )
+
+        data = await self.assert_response_list(response=response)
+        field_names = {field["name"] for field in data}
+        if "label" not in field_names or "format" not in field_names:
+            pytest.fail(f"Expected 'label' and 'format' fields, got {field_names}")
+
+
 class TestNodeUpdate(BaseTestCase):
     """Tests for PATCH /nodes/{node_id}."""
 

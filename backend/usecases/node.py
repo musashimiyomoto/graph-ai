@@ -20,6 +20,18 @@ class NodeUsecase:
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
 
+    def get_node_fields(self, node_type: NodeType) -> tuple[dict]:
+        """Return field definitions, optionally filtered by node type.
+
+        Args:
+            node_type: Node type to filter by.
+
+        Returns:
+            A list of field definitions.
+
+        """
+        return NodeDataSpec[node_type.name].value
+
     def _validate_node_data(self, node_type: NodeType, data: dict) -> dict:
         """Validate node data for a specific node type.
 
