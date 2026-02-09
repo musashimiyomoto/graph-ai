@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from enums import NodeDataSpec, NodeType
 from exceptions import (
+    LLMProviderNotFoundError,
     NodeDataValidationError,
     NodeNotFoundError,
     WorkflowNotFoundError,
 )
 from models import Node
-from repositories import NodeRepository, WorkflowRepository
+from repositories import LLMProviderRepository, NodeRepository, WorkflowRepository
 
 
 class NodeUsecase:
@@ -19,6 +20,7 @@ class NodeUsecase:
         """Initialize the usecase."""
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
+        self._llm_provider_repository = LLMProviderRepository()
 
     def get_node_fields(self, node_type: NodeType) -> tuple[dict]:
         """Return field definitions, optionally filtered by node type.
@@ -51,6 +53,33 @@ class NodeUsecase:
         except ValueError as exc:
             raise NodeDataValidationError(message=str(exc)) from exc
 
+    async def _validate_llm_provider_data(
+        self, session: AsyncSession, user_id: int, data: dict
+    ) -> None:
+        """Validate LLM provider data for LLM nodes.
+
+        Args:
+            session: The session.
+            user_id: The owner user ID.
+            data: The validated node data.
+
+        Raises:
+            NodeDataValidationError: If the provider ID is invalid.
+            LLMProviderNotFoundError: If the provider does not belong to the user.
+
+        """
+        provider_id = data.get("llm_provider_id")
+        if not isinstance(provider_id, int) or provider_id <= 0:
+            raise NodeDataValidationError(
+                message="LLM provider ID must be a positive integer."
+            )
+
+        provider = await self._llm_provider_repository.get_by(
+            session=session, id=provider_id, user_id=user_id
+        )
+        if not provider:
+            raise LLMProviderNotFoundError
+
     async def create_node(
         self,
         session: AsyncSession,
@@ -69,6 +98,8 @@ class NodeUsecase:
 
         Raises:
             WorkflowNotFoundError: If the workflow is not found.
+            LLMProviderNotFoundError: If the LLM provider is not found.
+            NodeDataValidationError: If the node data is invalid.
 
         """
         workflow = await self._workflow_repository.get_by(
@@ -85,7 +116,12 @@ class NodeUsecase:
         if not isinstance(raw_data, dict):
             raise NodeDataValidationError(message="Node data must be an object.")
 
-        kwargs["data"] = self._validate_node_data(node_type=node_type, data=raw_data)
+        validated_data = self._validate_node_data(node_type=node_type, data=raw_data)
+        kwargs["data"] = validated_data
+        if node_type is NodeType.LLM:
+            await self._validate_llm_provider_data(
+                session=session, user_id=user_id, data=validated_data
+            )
 
         return await self._node_repository.create(
             session=session,
@@ -133,6 +169,8 @@ class NodeUsecase:
         Raises:
             NodeNotFoundError: If the node is not found.
             WorkflowNotFoundError: If the workflow is not found.
+            LLMProviderNotFoundError: If the LLM provider is not found.
+            NodeDataValidationError: If the node data is invalid.
 
         """
         node = await self._node_repository.get_by(session=session, id=node_id)
@@ -176,9 +214,14 @@ class NodeUsecase:
         if not isinstance(incoming_data, dict):
             raise NodeDataValidationError(message="Node data must be an object.")
 
-        update_data["data"] = self._validate_node_data(
+        validated_data = self._validate_node_data(
             node_type=node.type, data=node.data | incoming_data
         )
+        update_data["data"] = validated_data
+        if node.type is NodeType.LLM:
+            await self._validate_llm_provider_data(
+                session=session, user_id=user_id, data=validated_data
+            )
 
         node = await self._node_repository.update_by(
             session=session,

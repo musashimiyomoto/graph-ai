@@ -1,11 +1,9 @@
 """LLM provider model factory."""
 
-import secrets
-
 from factory.declarations import LazyAttribute
 
 from enums import LLMProviderType
-from models.llm_provider import LLMProvider
+from models import LLMProvider
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 
@@ -20,6 +18,7 @@ class LLMProviderFactory(AsyncSQLAlchemyModelFactory):
     user_id = None
     name = LazyAttribute(lambda _obj: f"provider-{fake.word()}")
     type = LLMProviderType.OLLAMA
-    api_key = LazyAttribute(lambda _obj: secrets.token_urlsafe(18))
+    api_key = None
+    config = LazyAttribute(lambda _obj: {})
     base_url = None
     is_default = False

@@ -26,3 +26,27 @@ class LLMProviderConnectionError(BaseError):
             message="LLM provider is unreachable",
             status_code=HTTPStatus.BAD_GATEWAY,
         )
+
+
+class LLMProviderConfigError(BaseError):
+    """Raised when the LLM provider configuration is invalid."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider configuration is invalid",
+        status_code: HTTPStatus = HTTPStatus.CONFLICT,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
+class UnsupportedLLMProviderError(BaseError):
+    """Raised when the LLM provider type is unsupported."""
+
+    def __init__(
+        self,
+        message: str = "LLM provider type is not supported",
+        status_code: HTTPStatus = HTTPStatus.NOT_IMPLEMENTED,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)

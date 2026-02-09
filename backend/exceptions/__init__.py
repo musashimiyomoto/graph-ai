@@ -4,7 +4,12 @@ from exceptions.auth import AuthCredentialsError
 from exceptions.base import BaseError
 from exceptions.edge import EdgeNodeMismatchError, EdgeNotFoundError
 from exceptions.execution import ExecutionNotFoundError
-from exceptions.llm_provider import LLMProviderConnectionError, LLMProviderNotFoundError
+from exceptions.llm_provider import (
+    LLMProviderConfigError,
+    LLMProviderConnectionError,
+    LLMProviderNotFoundError,
+    UnsupportedLLMProviderError,
+)
 from exceptions.node import NodeDataValidationError, NodeNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
 from exceptions.workflow import WorkflowNotFoundError
@@ -15,10 +20,12 @@ __all__ = [
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
     "ExecutionNotFoundError",
+    "LLMProviderConfigError",
     "LLMProviderConnectionError",
     "LLMProviderNotFoundError",
     "NodeDataValidationError",
     "NodeNotFoundError",
+    "UnsupportedLLMProviderError",
     "UserAlreadyExistsError",
     "UserNotFoundError",
     "WorkflowNotFoundError",

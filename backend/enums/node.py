@@ -36,7 +36,7 @@ class NodeDataSpec(Enum):
     )
     LLM = (
         {"name": "label", "validators": {_V.MIN_LENGTH: 1}},
-        {"name": "llm_provider", "validators": {}},
+        {"name": "llm_provider_id", "validators": {_V.GE: 1}},
         {"name": "model", "validators": {}},
         {"name": "system_prompt", "validators": {}},
         {"name": "temperature", "validators": {_V.GE: 0.0, _V.LE: 2.0}},

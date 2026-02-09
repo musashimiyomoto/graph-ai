@@ -1,6 +1,7 @@
 """LLM provider model."""
 
 from sqlalchemy import Boolean, Enum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from enums import LLMProviderType
@@ -28,10 +29,17 @@ class LLMProvider(BaseWithID):
         nullable=False,
         comment="Provider type",
     )
-    api_key: Mapped[str] = mapped_column(
+    api_key: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
+        nullable=True,
         comment="Encrypted API key",
+    )
+    config: Mapped[dict] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default="{}",
+        nullable=False,
+        comment="Provider configuration",
     )
     base_url: Mapped[str | None] = mapped_column(
         String(512),

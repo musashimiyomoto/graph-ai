@@ -5,7 +5,12 @@ from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
 from schemas.execution import ExecutionCreate, ExecutionResponse
 from schemas.health import HealthResponse, ServiceHealthResponse
 from schemas.llm_provider import (
+    ChatMessage,
+    LLMProviderChatRequest,
+    LLMProviderChatResponse,
     LLMProviderCreate,
+    LLMProviderEmbeddingRequest,
+    LLMProviderEmbeddingResponse,
     LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
@@ -20,13 +25,18 @@ from schemas.user import UserCreate, UserResponse
 from schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
 
 __all__ = [
+    "ChatMessage",
     "EdgeCreate",
     "EdgeResponse",
     "EdgeUpdate",
     "ExecutionCreate",
     "ExecutionResponse",
     "HealthResponse",
+    "LLMProviderChatRequest",
+    "LLMProviderChatResponse",
     "LLMProviderCreate",
+    "LLMProviderEmbeddingRequest",
+    "LLMProviderEmbeddingResponse",
     "LLMProviderModelResponse",
     "LLMProviderResponse",
     "LLMProviderUpdate",

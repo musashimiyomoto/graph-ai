@@ -1,35 +1,40 @@
 """Node API tests."""
 
 import uuid
+from http import HTTPStatus
 
 import pytest
 
 from enums import NodeType
 from enums.node import InputNodeFormat, OutputNodeFormat
-from tests.factories import NodeFactory, WorkflowFactory
+from tests.factories import LLMProviderFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
-NODE_DATA_BY_TYPE: dict[NodeType, dict] = {
-    NodeType.INPUT: {
-        "label": f"node-{uuid.uuid4().hex[:8]}",
-        "format": InputNodeFormat.TXT,
-    },
-    NodeType.LLM: {
-        "label": f"node-{uuid.uuid4().hex[:8]}",
-        "llm_provider": "openai",
-        "model": "gpt-4",
-        "system_prompt": "You are a helpful assistant.",
-        "temperature": 0.7,
-    },
-    NodeType.OUTPUT: {
+
+def build_node_data(node_type: NodeType, *, llm_provider_id: int | None = None) -> dict:
+    """Build node data payloads for tests."""
+    if node_type is NodeType.INPUT:
+        return {
+            "label": f"node-{uuid.uuid4().hex[:8]}",
+            "format": InputNodeFormat.TXT,
+        }
+    if node_type is NodeType.LLM:
+        return {
+            "label": f"node-{uuid.uuid4().hex[:8]}",
+            "llm_provider_id": llm_provider_id,
+            "model": "gpt-4",
+            "system_prompt": "You are a helpful assistant.",
+            "temperature": 0.7,
+        }
+    return {
         "label": f"node-{uuid.uuid4().hex[:8]}",
         "format": OutputNodeFormat.TXT,
-    },
-}
+    }
+
 
 EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.INPUT: {"label", "format"},
-    NodeType.LLM: {"label", "llm_provider", "model", "system_prompt", "temperature"},
+    NodeType.LLM: {"label", "llm_provider_id", "model", "system_prompt", "temperature"},
     NodeType.OUTPUT: {"label", "format"},
 }
 
@@ -47,10 +52,16 @@ class TestNodeCreate(BaseTestCase):
         workflow = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
         )
+        llm_provider_id = None
+        if node_type is NodeType.LLM:
+            provider = await LLMProviderFactory.create_async(
+                session=self.session, user_id=user["id"]
+            )
+            llm_provider_id = provider.id
         payload = {
             "workflow_id": workflow.id,
             "type": node_type,
-            "data": NODE_DATA_BY_TYPE[node_type],
+            "data": build_node_data(node_type, llm_provider_id=llm_provider_id),
             "position_x": 10.0,
             "position_y": 20.0,
         }
@@ -66,6 +77,25 @@ class TestNodeCreate(BaseTestCase):
             pytest.fail("Node workflow_id did not match request")
         if data["type"] != node_type:
             pytest.fail(f"Node type did not match: {data['type']} != {node_type}")
+
+    @pytest.mark.asyncio
+    async def test_llm_provider_not_found(self) -> None:
+        """LLM nodes must reference existing providers."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+
+        payload = {
+            "workflow_id": workflow.id,
+            "type": NodeType.LLM,
+            "data": build_node_data(NodeType.LLM, llm_provider_id=9999),
+        }
+
+        response = await self.client.post(url=self.url, json=payload, headers=headers)
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail(f"Expected {HTTPStatus.NOT_FOUND}, got {response.status_code}")
 
 
 class TestNodeList(BaseTestCase):
@@ -90,7 +120,7 @@ class TestNodeList(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=NodeType.OUTPUT,
-            data=NODE_DATA_BY_TYPE[NodeType.OUTPUT],
+            data=build_node_data(NodeType.OUTPUT),
         )
 
         response = await self.client.get(
@@ -137,11 +167,17 @@ class TestNodeUpdate(BaseTestCase):
         workflow = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
         )
+        llm_provider_id = None
+        if node_type is NodeType.LLM:
+            provider = await LLMProviderFactory.create_async(
+                session=self.session, user_id=user["id"]
+            )
+            llm_provider_id = provider.id
         node = await NodeFactory.create_async(
             session=self.session,
             workflow_id=workflow.id,
             type=node_type,
-            data=NODE_DATA_BY_TYPE[node_type],
+            data=build_node_data(node_type, llm_provider_id=llm_provider_id),
         )
         new_x = 42.0
         new_y = 24.0
@@ -149,7 +185,7 @@ class TestNodeUpdate(BaseTestCase):
         response = await self.client.patch(
             url=f"{self.url}/{node.id}",
             json={
-                "data": NODE_DATA_BY_TYPE[node_type],
+                "data": build_node_data(node_type, llm_provider_id=llm_provider_id),
                 "position_x": new_x,
                 "position_y": new_y,
             },
@@ -178,7 +214,18 @@ class TestNodeDelete(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=node_type,
-            data=NODE_DATA_BY_TYPE[node_type],
+            data=build_node_data(
+                node_type,
+                llm_provider_id=(
+                    (
+                        await LLMProviderFactory.create_async(
+                            session=self.session, user_id=user["id"]
+                        )
+                    ).id
+                    if node_type is NodeType.LLM
+                    else None
+                ),
+            ),
         )
 
         response = await self.client.delete(

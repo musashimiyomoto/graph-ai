@@ -7,8 +7,21 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, llm_provider
+from llm import (
+    ChatMessage as LLMChatMessage,
+)
+from llm import (
+    ChatRequest as LLMChatRequest,
+)
+from llm import (
+    EmbeddingRequest as LLMEmbeddingRequest,
+)
 from schemas import (
+    LLMProviderChatRequest,
+    LLMProviderChatResponse,
     LLMProviderCreate,
+    LLMProviderEmbeddingRequest,
+    LLMProviderEmbeddingResponse,
     LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
@@ -116,3 +129,61 @@ async def list_provider_models(
             session=session, provider_id=provider_id, user_id=current_user.id
         )
     ]
+
+
+@router.post(path="/{provider_id}/chat")
+async def chat_provider(
+    provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],
+    data: Annotated[LLMProviderChatRequest, Body(description="Chat request payload")],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        llm_provider.LLMProviderUsecase,
+        Depends(dependency=llm_provider.get_llm_provider_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> LLMProviderChatResponse:
+    """Send chat messages to an LLM provider."""
+    request = LLMChatRequest(
+        model=data.model,
+        messages=[
+            LLMChatMessage(role=message.role, content=message.content)
+            for message in data.messages
+        ],
+        options=data.options,
+        stream=data.stream,
+    )
+    response = await usecase.chat(
+        session=session,
+        provider_id=provider_id,
+        user_id=current_user.id,
+        request=request,
+    )
+    return LLMProviderChatResponse.model_validate(response.raw)
+
+
+@router.post(path="/{provider_id}/embeddings")
+async def embed_provider(
+    provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],
+    data: Annotated[
+        LLMProviderEmbeddingRequest, Body(description="Embedding request payload")
+    ],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        llm_provider.LLMProviderUsecase,
+        Depends(dependency=llm_provider.get_llm_provider_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> LLMProviderEmbeddingResponse:
+    """Generate embeddings from an LLM provider."""
+    request = LLMEmbeddingRequest(
+        model=data.model,
+        prompt=data.prompt,
+        options=data.options,
+    )
+    response = await usecase.embed(
+        session=session,
+        provider_id=provider_id,
+        user_id=current_user.id,
+        request=request,
+    )
+    return LLMProviderEmbeddingResponse.model_validate(response.raw)
