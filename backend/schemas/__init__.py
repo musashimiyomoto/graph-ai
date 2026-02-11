@@ -2,7 +2,7 @@
 
 from schemas.auth import Login, Token
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
-from schemas.execution import ExecutionCreate, ExecutionResponse
+from schemas.execution import ExecutionCreate, ExecutionInputPayload, ExecutionResponse
 from schemas.health import HealthResponse, ServiceHealthResponse
 from schemas.llm_provider import (
     ChatMessage,
@@ -40,6 +40,7 @@ __all__ = [
     "EdgeResponse",
     "EdgeUpdate",
     "ExecutionCreate",
+    "ExecutionInputPayload",
     "ExecutionResponse",
     "HealthResponse",
     "LLMModel",

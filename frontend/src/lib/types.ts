@@ -130,13 +130,15 @@ export interface LlmProvider {
   user_id: number
   name: string
   type: string
-  base_url: string | null
+  base_url: string
+  config: Record<string, unknown>
 }
 
 export interface LlmProviderCreatePayload {
   name: string
   type: string
   base_url: string
+  config?: Record<string, unknown>
 }
 
 export interface LlmModel {

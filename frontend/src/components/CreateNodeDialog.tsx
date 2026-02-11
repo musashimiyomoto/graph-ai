@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import { getLlmProviderModels, getLlmProviders } from '../lib/api'
 import type {
   LlmModel,
   LlmProvider,
   NodeCatalogItem,
   NodeCatalogField,
 } from '../lib/types'
+import { useLlmProviders } from '../hooks/useLlmProviders'
+import { useProviderModels } from '../hooks/useProviderModels'
 
 interface CreateNodeDialogProps {
   nodeSpec: NodeCatalogItem | null
@@ -156,8 +157,6 @@ export function CreateNodeDialog({
   onConfirm,
 }: CreateNodeDialogProps) {
   const [data, setData] = useState<Record<string, unknown>>(initialData)
-  const [providers, setProviders] = useState<LlmProvider[]>([])
-  const [models, setModels] = useState<LlmModel[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -169,69 +168,19 @@ export function CreateNodeDialog({
     (field) => field.datasource?.kind === 'llm_model',
   )
 
-  const selectedProviderId = Number(data['llm_provider_id'] ?? 0)
+  const selectedProviderRaw = Number(data['llm_provider_id'] ?? 0)
+  const selectedProviderId =
+    Number.isInteger(selectedProviderRaw) && selectedProviderRaw > 0
+      ? selectedProviderRaw
+      : null
 
-  useEffect(() => {
-    let cancelled = false
-
-    if (!hasProviderDatasource) {
-      void Promise.resolve().then(() => {
-        if (!cancelled) {
-          setProviders([])
-        }
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    void getLlmProviders()
-      .then((items) => {
-        if (!cancelled) {
-          setProviders(items)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setProviders([])
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [hasProviderDatasource])
-
-  useEffect(() => {
-    let cancelled = false
-
-    if (!hasModelDatasource || !selectedProviderId) {
-      void Promise.resolve().then(() => {
-        if (!cancelled) {
-          setModels([])
-        }
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    void getLlmProviderModels(selectedProviderId)
-      .then((items) => {
-        if (!cancelled) {
-          setModels(items)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setModels([])
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [hasModelDatasource, selectedProviderId])
+  const { providers } = useLlmProviders({
+    enabled: hasProviderDatasource,
+  })
+  const { models } = useProviderModels({
+    providerId: selectedProviderId,
+    enabled: hasModelDatasource,
+  })
 
   const validationErrors = useMemo(() => {
     const nextErrors: Record<string, string> = {}

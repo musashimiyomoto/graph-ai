@@ -161,7 +161,7 @@ export async function getExecutions(
 
 export async function createExecution(
   workflowId: number,
-  inputData: RunInputPayload | null,
+  inputData: RunInputPayload,
 ): Promise<Execution> {
   return request<Execution>('/executions', {
     method: 'POST',

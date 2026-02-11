@@ -1,6 +1,6 @@
 """Schemas for LLM provider API payloads."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
 
 from enums import LLMProviderType
 
@@ -39,7 +39,7 @@ class LLMProviderCreate(BaseModel):
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
     config: dict = Field(default_factory=dict, description="Provider configuration")
-    base_url: str | None = Field(default=None, description="Custom base URL")
+    base_url: AnyHttpUrl = Field(default=..., description="Custom base URL")
 
 
 class LLMProviderUpdate(BaseModel):
@@ -48,7 +48,14 @@ class LLMProviderUpdate(BaseModel):
     name: str | None = Field(default=None, description="Provider name")
     type: LLMProviderType | None = Field(default=None, description="Provider type")
     config: dict | None = Field(default=None, description="Provider configuration")
-    base_url: str | None = Field(default=None, description="Custom base URL")
+    base_url: AnyHttpUrl | None = Field(default=None, description="Custom base URL")
+
+    @model_validator(mode="after")
+    def validate_base_url(self) -> "LLMProviderUpdate":
+        """Reject explicit null for base_url in PATCH payloads."""
+        if "base_url" in self.model_fields_set and self.base_url is None:
+            raise ValueError
+        return self
 
 
 class LLMProviderResponse(BaseModel):
@@ -60,7 +67,7 @@ class LLMProviderResponse(BaseModel):
     user_id: int = Field(default=..., description="Owner user ID", gt=0)
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
-    base_url: str | None = Field(default=None, description="Custom base URL")
+    base_url: str = Field(default=..., description="Custom base URL")
     config: dict = Field(default=..., description="Provider configuration")
 
 

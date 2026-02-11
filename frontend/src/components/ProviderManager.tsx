@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-import {
-  createLlmProvider,
-  deleteLlmProvider,
-  getLlmProviders,
-} from '../lib/api'
-import type { ApiError, LlmProvider } from '../lib/types'
+import type { ApiError } from '../lib/types'
+import { useLlmProviders } from '../hooks/useLlmProviders'
 
 interface ProviderManagerProps {
   onClose: () => void
@@ -13,23 +9,17 @@ interface ProviderManagerProps {
 }
 
 export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
-  const [providers, setProviders] = useState<LlmProvider[]>([])
   const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
-  const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void getLlmProviders()
-      .then((data) => {
-        if (!cancelled) setProviders(data)
-      })
-      .catch((err: ApiError) => onError(err))
-    return () => {
-      cancelled = true
-    }
-  }, [onError])
+  const {
+    providers,
+    creating,
+    createProvider,
+    removeProvider,
+  } = useLlmProviders({
+    onError,
+  })
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -42,30 +32,24 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
   }, [onClose])
 
   async function handleCreate(): Promise<void> {
-    setSaving(true)
     try {
-      const created = await createLlmProvider({
+      const created = await createProvider({
         name: name.trim(),
         type: 'ollama',
         base_url: baseUrl.trim(),
+        config: {},
       })
-      setProviders((prev) => [...prev, created])
-      setName('')
-      setBaseUrl('')
-    } catch (err) {
-      onError(err as ApiError)
-    } finally {
-      setSaving(false)
+      if (created) {
+        setName('')
+        setBaseUrl('')
+      }
+    } catch (error) {
+      onError(error as ApiError)
     }
   }
 
   async function handleDelete(providerId: number): Promise<void> {
-    try {
-      await deleteLlmProvider(providerId)
-      setProviders((prev) => prev.filter((p) => p.id !== providerId))
-    } catch (err) {
-      onError(err as ApiError)
-    }
+    await removeProvider(providerId)
   }
 
   return (
@@ -137,10 +121,10 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
             <button
               type="button"
               className="pixel-button small"
-              disabled={saving || !name.trim()}
+              disabled={creating || !name.trim() || !baseUrl.trim()}
               onClick={() => void handleCreate()}
             >
-              {saving ? 'Saving...' : 'Add Provider'}
+              {creating ? 'Saving...' : 'Add Provider'}
             </button>
           </div>
         </div>

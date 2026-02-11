@@ -308,8 +308,8 @@ class TestExecutionCreate(BaseTestCase):
             headers=headers,
         )
 
-        if response.status_code != HTTPStatus.BAD_REQUEST:
-            pytest.fail("Expected BAD_REQUEST for invalid input payload")
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail("Expected UNPROCESSABLE_ENTITY for invalid input payload")
 
     @pytest.mark.asyncio
     async def test_dispatch_error(self, monkeypatch: pytest.MonkeyPatch) -> None:

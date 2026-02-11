@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import type {
+  DefaultEdgeOptions,
   Connection,
   Edge,
   EdgeMouseHandler,
@@ -10,7 +11,9 @@ import type {
 } from 'reactflow'
 import ReactFlow, {
   Background,
+  ConnectionLineType,
   Controls,
+  MarkerType,
   ReactFlowProvider,
   useReactFlow,
 } from 'reactflow'
@@ -54,6 +57,23 @@ function GraphCanvasInner({
 }: GraphCanvasProps) {
   const { screenToFlowPosition } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const defaultEdgeOptions = useMemo<DefaultEdgeOptions>(
+    () => ({
+      type: 'step',
+      className: 'pixel-edge',
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 12,
+        height: 12,
+        color: '#35ffbc',
+      },
+      style: {
+        strokeWidth: 2.5,
+        stroke: '#35ffbc',
+      },
+    }),
+    [],
+  )
 
   const nodeTypes = useMemo<NodeTypes>(() => {
     const entries: Array<[string, NodeTypes[string]]> = nodeCatalog.map((item) => [
@@ -155,6 +175,8 @@ function GraphCanvasInner({
             onConnect(params.source, params.target)
           }
         }}
+        defaultEdgeOptions={defaultEdgeOptions}
+        connectionLineType={ConnectionLineType.Step}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         proOptions={{ hideAttribution: true }}

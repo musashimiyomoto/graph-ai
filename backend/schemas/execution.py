@@ -7,11 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from enums import ExecutionStatus
 
 
+class ExecutionInputPayload(BaseModel):
+    """Input payload for workflow execution."""
+
+    value: str = Field(default=..., description="Text input value")
+
+
 class ExecutionCreate(BaseModel):
     """Payload for launching a workflow execution."""
 
     workflow_id: int = Field(default=..., description="Workflow ID", gt=0)
-    input_data: dict | None = Field(default=None, description="Execution input")
+    input_data: ExecutionInputPayload = Field(
+        default=...,
+        description="Execution input",
+    )
 
 
 class ExecutionResponse(BaseModel):
@@ -22,7 +31,10 @@ class ExecutionResponse(BaseModel):
     id: int = Field(default=..., description="Execution ID", gt=0)
     workflow_id: int = Field(default=..., description="Workflow ID", gt=0)
     status: ExecutionStatus = Field(default=..., description="Execution status")
-    input_data: dict | None = Field(default=None, description="Execution input")
+    input_data: ExecutionInputPayload | None = Field(
+        default=None,
+        description="Execution input",
+    )
     output_data: dict | None = Field(default=None, description="Execution output")
     error: str | None = Field(default=None, description="Error message")
     prefect_flow_run_id: str | None = Field(

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Edge, Node as FlowNode, NodeChange } from 'reactflow'
-import { applyNodeChanges } from 'reactflow'
+import { MarkerType, applyNodeChanges } from 'reactflow'
 
 import {
   createEdge,
@@ -47,6 +47,30 @@ interface UseGraphStateResult {
   handleMoveNode: (nodeId: string, x: number, y: number) => Promise<void>
   handleConnect: (sourceId: string, targetId: string) => Promise<void>
   handleDeleteEdge: (edgeId: string) => Promise<void>
+}
+
+function toFlowEdge(edge: {
+  id: number
+  source_node_id: number
+  target_node_id: number
+}): Edge {
+  return {
+    id: String(edge.id),
+    source: String(edge.source_node_id),
+    target: String(edge.target_node_id),
+    type: 'step',
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 12,
+      height: 12,
+      color: '#35ffbc',
+    },
+    className: 'pixel-edge',
+    style: {
+      strokeWidth: 2.5,
+      stroke: '#35ffbc',
+    },
+  }
 }
 
 function toFlowNode(
@@ -131,11 +155,7 @@ export function useGraphState({
           nodeItems.map((node) => toFlowNode(node, nodeCatalogByType)),
         )
         setEdges(
-          edgeItems.map((edge) => ({
-            id: String(edge.id),
-            source: String(edge.source_node_id),
-            target: String(edge.target_node_id),
-          })),
+          edgeItems.map((edge) => toFlowEdge(edge)),
         )
       })
       .catch((error: ApiError) => handleError(error))
@@ -260,11 +280,7 @@ export function useGraphState({
         })
         setEdges((previous) => [
           ...previous,
-          {
-            id: String(created.id),
-            source: String(created.source_node_id),
-            target: String(created.target_node_id),
-          },
+          toFlowEdge(created),
         ])
         setError(null)
       } catch (error) {

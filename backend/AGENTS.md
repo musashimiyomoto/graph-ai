@@ -56,7 +56,7 @@ backend/
 ## Execution pipeline rules
 
 - Execution creation is initiated via `ExecutionUsecase.create_execution`.
-- Prefect dispatch is done through `integrations/prefect_runner.py`.
+- Prefect dispatch is done through `integrations/prefect.py`.
 - Prefect flow entrypoint is `flows/prefect_execution_flow.py`.
 - Flow execution delegates back to usecase (`execute_and_finalize`) to persist final status.
 - Graph validation (acyclic graph, single input/output, connectivity) stays in execution usecase.
@@ -76,7 +76,7 @@ backend/
 - DB tests use testcontainers PostgreSQL (`tests/conftest.py`).
 - API tests live in `tests/test_api/` and use `BaseTestCase`.
 - Model factories live in `tests/factories/` and must be exported via `tests/factories/__init__.py`.
-- Prefect integration scenario is covered in `tests/test_prefect_execution.py`.
+- Prefect integration tests are temporarily deferred; current coverage focuses on API and usecase behavior.
 
 ## Change checklist for a new backend entity
 
