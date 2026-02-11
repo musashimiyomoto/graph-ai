@@ -87,15 +87,12 @@ export interface LlmProvider {
   name: string
   type: string
   base_url: string | null
-  is_default: boolean
 }
 
 export interface LlmProviderCreatePayload {
   name: string
   type: string
-  api_key: string
-  base_url?: string
-  is_default?: boolean
+  base_url: string
 }
 
 export interface LlmModel {

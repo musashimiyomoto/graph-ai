@@ -3,12 +3,7 @@
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from enums import LLMProviderType
-from exceptions import (
-    LLMProviderConfigError,
-    LLMProviderConnectionError,
-    LLMProviderNotFoundError,
-)
+from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
 from llms import ChatRequest, ChatResponse, LLMModel, get_llm_client
 from models import LLMProvider
 from repositories import LLMProviderRepository
@@ -20,30 +15,6 @@ class LLMProviderUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._llm_provider_repository = LLMProviderRepository()
-
-    @staticmethod
-    def _validate_provider_config(
-        provider_type: LLMProviderType, api_key: str | None
-    ) -> None:
-        """Validate provider configuration based on type.
-
-        Args:
-            provider_type: The LLM provider type.
-            api_key: The API key value, if any.
-
-        Raises:
-            LLMProviderConfigError: If the provider configuration is invalid.
-
-        """
-        if provider_type is LLMProviderType.OLLAMA:
-            if api_key is not None:
-                raise LLMProviderConfigError(
-                    message="Ollama providers must not include an API key."
-                )
-            return
-
-        if not api_key:
-            raise LLMProviderConfigError(message="Cloud providers require an API key.")
 
     async def create_llm_provider(
         self,
@@ -61,26 +32,7 @@ class LLMProviderUsecase:
         Returns:
             The created LLM provider.
 
-        Raises:
-            LLMProviderConfigError: If the provider configuration is invalid.
-
         """
-        provider_type = kwargs.get("type")
-        if not isinstance(provider_type, LLMProviderType):
-            raise LLMProviderConfigError(message="LLM provider type is required.")
-
-        api_key_value = kwargs.get("api_key")
-        if api_key_value is not None and not isinstance(api_key_value, str):
-            raise LLMProviderConfigError(
-                message="API key must be a string when provided."
-            )
-        self._validate_provider_config(
-            provider_type=provider_type, api_key=api_key_value
-        )
-
-        if provider_type is LLMProviderType.OLLAMA:
-            kwargs["api_key"] = None
-
         return await self._llm_provider_repository.create(
             session=session,
             data={**kwargs, "user_id": user_id},
@@ -152,34 +104,6 @@ class LLMProviderUsecase:
         )
 
         update_data = {k: v for k, v in kwargs.items() if v is not None}
-
-        incoming_type = kwargs.get("type")
-        if isinstance(incoming_type, LLMProviderType):
-            provider_type = incoming_type
-        else:
-            provider_type = provider.type
-        incoming_api_key = kwargs.get("api_key")
-        if incoming_api_key is not None and not isinstance(incoming_api_key, str):
-            raise LLMProviderConfigError(
-                message="API key must be a string when provided."
-            )
-        if provider_type is LLMProviderType.OLLAMA:
-            if incoming_api_key is not None:
-                raise LLMProviderConfigError(
-                    message="Ollama providers must not include an API key."
-                )
-            effective_api_key = None
-        else:
-            effective_api_key = (
-                incoming_api_key if incoming_api_key is not None else provider.api_key
-            )
-
-        self._validate_provider_config(
-            provider_type=provider_type, api_key=effective_api_key
-        )
-
-        if provider_type is LLMProviderType.OLLAMA:
-            update_data["api_key"] = None
 
         if not update_data:
             return provider

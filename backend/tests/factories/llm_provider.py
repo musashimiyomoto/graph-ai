@@ -18,7 +18,5 @@ class LLMProviderFactory(AsyncSQLAlchemyModelFactory):
     user_id = None
     name = LazyAttribute(lambda _obj: f"provider-{fake.word()}")
     type = LLMProviderType.OLLAMA
-    api_key = None
     config = LazyAttribute(lambda _obj: {})
-    base_url = None
-    is_default = False
+    base_url = LazyAttribute(lambda _obj: fake.url())

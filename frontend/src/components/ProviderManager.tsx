@@ -15,7 +15,6 @@ interface ProviderManagerProps {
 export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
   const [providers, setProviders] = useState<LlmProvider[]>([])
   const [name, setName] = useState('')
-  const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -43,20 +42,15 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
   }, [onClose])
 
   async function handleCreate(): Promise<void> {
-    if (!name.trim() || !apiKey.trim()) {
-      return
-    }
     setSaving(true)
     try {
       const created = await createLlmProvider({
         name: name.trim(),
         type: 'ollama',
-        api_key: apiKey.trim(),
-        base_url: baseUrl.trim() || undefined,
+        base_url: baseUrl.trim(),
       })
       setProviders((prev) => [...prev, created])
       setName('')
-      setApiKey('')
       setBaseUrl('')
     } catch (err) {
       onError(err as ApiError)
@@ -132,16 +126,6 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
               />
             </label>
             <label className="pixel-label">
-              API Key
-              <input
-                className="pixel-input"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
-              />
-            </label>
-            <label className="pixel-label">
               Base URL (optional)
               <input
                 className="pixel-input"
@@ -153,7 +137,7 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
             <button
               type="button"
               className="pixel-button small"
-              disabled={saving || !name.trim() || !apiKey.trim()}
+              disabled={saving || !name.trim()}
               onClick={() => void handleCreate()}
             >
               {saving ? 'Saving...' : 'Add Provider'}

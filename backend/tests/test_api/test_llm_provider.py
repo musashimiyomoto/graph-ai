@@ -1,7 +1,6 @@
 """LLM provider API tests."""
 
 import uuid
-from http import HTTPStatus
 
 import pytest
 
@@ -23,7 +22,6 @@ class TestLLMProviderCreate(BaseTestCase):
             "name": f"provider-{uuid.uuid4().hex[:8]}",
             "type": LLMProviderType.OLLAMA,
             "base_url": "https://example.com",
-            "is_default": True,
             "config": {"timeout": 5},
         }
 
@@ -32,7 +30,7 @@ class TestLLMProviderCreate(BaseTestCase):
         data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
-            {"id", "user_id", "name", "type", "base_url", "is_default", "config"},
+            {"id", "user_id", "name", "type", "base_url"},
         )
         if data["name"] != payload["name"]:
             pytest.fail("Provider name did not match request")
@@ -40,25 +38,8 @@ class TestLLMProviderCreate(BaseTestCase):
             pytest.fail("Provider type did not match request")
         if data["user_id"] != user["id"]:
             pytest.fail("Provider user_id did not match current user")
-        if "api_key" in data:
-            pytest.fail("Provider response must not include api_key")
         if data["config"] != payload["config"]:
             pytest.fail("Provider config did not match request")
-
-    @pytest.mark.asyncio
-    async def test_rejects_api_key(self) -> None:
-        """Ollama providers must not accept an API key."""
-        _user, headers = await self.create_user_and_get_token()
-        payload = {
-            "name": f"provider-{uuid.uuid4().hex[:8]}",
-            "type": LLMProviderType.OLLAMA,
-            "api_key": "invalid-key",
-        }
-
-        response = await self.client.post(url=self.url, json=payload, headers=headers)
-
-        if response.status_code != HTTPStatus.CONFLICT:
-            pytest.fail(f"Expected {HTTPStatus.CONFLICT}, got {response.status_code}")
 
 
 class TestLLMProviderList(BaseTestCase):
@@ -108,15 +89,13 @@ class TestLLMProviderUpdate(BaseTestCase):
 
         response = await self.client.patch(
             url=f"{self.url}/{provider.id}",
-            json={"name": new_name, "is_default": True},
+            json={"name": new_name},
             headers=headers,
         )
 
         data = await self.assert_response_dict(response=response)
         if data["name"] != new_name:
             pytest.fail("Provider name was not updated")
-        if data["is_default"] is not True:
-            pytest.fail("Provider is_default was not updated")
 
 
 class TestLLMProviderDelete(BaseTestCase):

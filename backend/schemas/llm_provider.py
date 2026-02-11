@@ -10,10 +10,8 @@ class LLMProviderCreate(BaseModel):
 
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
-    api_key: str | None = Field(default=None, description="Encrypted API key")
     config: dict = Field(default_factory=dict, description="Provider configuration")
     base_url: str | None = Field(default=None, description="Custom base URL")
-    is_default: bool = Field(default=False, description="Is default provider")
 
 
 class LLMProviderUpdate(BaseModel):
@@ -21,10 +19,8 @@ class LLMProviderUpdate(BaseModel):
 
     name: str | None = Field(default=None, description="Provider name")
     type: LLMProviderType | None = Field(default=None, description="Provider type")
-    api_key: str | None = Field(default=None, description="Encrypted API key")
     config: dict | None = Field(default=None, description="Provider configuration")
     base_url: str | None = Field(default=None, description="Custom base URL")
-    is_default: bool | None = Field(default=None, description="Is default provider")
 
 
 class LLMProviderResponse(BaseModel):
@@ -37,7 +33,6 @@ class LLMProviderResponse(BaseModel):
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
     base_url: str | None = Field(default=None, description="Custom base URL")
-    is_default: bool = Field(default=..., description="Is default provider")
     config: dict = Field(default=..., description="Provider configuration")
 
 
