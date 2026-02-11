@@ -208,7 +208,6 @@ export function useGraphState({
 
   const handleUpdateNodeData = useCallback(
     async (nodeId: string, data: Record<string, unknown>): Promise<void> => {
-      setLoading(true)
       try {
         const { nodeType: _nodeType, iconKey: _iconKey, graph: _graph, ...cleanData } = data
         void _nodeType
@@ -226,11 +225,9 @@ export function useGraphState({
         setError(null)
       } catch (error) {
         handleError(error as ApiError)
-      } finally {
-        setLoading(false)
       }
     },
-    [handleError, nodeCatalogByType, setError, setLoading],
+    [handleError, nodeCatalogByType, setError],
   )
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {

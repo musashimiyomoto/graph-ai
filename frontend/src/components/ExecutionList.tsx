@@ -1,8 +1,9 @@
+import { useState } from 'react'
+
 import type { Execution, ExecutionStatus } from '../lib/types'
 
 interface ExecutionListProps {
   executions: Execution[]
-  loading: boolean
 }
 
 const STATUS_COLORS: Record<ExecutionStatus, string> = {
@@ -22,12 +23,8 @@ function formatTime(iso: string): string {
   })
 }
 
-export function ExecutionList({ executions, loading }: ExecutionListProps) {
-  if (loading) {
-    return (
-      <div className="text-xs text-[var(--muted)]">Loading executions...</div>
-    )
-  }
+export function ExecutionList({ executions }: ExecutionListProps) {
+  const [expandedExecutionId, setExpandedExecutionId] = useState<number | null>(null)
 
   if (executions.length === 0) {
     return (
@@ -40,7 +37,20 @@ export function ExecutionList({ executions, loading }: ExecutionListProps) {
   return (
     <div className="flex flex-col gap-2">
       {executions.map((execution) => (
-        <div key={execution.id} className="pixel-card flex-col items-start gap-1">
+        <div
+          key={execution.id}
+          className={`pixel-card flex-col items-start gap-1 ${
+            execution.output_data ? 'cursor-pointer' : ''
+          }`}
+          onClick={() => {
+            if (!execution.output_data) {
+              return
+            }
+            setExpandedExecutionId((current) =>
+              current === execution.id ? null : execution.id,
+            )
+          }}
+        >
           <div className="flex w-full items-center justify-between">
             <span className="text-xs text-[var(--muted)]">
               #{execution.id}
@@ -53,13 +63,20 @@ export function ExecutionList({ executions, loading }: ExecutionListProps) {
             {formatTime(execution.started_at)}
             {execution.finished_at ? ` → ${formatTime(execution.finished_at)}` : ''}
           </div>
+          {execution.output_data ? (
+            <div className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+              {expandedExecutionId === execution.id
+                ? 'Click to hide output'
+                : 'Click to view output'}
+            </div>
+          ) : null}
           {execution.error ? (
             <div className="mt-1 w-full break-all text-xs text-[var(--danger)]">
               {execution.error}
             </div>
           ) : null}
-          {execution.output_data ? (
-            <pre className="mt-1 max-h-24 w-full overflow-auto text-xs text-[var(--text)] opacity-70">
+          {execution.output_data && expandedExecutionId === execution.id ? (
+            <pre className="hide-scrollbar mt-1 max-h-24 w-full overflow-auto text-xs text-[var(--text)] opacity-70">
               {JSON.stringify(execution.output_data, null, 2)}
             </pre>
           ) : null}

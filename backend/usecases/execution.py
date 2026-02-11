@@ -4,6 +4,7 @@ from collections import deque
 from datetime import UTC, datetime
 from typing import cast
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from enums import ExecutionStatus, NodeType
@@ -12,6 +13,7 @@ from exceptions import (
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
     ExecutionNotFoundError,
+    LLMProviderConnectionError,
     WorkflowNotFoundError,
 )
 from integrations import LLMClientFactory, PrefectExecutionRunner
@@ -624,13 +626,27 @@ class ExecutionUsecase:
             message = "Referenced LLM provider does not exist"
             raise ExecutionGraphValidationError(message=message)
 
-        response = await self._llm_client_factory.get_client(
-            llm_provider=llm_provider
-        ).chat(
-            model=model,
-            messages=[
-                ChatMessage(role="system", content=system_prompt_value),
-                ChatMessage(role="user", content="\n".join(parent_values)),
-            ],
-        )
+        try:
+            response = await self._llm_client_factory.get_client(
+                llm_provider=llm_provider
+            ).chat(
+                model=model,
+                messages=[
+                    ChatMessage(role="system", content=system_prompt_value),
+                    ChatMessage(role="user", content="\n".join(parent_values)),
+                ],
+            )
+        except httpx.TimeoutException as exc:
+            raise LLMProviderConnectionError(
+                message="LLM provider request timed out while running execution"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip()
+            message = f"LLM provider returned {exc.response.status_code}"
+            if detail:
+                message = f"{message}: {detail[:300]}"
+            raise LLMProviderConnectionError(message=message) from exc
+        except httpx.HTTPError as exc:
+            raise LLMProviderConnectionError from exc
+
         return response.message.content

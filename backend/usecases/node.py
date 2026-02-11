@@ -108,19 +108,6 @@ class NodeUsecase:
                 ),
                 default="",
             ),
-            NodeFieldSpec(
-                name="temperature",
-                required=True,
-                validators={
-                    ValidatorType.GE.value: 0.0,
-                    ValidatorType.LE.value: 2.0,
-                },
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.NUMBER,
-                    label="Temperature",
-                ),
-                default=0.7,
-            ),
         )
 
         output_fields = (

@@ -365,7 +365,7 @@ export function CreateNodeDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="pixel-panel max-h-[80vh] w-full max-w-xl overflow-y-auto">
+      <div className="pixel-panel modal-scroll max-h-[80vh] w-full max-w-xl overflow-y-auto">
         <div className="pixel-section-title">Create {nodeSpec.label} Node</div>
         <div className="mt-4 flex flex-col gap-3">
           {fields.map((field) => (

@@ -13,7 +13,6 @@ interface AppShellProps {
   error: string | null
   loading: boolean
   executions: Execution[]
-  executionsLoading: boolean
   runInput: RunInputPayload
   runEnabled: boolean
   runDisabledReason: string | null
@@ -31,7 +30,6 @@ export function AppShell({
   error,
   loading,
   executions,
-  executionsLoading,
   runInput,
   runEnabled,
   runDisabledReason,
@@ -109,7 +107,6 @@ export function AppShell({
       {showExecutions ? (
         <ExecutionHistory
           executions={executions}
-          loading={executionsLoading}
           onClose={() => setShowExecutions(false)}
         />
       ) : null}

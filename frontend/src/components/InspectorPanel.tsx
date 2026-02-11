@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Node as FlowNode } from 'reactflow'
 
 import { getLlmProviderModels, getLlmProviders } from '../lib/api'
@@ -156,9 +156,10 @@ export function InspectorPanel({
   onSaveNode,
 }: InspectorPanelProps) {
   const nodeType = (node?.data?.nodeType as NodeType | undefined) ?? null
-  const nodeData = (node?.data as Record<string, unknown>) ?? {}
   const [providers, setProviders] = useState<LlmProvider[]>([])
   const [models, setModels] = useState<LlmModel[]>([])
+  const [draftData, setDraftData] = useState<Record<string, unknown>>({})
+  const lastSavedSnapshotRef = useRef<string>('')
 
   const catalogByType = useMemo(
     () => Object.fromEntries(nodeCatalog.map((item) => [item.type, item])) as Record<string, NodeCatalogItem>,
@@ -166,7 +167,11 @@ export function InspectorPanel({
   )
 
   const nodeSpec = nodeType ? catalogByType[nodeType] : undefined
-  const fields = nodeSpec?.fields ?? []
+  const fields = useMemo(() => nodeSpec?.fields ?? [], [nodeSpec])
+  const allowedFieldNames = useMemo(
+    () => new Set(fields.map((field) => field.name)),
+    [fields],
+  )
 
   const hasProviderDatasource = fields.some(
     (field) => field.datasource?.kind === 'llm_provider',
@@ -175,7 +180,48 @@ export function InspectorPanel({
     (field) => field.datasource?.kind === 'llm_model',
   )
 
-  const selectedProviderId = Number(nodeData['llm_provider_id'] ?? 0)
+  const selectedProviderId = Number(draftData['llm_provider_id'] ?? 0)
+
+  useEffect(() => {
+    let cancelled = false
+    const rawData = node ? ((node.data as Record<string, unknown>) ?? {}) : {}
+    const initialData = node
+      ? Object.fromEntries(
+          Object.entries(rawData).filter(([key]) => allowedFieldNames.has(key)),
+        )
+      : {}
+    const snapshot = node ? JSON.stringify(initialData) : ''
+
+    void Promise.resolve().then(() => {
+      if (cancelled) {
+        return
+      }
+      setDraftData(initialData)
+      lastSavedSnapshotRef.current = snapshot
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [allowedFieldNames, node])
+
+  useEffect(() => {
+    if (!node) {
+      return
+    }
+
+    const snapshot = JSON.stringify(draftData)
+    if (snapshot === lastSavedSnapshotRef.current) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      lastSavedSnapshotRef.current = snapshot
+      onSaveNode(node.id, draftData)
+    }, 400)
+
+    return () => window.clearTimeout(timer)
+  }, [draftData, node, onSaveNode])
 
   useEffect(() => {
     let cancelled = false
@@ -232,15 +278,11 @@ export function InspectorPanel({
   }, [hasModelDatasource, selectedProviderId])
 
   function updateField(key: string, value: string | number) {
-    if (!node) {
-      return
-    }
-    const updated = { ...nodeData, [key]: value }
-    onSaveNode(node.id, updated)
+    setDraftData((current) => ({ ...current, [key]: value }))
   }
 
   function renderField(field: NodeCatalogField) {
-    const value = nodeData[field.name]
+    const value = draftData[field.name]
 
     if (field.ui.widget === 'provider') {
       return (

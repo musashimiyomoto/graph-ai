@@ -86,7 +86,6 @@ export function App() {
 
   const {
     executions,
-    executionsLoading,
     lastExecution,
     runInput,
     clearExecutions,
@@ -222,7 +221,6 @@ export function App() {
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
         executions={executions}
-        executionsLoading={executionsLoading}
         runInput={runInput}
         runEnabled={runEnabled}
         runDisabledReason={runDisabledReason}

@@ -226,7 +226,6 @@ class TestExecutionCreate(BaseTestCase):
                 "llm_provider_id": 1,
                 "model": "test-model",
                 "system_prompt": "",
-                "temperature": 0.1,
             },
         )
         output_node = await NodeFactory.create_async(

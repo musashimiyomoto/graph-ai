@@ -72,7 +72,7 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div
         ref={ref}
-        className="pixel-panel w-full max-w-md max-h-[80vh] overflow-y-auto"
+        className="pixel-panel modal-scroll w-full max-w-md max-h-[80vh] overflow-y-auto"
       >
         <div className="mb-4 flex items-center justify-between">
           <div className="pixel-section-title">LLM Providers</div>
@@ -126,7 +126,7 @@ export function ProviderManager({ onClose, onError }: ProviderManagerProps) {
               />
             </label>
             <label className="pixel-label">
-              Base URL (optional)
+              Base URL
               <input
                 className="pixel-input"
                 value={baseUrl}
