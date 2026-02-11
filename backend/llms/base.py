@@ -35,25 +35,6 @@ class ChatRequest:
 
     model: str
     messages: list[ChatMessage]
-    options: dict | None
-    stream: bool
-
-
-@dataclass(frozen=True)
-class EmbeddingResponse:
-    """Embedding response payload."""
-
-    embedding: list[float]
-    raw: dict[str, object]
-
-
-@dataclass(frozen=True)
-class EmbeddingRequest:
-    """Embedding request payload."""
-
-    model: str
-    prompt: str
-    options: dict | None
 
 
 class LLMClient(Protocol):
@@ -62,21 +43,5 @@ class LLMClient(Protocol):
     async def list_models(self) -> list[LLMModel]:
         """List available models from the provider."""
 
-    async def chat(
-        self,
-        *,
-        model: str,
-        messages: list[ChatMessage],
-        options: dict | None,
-        stream: bool,
-    ) -> ChatResponse:
+    async def chat(self, model: str, messages: list[ChatMessage]) -> ChatResponse:
         """Send chat messages to the provider."""
-
-    async def embed(
-        self,
-        *,
-        model: str,
-        prompt: str,
-        options: dict | None,
-    ) -> EmbeddingResponse:
-        """Generate embeddings from the provider."""

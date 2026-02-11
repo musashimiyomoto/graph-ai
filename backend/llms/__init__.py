@@ -1,11 +1,17 @@
-"""LLM client factory."""
+"""LLM client exports."""
 
+from constants import DEFAULT_TIMEOUT
 from enums import LLMProviderType
 from exceptions import UnsupportedLLMProviderError
-from llm.base import LLMClient
-from llm.ollama import OllamaClient
+from llms.base import (
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    LLMClient,
+    LLMModel,
+)
+from llms.ollama import OllamaClient
 from models import LLMProvider
-from settings import llm_settings
 
 
 def get_llm_client(provider: LLMProvider) -> LLMClient:
@@ -22,10 +28,17 @@ def get_llm_client(provider: LLMProvider) -> LLMClient:
 
     """
     if provider.type is LLMProviderType.OLLAMA:
-        base_url = provider.base_url or llm_settings.default_base_url
-        return OllamaClient(
-            base_url=base_url,
-            timeout=llm_settings.request_timeout,
-        )
+        return OllamaClient(base_url=provider.base_url, timeout=DEFAULT_TIMEOUT)
 
     raise UnsupportedLLMProviderError
+
+
+__all__ = [
+    "ChatMessage",
+    "ChatRequest",
+    "ChatResponse",
+    "LLMClient",
+    "LLMModel",
+    "OllamaClient",
+    "get_llm_client",
+]

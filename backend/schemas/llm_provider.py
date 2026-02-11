@@ -75,19 +75,3 @@ class LLMProviderChatResponse(BaseModel):
     model: str = Field(default=..., description="Model name")
     message: ChatMessage = Field(default=..., description="Response message")
     done: bool = Field(default=..., description="Whether the response is complete")
-
-
-class LLMProviderEmbeddingRequest(BaseModel):
-    """Request payload for LLM embeddings."""
-
-    model: str = Field(default=..., description="Model name")
-    prompt: str = Field(default=..., description="Embedding prompt")
-    options: dict | None = Field(default=None, description="Provider options")
-
-
-class LLMProviderEmbeddingResponse(BaseModel):
-    """Response payload for LLM embeddings."""
-
-    model_config = ConfigDict(extra="allow")
-
-    embedding: list[float] = Field(default=..., description="Embedding vector")

@@ -9,14 +9,7 @@ from exceptions import (
     LLMProviderConnectionError,
     LLMProviderNotFoundError,
 )
-from llm import (
-    ChatRequest,
-    ChatResponse,
-    EmbeddingRequest,
-    EmbeddingResponse,
-    LLMModel,
-    get_llm_client,
-)
+from llms import ChatRequest, ChatResponse, LLMModel, get_llm_client
 from models import LLMProvider
 from repositories import LLMProviderRepository
 
@@ -278,49 +271,6 @@ class LLMProviderUsecase:
 
         try:
             client = get_llm_client(provider=provider)
-            return await client.chat(
-                model=request.model,
-                messages=request.messages,
-                options=request.options,
-                stream=request.stream,
-            )
-        except httpx.HTTPError as exc:
-            raise LLMProviderConnectionError from exc
-
-    async def embed(
-        self,
-        session: AsyncSession,
-        provider_id: int,
-        user_id: int,
-        request: EmbeddingRequest,
-    ) -> EmbeddingResponse:
-        """Generate embeddings from an LLM provider.
-
-        Args:
-            session: The session.
-            provider_id: The provider ID.
-            user_id: The owner user ID.
-            request: The embedding request payload.
-
-        Returns:
-            The embedding response payload.
-
-        Raises:
-            LLMProviderNotFoundError: If the provider is not found.
-            LLMProviderConnectionError: If the provider is unreachable.
-            UnsupportedLLMProviderError: If the provider type is unsupported.
-
-        """
-        provider = await self.get_llm_provider(
-            session=session, provider_id=provider_id, user_id=user_id
-        )
-
-        try:
-            client = get_llm_client(provider=provider)
-            return await client.embed(
-                model=request.model,
-                prompt=request.prompt,
-                options=request.options,
-            )
+            return await client.chat(model=request.model, messages=request.messages)
         except httpx.HTTPError as exc:
             raise LLMProviderConnectionError from exc
