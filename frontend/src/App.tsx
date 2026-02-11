@@ -100,6 +100,31 @@ export function App() {
   })
 
   const activeWorkflow = workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null
+  const inputNodes = useMemo(
+    () => nodes.filter((node) => node.type === 'input'),
+    [nodes],
+  )
+  const outputNodes = useMemo(
+    () => nodes.filter((node) => node.type === 'output'),
+    [nodes],
+  )
+  const inputFormat = String(inputNodes[0]?.data?.format ?? 'txt')
+  const runDisabledReason = useMemo((): string | null => {
+    if (!activeWorkflowId) {
+      return 'Select a workflow to run.'
+    }
+    if (inputNodes.length !== 1) {
+      return 'Workflow must contain exactly one input node.'
+    }
+    if (outputNodes.length !== 1) {
+      return 'Workflow must contain exactly one output node.'
+    }
+    if (inputFormat !== 'txt') {
+      return `Unsupported input format: ${inputFormat}.`
+    }
+    return null
+  }, [activeWorkflowId, inputFormat, inputNodes.length, outputNodes.length])
+  const runEnabled = runDisabledReason === null
 
   const handleLogout = useCallback(() => {
     clearExecutions()
@@ -199,6 +224,8 @@ export function App() {
         executions={executions}
         executionsLoading={executionsLoading}
         runInput={runInput}
+        runEnabled={runEnabled}
+        runDisabledReason={runDisabledReason}
         onError={handleError}
       >
         <WorkflowSidebar

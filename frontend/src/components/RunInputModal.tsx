@@ -1,19 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
 
+import type { RunInputPayload } from '../lib/types'
+
 interface RunInputModalProps {
-  initialValue: string
+  initialValue: RunInputPayload
   loading: boolean
-  onRun: (input: string) => void
+  canRun: boolean
+  disabledReason: string | null
+  onRun: (input: RunInputPayload) => void
   onClose: () => void
 }
 
 export function RunInputModal({
   initialValue,
   loading,
+  canRun,
+  disabledReason,
   onRun,
   onClose,
 }: RunInputModalProps) {
-  const [value, setValue] = useState(initialValue)
+  const [value, setValue] = useState(initialValue.value)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,19 +41,26 @@ export function RunInputModal({
             ✕
           </button>
         </div>
+        <label className="text-xs uppercase text-[var(--muted)]">
+          Text Input
+        </label>
         <textarea
-          className="pixel-textarea min-h-[200px]"
+          className="pixel-textarea mt-2 min-h-[200px]"
           value={value}
           onChange={(event) => setValue(event.target.value)}
+          disabled={!canRun || loading}
         />
         <div className="mt-2 text-xs text-[var(--muted)]">
-          JSON payload will be sent to executions.
+          Format: txt. Payload will be sent as <code>{'{ "value": "..." }'}</code>.
         </div>
+        {disabledReason ? (
+          <div className="mt-3 text-xs text-red-400">{disabledReason}</div>
+        ) : null}
         <button
           type="button"
           className="pixel-button small mt-4 w-full"
-          disabled={loading}
-          onClick={() => onRun(value)}
+          disabled={loading || !canRun}
+          onClick={() => onRun({ value })}
         >
           {loading ? 'Running...' : 'Run'}
         </button>

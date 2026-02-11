@@ -27,14 +27,15 @@ class Execution(BaseWithID):
         comment="Execution status",
     )
     input_data: Mapped[dict | None] = mapped_column(
-        JSONB,
-        comment="Input data for execution",
+        JSONB, comment="Input data for execution"
     )
     output_data: Mapped[dict | None] = mapped_column(
-        JSONB,
-        comment="Output data from execution",
+        JSONB, comment="Output data from execution"
     )
     error: Mapped[str | None] = mapped_column(Text, comment="Error message if failed")
+    prefect_flow_run_id: Mapped[str | None] = mapped_column(
+        Text, comment="Prefect flow run ID"
+    )
 
     started_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),

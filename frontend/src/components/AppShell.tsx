@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from 'react'
 
-import type { ApiError, Execution } from '../lib/types'
+import type { ApiError, Execution, RunInputPayload } from '../lib/types'
 import { ExecutionHistory } from './ExecutionHistory'
 import { ProviderManager } from './ProviderManager'
 import { RunInputModal } from './RunInputModal'
@@ -14,8 +14,10 @@ interface AppShellProps {
   loading: boolean
   executions: Execution[]
   executionsLoading: boolean
-  runInput: string
-  onRun: (input: string) => void
+  runInput: RunInputPayload
+  runEnabled: boolean
+  runDisabledReason: string | null
+  onRun: (input: RunInputPayload) => void
   onLogout: () => void
   onDeleteAccount: () => void
   onError: (err: ApiError) => void
@@ -31,6 +33,8 @@ export function AppShell({
   executions,
   executionsLoading,
   runInput,
+  runEnabled,
+  runDisabledReason,
   onRun,
   onLogout,
   onDeleteAccount,
@@ -53,6 +57,7 @@ export function AppShell({
         <button
           type="button"
           className="pixel-button small justify-self-center"
+          disabled={!runEnabled}
           onClick={() => setShowRunInput(true)}
         >
           Run
@@ -92,6 +97,8 @@ export function AppShell({
         <RunInputModal
           initialValue={runInput}
           loading={loading}
+          canRun={runEnabled}
+          disabledReason={runDisabledReason}
           onRun={(input) => {
             onRun(input)
             setShowRunInput(false)

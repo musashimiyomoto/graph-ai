@@ -16,3 +16,4 @@ class ExecutionFactory(AsyncSQLAlchemyModelFactory):
     workflow_id = None
     status = ExecutionStatus.CREATED
     input_data = None
+    prefect_flow_run_id = None

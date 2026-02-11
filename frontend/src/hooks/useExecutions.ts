@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { createExecution, getExecutions } from '../lib/api'
-import type { ApiError, Execution } from '../lib/types'
+import type { ApiError, Execution, RunInputPayload } from '../lib/types'
+
+const POLL_INTERVAL_MS = 5000
 
 interface UseExecutionsParams {
   token: string | null
@@ -15,9 +17,9 @@ interface UseExecutionsResult {
   executions: Execution[]
   executionsLoading: boolean
   lastExecution: Execution | null
-  runInput: string
+  runInput: RunInputPayload
   clearExecutions: () => void
-  handleRun: (input: string) => Promise<void>
+  handleRun: (input: RunInputPayload) => Promise<void>
   refreshExecutions: (workflowId: number) => Promise<void>
 }
 
@@ -28,7 +30,7 @@ export function useExecutions({
   setError,
   handleError,
 }: UseExecutionsParams): UseExecutionsResult {
-  const [runInput, setRunInput] = useState<string>('{}')
+  const [runInput, setRunInput] = useState<RunInputPayload>({ value: '' })
   const [executions, setExecutions] = useState<Execution[]>([])
   const [executionsLoading, setExecutionsLoading] = useState<boolean>(false)
   const [lastExecution, setLastExecution] = useState<Execution | null>(null)
@@ -39,6 +41,8 @@ export function useExecutions({
       try {
         const items = await getExecutions(workflowId)
         setExecutions(items)
+        const latest = [...items].sort((first, second) => second.id - first.id)[0] ?? null
+        setLastExecution(latest)
       } catch (error) {
         handleError(error as ApiError)
       } finally {
@@ -58,16 +62,30 @@ export function useExecutions({
     void refreshExecutions(activeWorkflowId)
   }, [activeWorkflowId, refreshExecutions, token])
 
+  useEffect(() => {
+    if (!token || !activeWorkflowId) {
+      return
+    }
+    if (!executions.some((execution) => execution.status === 'running')) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void refreshExecutions(activeWorkflowId)
+    }, POLL_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [activeWorkflowId, executions, refreshExecutions, token])
+
   const handleRun = useCallback(
-    async (input: string): Promise<void> => {
+    async (input: RunInputPayload): Promise<void> => {
       if (!activeWorkflowId) {
         return
       }
       setRunInput(input)
       setLoading(true)
       try {
-        const parsed = input.trim() ? (JSON.parse(input) as object) : null
-        const execution = await createExecution(activeWorkflowId, parsed)
+        const execution = await createExecution(activeWorkflowId, input)
         setLastExecution(execution)
         await refreshExecutions(activeWorkflowId)
         setError(null)

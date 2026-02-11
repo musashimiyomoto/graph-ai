@@ -2,6 +2,10 @@ export type NodeType = string
 
 export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
 
+export interface RunInputPayload {
+  value: string
+}
+
 export interface Workflow {
   id: number
   owner_id: number
@@ -50,9 +54,10 @@ export interface Execution {
   id: number
   workflow_id: number
   status: ExecutionStatus
-  input_data: object | null
-  output_data: object | null
+  input_data: RunInputPayload | null
+  output_data: Record<string, unknown> | null
   error: string | null
+  prefect_flow_run_id: string | null
   started_at: string
   finished_at: string | null
 }

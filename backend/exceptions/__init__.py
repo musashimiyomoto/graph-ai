@@ -3,7 +3,12 @@
 from exceptions.auth import AuthCredentialsError
 from exceptions.base import BaseError
 from exceptions.edge import EdgeNodeMismatchError, EdgeNotFoundError
-from exceptions.execution import ExecutionNotFoundError
+from exceptions.execution import (
+    ExecutionDispatchError,
+    ExecutionGraphValidationError,
+    ExecutionInputValidationError,
+    ExecutionNotFoundError,
+)
 from exceptions.llm_provider import (
     LLMProviderConfigError,
     LLMProviderConnectionError,
@@ -19,6 +24,9 @@ __all__ = [
     "BaseError",
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
+    "ExecutionDispatchError",
+    "ExecutionGraphValidationError",
+    "ExecutionInputValidationError",
     "ExecutionNotFoundError",
     "LLMProviderConfigError",
     "LLMProviderConnectionError",

@@ -9,6 +9,7 @@ import type {
   NodeCreatePayload,
   NodeResponse,
   NodeUpdatePayload,
+  RunInputPayload,
   TokenResponse,
   UserProfile,
   Workflow,
@@ -160,7 +161,7 @@ export async function getExecutions(
 
 export async function createExecution(
   workflowId: number,
-  inputData: object | null,
+  inputData: RunInputPayload | null,
 ): Promise<Execution> {
   return request<Execution>('/executions', {
     method: 'POST',

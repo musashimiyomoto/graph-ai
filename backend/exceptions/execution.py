@@ -15,3 +15,39 @@ class ExecutionNotFoundError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
+
+
+class ExecutionGraphValidationError(BaseError):
+    """Raised when a workflow graph cannot be executed."""
+
+    def __init__(
+        self,
+        message: str = "Workflow graph is not valid for execution",
+        status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
+class ExecutionInputValidationError(BaseError):
+    """Raised when execution input payload is invalid."""
+
+    def __init__(
+        self,
+        message: str = "Execution input payload is invalid",
+        status_code: HTTPStatus = HTTPStatus.BAD_REQUEST,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
+class ExecutionDispatchError(BaseError):
+    """Raised when execution dispatch to Prefect fails."""
+
+    def __init__(
+        self,
+        message: str = "Failed to dispatch execution",
+        status_code: HTTPStatus = HTTPStatus.SERVICE_UNAVAILABLE,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
