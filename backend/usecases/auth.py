@@ -140,8 +140,7 @@ class AuthUsecase:
             AuthCredentialsError: If the token is invalid.
 
         """
-        payload = self.get_payload(token=token)
-        email = payload.get("sub")
+        email = self.get_payload(token=token).get("sub")
 
         if email is None:
             raise AuthCredentialsError

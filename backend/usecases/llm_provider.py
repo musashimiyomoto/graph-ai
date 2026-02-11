@@ -163,7 +163,7 @@ class LLMProviderUsecase:
 
         try:
             return await self._llm_client_factory.get_client(
-                provider=llm_provider
+                llm_provider=llm_provider
             ).list_models()
         except httpx.TimeoutException as exc:
             raise LLMProviderConnectionError(

@@ -4,15 +4,7 @@ from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from constants import (
-    DEFAULT_TEXT_FORMAT,
-    GE_KEY,
-    LE_KEY,
-    MIN_LENGTH_KEY,
-    SELECT_KEY,
-    TEXT_FORMAT_OPTIONS,
-)
-from enums import NodeType
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, ValidatorType
 from exceptions import (
     LLMProviderNotFoundError,
     NodeDataValidationError,
@@ -53,7 +45,7 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="label",
                 required=True,
-                validators={MIN_LENGTH_KEY: 1},
+                validators={ValidatorType.MIN_LENGTH.value: 1},
                 ui=NodeFieldUI(
                     widget=NodeFieldWidget.TEXT,
                     label="Label",
@@ -64,9 +56,9 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="format",
                 required=True,
-                validators={SELECT_KEY: list(TEXT_FORMAT_OPTIONS)},
+                validators={ValidatorType.SELECT.value: [InputNodeFormat.TXT.value]},
                 ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
-                default=DEFAULT_TEXT_FORMAT,
+                default=InputNodeFormat.TXT.value,
             ),
         )
 
@@ -74,7 +66,7 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="label",
                 required=True,
-                validators={MIN_LENGTH_KEY: 1},
+                validators={ValidatorType.MIN_LENGTH.value: 1},
                 ui=NodeFieldUI(
                     widget=NodeFieldWidget.TEXT,
                     label="Label",
@@ -85,7 +77,7 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="llm_provider_id",
                 required=True,
-                validators={GE_KEY: 1},
+                validators={ValidatorType.GE.value: 1},
                 ui=NodeFieldUI(
                     widget=NodeFieldWidget.PROVIDER,
                     label="Provider",
@@ -97,7 +89,7 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="model",
                 required=True,
-                validators={MIN_LENGTH_KEY: 1},
+                validators={ValidatorType.MIN_LENGTH.value: 1},
                 ui=NodeFieldUI(widget=NodeFieldWidget.MODEL, label="Model"),
                 datasource=NodeFieldDataSource(
                     kind=NodeFieldDataSourceKind.LLM_MODEL,
@@ -119,7 +111,10 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="temperature",
                 required=True,
-                validators={GE_KEY: 0.0, LE_KEY: 2.0},
+                validators={
+                    ValidatorType.GE.value: 0.0,
+                    ValidatorType.LE.value: 2.0,
+                },
                 ui=NodeFieldUI(
                     widget=NodeFieldWidget.NUMBER,
                     label="Temperature",
@@ -132,7 +127,7 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="label",
                 required=True,
-                validators={MIN_LENGTH_KEY: 1},
+                validators={ValidatorType.MIN_LENGTH.value: 1},
                 ui=NodeFieldUI(
                     widget=NodeFieldWidget.TEXT,
                     label="Label",
@@ -143,9 +138,9 @@ class NodeUsecase:
             NodeFieldSpec(
                 name="format",
                 required=True,
-                validators={SELECT_KEY: list(TEXT_FORMAT_OPTIONS)},
+                validators={ValidatorType.SELECT.value: [OutputNodeFormat.TXT.value]},
                 ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
-                default=DEFAULT_TEXT_FORMAT,
+                default=OutputNodeFormat.TXT.value,
             ),
         )
 
@@ -202,27 +197,28 @@ class NodeUsecase:
         """
         validators = field.validators
 
-        if MIN_LENGTH_KEY in validators and (
-            not isinstance(value, str) or len(value) < int(validators[MIN_LENGTH_KEY])
+        if ValidatorType.MIN_LENGTH.value in validators and (
+            not isinstance(value, str)
+            or len(value) < int(validators[ValidatorType.MIN_LENGTH.value])
         ):
             errors.append(
                 f"Field '{field.name}' must be a string with "
-                f"min length {validators[MIN_LENGTH_KEY]}"
+                f"min length {validators[ValidatorType.MIN_LENGTH.value]}"
             )
 
-        if SELECT_KEY in validators:
-            allowed = validators[SELECT_KEY]
+        if ValidatorType.SELECT.value in validators:
+            allowed = validators[ValidatorType.SELECT.value]
             if value not in allowed:
                 options = ", ".join(str(option) for option in allowed)
                 errors.append(f"Field '{field.name}' must be one of: {options}")
 
-        if GE_KEY in validators:
-            threshold = float(validators[GE_KEY])
+        if ValidatorType.GE.value in validators:
+            threshold = float(validators[ValidatorType.GE.value])
             if not isinstance(value, int | float) or value < threshold:
                 errors.append(f"Field '{field.name}' must be >= {threshold}")
 
-        if LE_KEY in validators:
-            threshold = float(validators[LE_KEY])
+        if ValidatorType.LE.value in validators:
+            threshold = float(validators[ValidatorType.LE.value])
             if not isinstance(value, int | float) or value > threshold:
                 errors.append(f"Field '{field.name}' must be <= {threshold}")
 
@@ -479,11 +475,9 @@ class NodeUsecase:
         if not isinstance(incoming_data, dict):
             raise NodeDataValidationError(message="Node data must be an object.")
 
-        normalized_data = cast("dict[str, Any]", incoming_data)
-        merged_data = node.data | normalized_data
         validated_data = self._validate_node_data(
             node_type=node.type,
-            data=merged_data,
+            data=node.data | incoming_data,
         )
         await self._validate_external_references(
             session=session,

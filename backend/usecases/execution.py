@@ -95,7 +95,7 @@ class ExecutionUsecase:
 
         try:
             prefect_flow_run_id = await self._prefect_runner.dispatch_execution(
-                execution.id
+                execution_id=execution.id
             )
         except ExecutionDispatchError as exc:
             await self._execution_repository.update_by(
@@ -116,6 +116,7 @@ class ExecutionUsecase:
         )
         if updated_execution is None:
             raise ExecutionDispatchError(message="Execution was not persisted")
+
         return updated_execution
 
     async def get_executions(
@@ -220,6 +221,7 @@ class ExecutionUsecase:
             session=session,
             workflow_id=execution.workflow_id,
         )
+
         graph = self._build_graph_context(nodes=nodes, edges=edges)
         nodes_by_id = cast("dict[int, Node]", graph["nodes_by_id"])
         inbound = cast("dict[int, list[int]]", graph["inbound"])
@@ -324,6 +326,7 @@ class ExecutionUsecase:
         )
         if updated_execution is None:
             raise ExecutionNotFoundError
+
         return updated_execution
 
     async def mark_execution_failed(
@@ -357,6 +360,7 @@ class ExecutionUsecase:
         )
         if updated_execution is None:
             raise ExecutionNotFoundError
+
         return updated_execution
 
     def _validate_input_payload(self, input_data: dict | None) -> None:
@@ -373,12 +377,13 @@ class ExecutionUsecase:
             raise ExecutionInputValidationError(
                 message="Input payload is required for txt format"
             )
+
         if not isinstance(input_data, dict):
             raise ExecutionInputValidationError(
                 message="Input payload must be an object"
             )
-        value = input_data.get("value")
-        if not isinstance(value, str):
+
+        if not isinstance(input_data.get("value"), str):
             raise ExecutionInputValidationError(
                 message="Input payload field 'value' must be a string"
             )
@@ -406,10 +411,11 @@ class ExecutionUsecase:
             raise ExecutionGraphValidationError(message=message)
 
         input_nodes = [node for node in nodes if node.type is NodeType.INPUT]
-        output_nodes = [node for node in nodes if node.type is NodeType.OUTPUT]
         if len(input_nodes) != 1:
             message = "Workflow must contain exactly one input node"
             raise ExecutionGraphValidationError(message=message)
+
+        output_nodes = [node for node in nodes if node.type is NodeType.OUTPUT]
         if len(output_nodes) != 1:
             message = "Workflow must contain exactly one output node"
             raise ExecutionGraphValidationError(message=message)
@@ -424,6 +430,7 @@ class ExecutionUsecase:
             if source_id not in nodes_by_id or target_id not in nodes_by_id:
                 message = "Workflow contains edge with missing node reference"
                 raise ExecutionGraphValidationError(message=message)
+
             outbound[source_id].append(target_id)
             inbound[target_id].append(source_id)
             indegree[target_id] += 1
@@ -441,6 +448,7 @@ class ExecutionUsecase:
             inbound=inbound,
             nodes_by_id=nodes_by_id,
         )
+
         return {
             "input_node_id": input_node_id,
             "output_node_id": output_node_id,
@@ -484,6 +492,7 @@ class ExecutionUsecase:
         if len(order) != len(indegree):
             message = "Workflow graph must be acyclic"
             raise ExecutionGraphValidationError(message=message)
+
         return order
 
     def _validate_connectivity(
@@ -561,10 +570,12 @@ class ExecutionUsecase:
         if input_data is None:
             message = "Execution input payload is required"
             raise ExecutionInputValidationError(message=message)
+
         value = input_data.get("value")
         if not isinstance(value, str):
             message = "Execution input_data.value must be a string"
             raise ExecutionInputValidationError(message=message)
+
         return value
 
     async def _execute_llm_node(
@@ -589,8 +600,8 @@ class ExecutionUsecase:
             ExecutionGraphValidationError: If node configuration is invalid.
 
         """
-        provider_id = node_data.get("llm_provider_id")
-        if not isinstance(provider_id, int) or provider_id <= 0:
+        llm_provider_id = node_data.get("llm_provider_id")
+        if not isinstance(llm_provider_id, int) or llm_provider_id <= 0:
             message = "LLM node requires a valid llm_provider_id"
             raise ExecutionGraphValidationError(message=message)
 
@@ -604,17 +615,18 @@ class ExecutionUsecase:
             message = "LLM node field system_prompt must be a string"
             raise ExecutionGraphValidationError(message=message)
 
-        provider = await self._provider_repository.get_by(
+        llm_provider = await self._provider_repository.get_by(
             session=session,
-            id=provider_id,
+            id=llm_provider_id,
             user_id=workflow_owner_id,
         )
-        if provider is None:
+        if llm_provider is None:
             message = "Referenced LLM provider does not exist"
             raise ExecutionGraphValidationError(message=message)
 
-        client = self._llm_client_factory.get_client(provider)
-        response = await client.chat(
+        response = await self._llm_client_factory.get_client(
+            llm_provider=llm_provider
+        ).chat(
             model=model,
             messages=[
                 ChatMessage(role="system", content=system_prompt_value),

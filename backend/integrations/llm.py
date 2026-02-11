@@ -28,7 +28,6 @@ class OllamaClient:
         self,
         base_url: str,
         timeout: float,
-        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         """Initialize the client.
 
@@ -38,9 +37,8 @@ class OllamaClient:
             transport: Optional transport for testing.
 
         """
-        self.__base_url = base_url
-        self.__timeout = timeout
-        self.__transport = transport
+        self._base_url = base_url
+        self._timeout = timeout
 
     async def list_models(self) -> list[LLMModel]:
         """List available models from provider.
@@ -50,9 +48,7 @@ class OllamaClient:
 
         """
         async with httpx.AsyncClient(
-            base_url=self.__base_url,
-            timeout=self.__timeout,
-            transport=self.__transport,
+            base_url=self._base_url, timeout=self._timeout
         ) as client:
             response = await client.get(url="/api/tags")
             response.raise_for_status()
@@ -72,9 +68,7 @@ class OllamaClient:
 
         """
         async with httpx.AsyncClient(
-            base_url=self.__base_url,
-            timeout=self.__timeout,
-            transport=self.__transport,
+            base_url=self._base_url, timeout=self._timeout
         ) as client:
             response = await client.post(
                 url="/api/chat",
@@ -106,11 +100,11 @@ class OllamaClient:
 class LLMClientFactory:
     """Factory for resolving integration client by provider type."""
 
-    def get_client(self, provider: LLMProvider) -> BaseLLMClient:
+    def get_client(self, llm_provider: LLMProvider) -> BaseLLMClient:
         """Create an LLM client for provider.
 
         Args:
-            provider: Persisted provider entity.
+            llm_provider: Persisted provider entity.
 
         Returns:
             Concrete provider client implementation.
@@ -119,7 +113,7 @@ class LLMClientFactory:
             UnsupportedLLMProviderError: If provider type is unsupported.
 
         """
-        if provider.type is LLMProviderType.OLLAMA:
-            return OllamaClient(base_url=provider.base_url, timeout=DEFAULT_TIMEOUT)
+        if llm_provider.type is LLMProviderType.OLLAMA:
+            return OllamaClient(base_url=llm_provider.base_url, timeout=DEFAULT_TIMEOUT)
 
         raise UnsupportedLLMProviderError
