@@ -7,10 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, llm_provider
-from llms import (
-    ChatMessage as LLMChatMessage,
-)
-from llms import (
+from schemas import (
     ChatRequest as LLMChatRequest,
 )
 from schemas import (
@@ -144,10 +141,7 @@ async def chat_provider(
         user_id=current_user.id,
         request=LLMChatRequest(
             model=data.model,
-            messages=[
-                LLMChatMessage(role=message.role, content=message.content)
-                for message in data.messages
-            ],
+            messages=data.messages,
         ),
     )
     return LLMProviderChatResponse.model_validate(response.raw)

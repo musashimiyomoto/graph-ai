@@ -117,7 +117,6 @@ export interface NodeCatalogItem {
   label: string
   icon_key: string
   graph: NodeCatalogGraph
-  defaults: Record<string, unknown>
   fields: NodeCatalogField[]
 }
 

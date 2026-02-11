@@ -73,11 +73,6 @@ function buildDefaultData(catalogNode: NodeCatalogItem): Record<string, unknown>
   const data: Record<string, unknown> = {}
 
   for (const field of catalogNode.fields) {
-    if (catalogNode.defaults[field.name] !== undefined) {
-      data[field.name] = catalogNode.defaults[field.name]
-      continue
-    }
-
     if (field.default !== null && field.default !== undefined) {
       data[field.name] = field.default
       continue

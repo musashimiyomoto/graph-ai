@@ -5,6 +5,46 @@ from pydantic import BaseModel, ConfigDict, Field
 from enums import LLMProviderType
 
 
+class LLMModel(BaseModel):
+    """Model metadata returned by an LLM provider."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(default=..., description="Model name")
+
+
+class ChatMessage(BaseModel):
+    """Chat message payload."""
+
+    model_config = ConfigDict(frozen=True)
+
+    role: str = Field(default=..., description="Message role")
+    content: str = Field(default=..., description="Message content")
+
+
+class ChatResponse(BaseModel):
+    """Chat response payload."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model: str = Field(default=..., description="Model name")
+    message: ChatMessage = Field(default=..., description="Response message")
+    done: bool = Field(default=..., description="Completion flag")
+    raw: dict[str, object] = Field(default_factory=dict, description="Raw payload")
+
+
+class ChatRequest(BaseModel):
+    """Chat request payload."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model: str = Field(default=..., description="Model name")
+    messages: list[ChatMessage] = Field(
+        default_factory=list,
+        description="Messages for provider request",
+    )
+
+
 class LLMProviderCreate(BaseModel):
     """Payload for creating an LLM provider."""
 
@@ -42,13 +82,6 @@ class LLMProviderModelResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     name: str = Field(default=..., description="Model name")
-
-
-class ChatMessage(BaseModel):
-    """Chat message payload."""
-
-    role: str = Field(default=..., description="Message role")
-    content: str = Field(default=..., description="Message content")
 
 
 class LLMProviderChatRequest(BaseModel):

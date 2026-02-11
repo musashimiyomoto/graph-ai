@@ -4,6 +4,14 @@ from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from constants import (
+    DEFAULT_TEXT_FORMAT,
+    GE_KEY,
+    LE_KEY,
+    MIN_LENGTH_KEY,
+    SELECT_KEY,
+    TEXT_FORMAT_OPTIONS,
+)
 from enums import NodeType
 from exceptions import (
     LLMProviderNotFoundError,
@@ -12,14 +20,16 @@ from exceptions import (
     WorkflowNotFoundError,
 )
 from models import Node
-from node_catalog import (
-    NodeCatalogItem,
-    NodeFieldDataSourceKind,
-    get_node_catalog,
-    get_node_spec,
-    validate_node_data,
-)
 from repositories import LLMProviderRepository, NodeRepository, WorkflowRepository
+from schemas import (
+    NodeCatalogItem,
+    NodeFieldDataSource,
+    NodeFieldDataSourceKind,
+    NodeFieldSpec,
+    NodeFieldUI,
+    NodeFieldWidget,
+    NodeGraphSpec,
+)
 
 
 class NodeUsecase:
@@ -30,6 +40,236 @@ class NodeUsecase:
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
+        self._node_catalog = self._build_catalog()
+
+    def _build_catalog(self) -> dict[NodeType, NodeCatalogItem]:
+        """Build static node catalog.
+
+        Returns:
+            Mapping of node types to catalog entries.
+
+        """
+        input_fields = (
+            NodeFieldSpec(
+                name="label",
+                required=True,
+                validators={MIN_LENGTH_KEY: 1},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.TEXT,
+                    label="Label",
+                    placeholder="Input label",
+                ),
+                default="Input node",
+            ),
+            NodeFieldSpec(
+                name="format",
+                required=True,
+                validators={SELECT_KEY: list(TEXT_FORMAT_OPTIONS)},
+                ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
+                default=DEFAULT_TEXT_FORMAT,
+            ),
+        )
+
+        llm_fields = (
+            NodeFieldSpec(
+                name="label",
+                required=True,
+                validators={MIN_LENGTH_KEY: 1},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.TEXT,
+                    label="Label",
+                    placeholder="LLM label",
+                ),
+                default="LLM node",
+            ),
+            NodeFieldSpec(
+                name="llm_provider_id",
+                required=True,
+                validators={GE_KEY: 1},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.PROVIDER,
+                    label="Provider",
+                ),
+                datasource=NodeFieldDataSource(
+                    kind=NodeFieldDataSourceKind.LLM_PROVIDER
+                ),
+            ),
+            NodeFieldSpec(
+                name="model",
+                required=True,
+                validators={MIN_LENGTH_KEY: 1},
+                ui=NodeFieldUI(widget=NodeFieldWidget.MODEL, label="Model"),
+                datasource=NodeFieldDataSource(
+                    kind=NodeFieldDataSourceKind.LLM_MODEL,
+                    depends_on="llm_provider_id",
+                ),
+                default="",
+            ),
+            NodeFieldSpec(
+                name="system_prompt",
+                required=True,
+                validators={},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.TEXTAREA,
+                    label="System prompt",
+                    placeholder="You are a helpful assistant.",
+                ),
+                default="",
+            ),
+            NodeFieldSpec(
+                name="temperature",
+                required=True,
+                validators={GE_KEY: 0.0, LE_KEY: 2.0},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.NUMBER,
+                    label="Temperature",
+                ),
+                default=0.7,
+            ),
+        )
+
+        output_fields = (
+            NodeFieldSpec(
+                name="label",
+                required=True,
+                validators={MIN_LENGTH_KEY: 1},
+                ui=NodeFieldUI(
+                    widget=NodeFieldWidget.TEXT,
+                    label="Label",
+                    placeholder="Output label",
+                ),
+                default="Output node",
+            ),
+            NodeFieldSpec(
+                name="format",
+                required=True,
+                validators={SELECT_KEY: list(TEXT_FORMAT_OPTIONS)},
+                ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
+                default=DEFAULT_TEXT_FORMAT,
+            ),
+        )
+
+        return {
+            NodeType.INPUT: NodeCatalogItem(
+                type=NodeType.INPUT,
+                label="Input",
+                icon_key="input",
+                graph=NodeGraphSpec(has_input=False, has_output=True),
+                fields=input_fields,
+            ),
+            NodeType.LLM: NodeCatalogItem(
+                type=NodeType.LLM,
+                label="LLM",
+                icon_key="llm",
+                graph=NodeGraphSpec(has_input=True, has_output=True),
+                fields=llm_fields,
+            ),
+            NodeType.OUTPUT: NodeCatalogItem(
+                type=NodeType.OUTPUT,
+                label="Output",
+                icon_key="output",
+                graph=NodeGraphSpec(has_input=True, has_output=False),
+                fields=output_fields,
+            ),
+        }
+
+    def _get_node_spec(self, node_type: NodeType) -> NodeCatalogItem:
+        """Return catalog entry for specific node type.
+
+        Args:
+            node_type: Node type.
+
+        Returns:
+            Node catalog item.
+
+        """
+        return self._node_catalog[node_type]
+
+    def _validate_node_field(
+        self,
+        *,
+        field: NodeFieldSpec,
+        value: object,
+        errors: list[str],
+    ) -> None:
+        """Validate one node field.
+
+        Args:
+            field: Field schema.
+            value: Field value.
+            errors: Error collector.
+
+        """
+        validators = field.validators
+
+        if MIN_LENGTH_KEY in validators and (
+            not isinstance(value, str) or len(value) < int(validators[MIN_LENGTH_KEY])
+        ):
+            errors.append(
+                f"Field '{field.name}' must be a string with "
+                f"min length {validators[MIN_LENGTH_KEY]}"
+            )
+
+        if SELECT_KEY in validators:
+            allowed = validators[SELECT_KEY]
+            if value not in allowed:
+                options = ", ".join(str(option) for option in allowed)
+                errors.append(f"Field '{field.name}' must be one of: {options}")
+
+        if GE_KEY in validators:
+            threshold = float(validators[GE_KEY])
+            if not isinstance(value, int | float) or value < threshold:
+                errors.append(f"Field '{field.name}' must be >= {threshold}")
+
+        if LE_KEY in validators:
+            threshold = float(validators[LE_KEY])
+            if not isinstance(value, int | float) or value > threshold:
+                errors.append(f"Field '{field.name}' must be <= {threshold}")
+
+    def _validate_node_data(
+        self,
+        node_type: NodeType,
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Validate node payload against catalog schema.
+
+        Args:
+            node_type: Node type.
+            data: Incoming node data.
+
+        Returns:
+            Validated node data.
+
+        Raises:
+            NodeDataValidationError: If payload is invalid.
+
+        """
+        spec = self._get_node_spec(node_type=node_type)
+        errors: list[str] = []
+        fields_by_name = {field.name: field for field in spec.fields}
+
+        unexpected = set(data.keys()) - set(fields_by_name.keys())
+        if unexpected:
+            errors.append(f"Unexpected fields: {', '.join(sorted(unexpected))}")
+
+        for field in spec.fields:
+            if field.required and field.name not in data:
+                errors.append(f"Missing required field: '{field.name}'")
+                continue
+
+            if field.name not in data:
+                continue
+
+            self._validate_node_field(
+                field=field,
+                value=data[field.name],
+                errors=errors,
+            )
+
+        if errors:
+            raise NodeDataValidationError(message="; ".join(errors))
+
+        return data
 
     def get_node_catalog(self) -> tuple[NodeCatalogItem, ...]:
         """Return catalog metadata for all node types.
@@ -38,7 +278,7 @@ class NodeUsecase:
             A tuple with node catalog entries.
 
         """
-        return get_node_catalog()
+        return tuple(self._node_catalog[node_type] for node_type in NodeType)
 
     async def _validate_external_references(
         self,
@@ -60,7 +300,7 @@ class NodeUsecase:
             LLMProviderNotFoundError: If a referenced provider is not owned by user.
 
         """
-        spec = get_node_spec(node_type=node_type)
+        spec = self._get_node_spec(node_type=node_type)
 
         for field in spec.fields:
             if field.datasource is None or field.name not in data:
@@ -123,7 +363,10 @@ class NodeUsecase:
             raise NodeDataValidationError(message="Node data must be an object.")
 
         normalized_data = cast("dict[str, Any]", raw_data)
-        validated_data = validate_node_data(node_type=node_type, data=normalized_data)
+        validated_data = self._validate_node_data(
+            node_type=node_type,
+            data=normalized_data,
+        )
         await self._validate_external_references(
             session=session,
             user_id=user_id,
@@ -238,7 +481,10 @@ class NodeUsecase:
 
         normalized_data = cast("dict[str, Any]", incoming_data)
         merged_data = node.data | normalized_data
-        validated_data = validate_node_data(node_type=node.type, data=merged_data)
+        validated_data = self._validate_node_data(
+            node_type=node.type,
+            data=merged_data,
+        )
         await self._validate_external_references(
             session=session,
             user_id=user_id,

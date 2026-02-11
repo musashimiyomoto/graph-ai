@@ -157,7 +157,7 @@ class TestNodeCatalog(BaseTestCase):
         for item in data:
             self.assert_has_keys(
                 item,
-                {"type", "label", "icon_key", "graph", "defaults", "fields"},
+                {"type", "label", "icon_key", "graph", "fields"},
             )
             field_names = {
                 field["name"]

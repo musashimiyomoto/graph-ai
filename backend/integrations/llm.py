@@ -1,11 +1,27 @@
-"""Ollama client implementation."""
+"""LLM integration clients and factory."""
+
+from typing import Protocol
 
 import httpx
 
-from llms.base import ChatMessage, ChatResponse, LLMClient, LLMModel
+from constants import DEFAULT_TIMEOUT
+from enums import LLMProviderType
+from exceptions import UnsupportedLLMProviderError
+from models import LLMProvider
+from schemas.llm_provider import ChatMessage, ChatResponse, LLMModel
 
 
-class OllamaClient(LLMClient):
+class BaseLLMClient(Protocol):
+    """Interface for LLM provider clients."""
+
+    async def list_models(self) -> list[LLMModel]:
+        """List available models from provider."""
+
+    async def chat(self, model: str, messages: list[ChatMessage]) -> ChatResponse:
+        """Send chat messages to provider."""
+
+
+class OllamaClient:
     """Client for the Ollama API."""
 
     def __init__(
@@ -27,10 +43,10 @@ class OllamaClient(LLMClient):
         self.__transport = transport
 
     async def list_models(self) -> list[LLMModel]:
-        """List available models from the provider.
+        """List available models from provider.
 
         Returns:
-            The list of model metadata.
+            Model metadata list.
 
         """
         async with httpx.AsyncClient(
@@ -45,14 +61,14 @@ class OllamaClient(LLMClient):
         return [LLMModel(name=model["name"]) for model in payload.get("models", [])]
 
     async def chat(self, model: str, messages: list[ChatMessage]) -> ChatResponse:
-        """Send chat messages to the provider.
+        """Send chat messages to provider.
 
         Args:
-            model: The model name.
-            messages: The chat messages.
+            model: Model name.
+            messages: Chat messages.
 
         Returns:
-            The chat response payload.
+            Chat response payload.
 
         """
         async with httpx.AsyncClient(
@@ -85,3 +101,25 @@ class OllamaClient(LLMClient):
             done=bool(data.get("done", False)),
             raw=data,
         )
+
+
+class LLMClientFactory:
+    """Factory for resolving integration client by provider type."""
+
+    def get_client(self, provider: LLMProvider) -> BaseLLMClient:
+        """Create an LLM client for provider.
+
+        Args:
+            provider: Persisted provider entity.
+
+        Returns:
+            Concrete provider client implementation.
+
+        Raises:
+            UnsupportedLLMProviderError: If provider type is unsupported.
+
+        """
+        if provider.type is LLMProviderType.OLLAMA:
+            return OllamaClient(base_url=provider.base_url, timeout=DEFAULT_TIMEOUT)
+
+        raise UnsupportedLLMProviderError
