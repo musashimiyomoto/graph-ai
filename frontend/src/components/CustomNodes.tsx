@@ -1,39 +1,24 @@
 import type { NodeProps } from 'reactflow'
 import { Handle, Position } from 'reactflow'
 
-import { InputIcon, LlmIcon, OutputIcon } from './NodeIcons'
+import { NodeIcon } from './NodeIcons'
 
 interface NodeData {
   label: string
+  iconKey: string
+  graph: {
+    has_input: boolean
+    has_output: boolean
+  }
 }
 
-export function InputNode({ data }: NodeProps<NodeData>) {
+export function GenericNode({ data }: NodeProps<NodeData>) {
   return (
     <div className="pixel-node flex items-center gap-2">
-      <InputIcon />
+      {data.graph.has_input ? <Handle type="target" position={Position.Top} /> : null}
+      <NodeIcon iconKey={data.iconKey} />
       {data.label}
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  )
-}
-
-export function LlmNode({ data }: NodeProps<NodeData>) {
-  return (
-    <div className="pixel-node flex items-center gap-2">
-      <Handle type="target" position={Position.Top} />
-      <LlmIcon />
-      {data.label}
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  )
-}
-
-export function OutputNode({ data }: NodeProps<NodeData>) {
-  return (
-    <div className="pixel-node flex items-center gap-2">
-      <Handle type="target" position={Position.Top} />
-      <OutputIcon />
-      {data.label}
+      {data.graph.has_output ? <Handle type="source" position={Position.Bottom} /> : null}
     </div>
   )
 }

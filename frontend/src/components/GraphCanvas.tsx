@@ -1,15 +1,28 @@
-import { useCallback, useState } from 'react'
-import type { Connection, Edge, EdgeMouseHandler, Node as FlowNode, NodeChange, NodeMouseHandler } from 'reactflow'
-import ReactFlow, { Background, Controls, ReactFlowProvider, useReactFlow } from 'reactflow'
+import { useCallback, useMemo, useState } from 'react'
+import type {
+  Connection,
+  Edge,
+  EdgeMouseHandler,
+  Node as FlowNode,
+  NodeChange,
+  NodeMouseHandler,
+  NodeTypes,
+} from 'reactflow'
+import ReactFlow, {
+  Background,
+  Controls,
+  ReactFlowProvider,
+  useReactFlow,
+} from 'reactflow'
 
-import { InputNode, LlmNode, OutputNode } from './CustomNodes'
+import type { NodeCatalogItem } from '../lib/types'
+import { GenericNode } from './CustomNodes'
 import { ContextMenu } from './NodeContextMenu'
-
-const nodeTypes = { input: InputNode, llm: LlmNode, output: OutputNode }
 
 interface GraphCanvasProps {
   nodes: FlowNode[]
   edges: Edge[]
+  nodeCatalog: NodeCatalogItem[]
   onSelectNode: (id: string | null) => void
   onNodesChange: (changes: NodeChange[]) => void
   onMoveNode: (id: string, x: number, y: number) => void
@@ -30,6 +43,7 @@ interface ContextMenuState {
 function GraphCanvasInner({
   nodes,
   edges,
+  nodeCatalog,
   onSelectNode,
   onNodesChange,
   onMoveNode,
@@ -40,6 +54,14 @@ function GraphCanvasInner({
 }: GraphCanvasProps) {
   const { screenToFlowPosition } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+
+  const nodeTypes = useMemo<NodeTypes>(() => {
+    const entries: Array<[string, NodeTypes[string]]> = nodeCatalog.map((item) => [
+      item.type,
+      GenericNode,
+    ])
+    return Object.fromEntries(entries)
+  }, [nodeCatalog])
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()

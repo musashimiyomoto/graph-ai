@@ -126,3 +126,4 @@ class TestLLMProviderDelete(BaseTestCase):
         ids = {item.get("id") for item in data}
         if provider.id in ids:
             pytest.fail("Expected deleted provider to not appear in list")
+

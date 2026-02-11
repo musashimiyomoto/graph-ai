@@ -1,9 +1,13 @@
+import type { SVGProps } from 'react'
+
 const SIZE = 18
 const STYLE = { imageRendering: 'pixelated' as const }
 
-export function InputIcon() {
+type IconProps = SVGProps<SVGSVGElement>
+
+export function InputIcon(props: IconProps) {
   return (
-    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none">
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
       <rect x="3" y="1" width="10" height="2" fill="var(--accent)" />
       <rect x="7" y="3" width="2" height="6" fill="var(--accent)" />
       <rect x="5" y="7" width="2" height="2" fill="var(--accent)" />
@@ -13,9 +17,9 @@ export function InputIcon() {
   )
 }
 
-export function LlmIcon() {
+export function LlmIcon(props: IconProps) {
   return (
-    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none">
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
       <rect x="4" y="1" width="8" height="2" fill="var(--accent-2)" />
       <rect x="2" y="3" width="2" height="2" fill="var(--accent-2)" />
       <rect x="12" y="3" width="2" height="2" fill="var(--accent-2)" />
@@ -31,9 +35,9 @@ export function LlmIcon() {
   )
 }
 
-export function OutputIcon() {
+export function OutputIcon(props: IconProps) {
   return (
-    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none">
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
       <rect x="3" y="1" width="10" height="2" fill="var(--accent)" />
       <rect x="5" y="7" width="2" height="2" fill="var(--accent)" />
       <rect x="9" y="7" width="2" height="2" fill="var(--accent)" />
@@ -41,4 +45,16 @@ export function OutputIcon() {
       <rect x="3" y="13" width="10" height="2" fill="var(--accent)" />
     </svg>
   )
+}
+
+export function NodeIcon({ iconKey }: { iconKey: string }) {
+  if (iconKey === 'llm') {
+    return <LlmIcon />
+  }
+
+  if (iconKey === 'output') {
+    return <OutputIcon />
+  }
+
+  return <InputIcon />
 }

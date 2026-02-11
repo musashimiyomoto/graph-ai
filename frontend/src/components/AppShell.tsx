@@ -43,14 +43,21 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-      <header className="pixel-topbar">
-        <div className="flex items-center gap-4">
+      <header className="pixel-topbar grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="flex min-w-0 items-center gap-4">
           <div className="font-pixel text-sm uppercase text-[var(--accent)]">
             Graph AI
           </div>
-          <div className="text-xs text-[var(--muted)]">/ {workflowName}</div>
+          <div className="truncate text-xs text-[var(--muted)]">/ {workflowName}</div>
         </div>
-        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="pixel-button small justify-self-center"
+          onClick={() => setShowRunInput(true)}
+        >
+          Run
+        </button>
+        <div className="flex items-center justify-self-end gap-3">
           {executionStatus ? (
             <div className="pixel-pill">Status: {executionStatus}</div>
           ) : null}
@@ -67,13 +74,6 @@ export function AppShell({
             onClick={() => setShowExecutions(true)}
           >
             Executions
-          </button>
-          <button
-            type="button"
-            className="pixel-button small"
-            onClick={() => setShowRunInput(true)}
-          >
-            Run
           </button>
           <UserMenu
             email={email}

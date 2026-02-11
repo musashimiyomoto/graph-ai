@@ -14,8 +14,12 @@ from schemas.llm_provider import (
     LLMProviderUpdate,
 )
 from schemas.node import (
+    NodeCatalogDataSourceResponse,
+    NodeCatalogFieldResponse,
+    NodeCatalogFieldUIResponse,
+    NodeCatalogGraphResponse,
+    NodeCatalogItemResponse,
     NodeCreate,
-    NodeFieldResponse,
     NodeResponse,
     NodeUpdate,
 )
@@ -37,8 +41,12 @@ __all__ = [
     "LLMProviderResponse",
     "LLMProviderUpdate",
     "Login",
+    "NodeCatalogDataSourceResponse",
+    "NodeCatalogFieldResponse",
+    "NodeCatalogFieldUIResponse",
+    "NodeCatalogGraphResponse",
+    "NodeCatalogItemResponse",
     "NodeCreate",
-    "NodeFieldResponse",
     "NodeResponse",
     "NodeUpdate",
     "ServiceHealthResponse",

@@ -1,8 +1,10 @@
 """Node use case implementation."""
 
+from typing import Any, cast
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from enums import NodeDataSpec, NodeType
+from enums import NodeType
 from exceptions import (
     LLMProviderNotFoundError,
     NodeDataValidationError,
@@ -10,6 +12,13 @@ from exceptions import (
     WorkflowNotFoundError,
 )
 from models import Node
+from node_catalog import (
+    NodeCatalogItem,
+    NodeFieldDataSourceKind,
+    get_node_catalog,
+    get_node_spec,
+    validate_node_data,
+)
 from repositories import LLMProviderRepository, NodeRepository, WorkflowRepository
 
 
@@ -22,63 +31,58 @@ class NodeUsecase:
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
 
-    def get_node_fields(self, node_type: NodeType) -> tuple[dict]:
-        """Return field definitions, optionally filtered by node type.
-
-        Args:
-            node_type: Node type to filter by.
+    def get_node_catalog(self) -> tuple[NodeCatalogItem, ...]:
+        """Return catalog metadata for all node types.
 
         Returns:
-            A list of field definitions.
+            A tuple with node catalog entries.
 
         """
-        return NodeDataSpec[node_type.name].value
+        return get_node_catalog()
 
-    def _validate_node_data(self, node_type: NodeType, data: dict) -> dict:
-        """Validate node data for a specific node type.
-
-        Args:
-            node_type: The node type.
-            data: The raw node data.
-
-        Returns:
-            The sanitized node data.
-
-        Raises:
-            NodeDataValidationError: If the data is invalid.
-
-        """
-        try:
-            return NodeDataSpec[node_type.name].validate(data=data)
-        except ValueError as exc:
-            raise NodeDataValidationError(message=str(exc)) from exc
-
-    async def _validate_llm_provider_data(
-        self, session: AsyncSession, user_id: int, data: dict
+    async def _validate_external_references(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        node_type: NodeType,
+        data: dict[str, Any],
     ) -> None:
-        """Validate LLM provider data for LLM nodes.
+        """Validate cross-resource references required by node data.
 
         Args:
-            session: The session.
-            user_id: The owner user ID.
-            data: The validated node data.
+            session: Database session.
+            user_id: Owner user ID.
+            node_type: Type of node being validated.
+            data: Validated node data payload.
 
         Raises:
-            NodeDataValidationError: If the provider ID is invalid.
-            LLMProviderNotFoundError: If the provider does not belong to the user.
+            NodeDataValidationError: If reference format is invalid.
+            LLMProviderNotFoundError: If a referenced provider is not owned by user.
 
         """
-        provider_id = data.get("llm_provider_id")
-        if not isinstance(provider_id, int) or provider_id <= 0:
-            raise NodeDataValidationError(
-                message="LLM provider ID must be a positive integer."
-            )
+        spec = get_node_spec(node_type=node_type)
 
-        provider = await self._llm_provider_repository.get_by(
-            session=session, id=provider_id, user_id=user_id
-        )
-        if not provider:
-            raise LLMProviderNotFoundError
+        for field in spec.fields:
+            if field.datasource is None or field.name not in data:
+                continue
+
+            if field.datasource.kind is NodeFieldDataSourceKind.LLM_PROVIDER:
+                provider_id = data[field.name]
+                if not isinstance(provider_id, int) or provider_id <= 0:
+                    raise NodeDataValidationError(
+                        message=(
+                            f"Field '{field.name}' must be a positive integer "
+                            "provider ID."
+                        )
+                    )
+
+                provider = await self._llm_provider_repository.get_by(
+                    session=session,
+                    id=provider_id,
+                    user_id=user_id,
+                )
+                if not provider:
+                    raise LLMProviderNotFoundError
 
     async def create_node(
         self,
@@ -103,7 +107,9 @@ class NodeUsecase:
 
         """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=kwargs["workflow_id"], owner_id=user_id
+            session=session,
+            id=kwargs["workflow_id"],
+            owner_id=user_id,
         )
         if not workflow:
             raise WorkflowNotFoundError
@@ -116,20 +122,23 @@ class NodeUsecase:
         if not isinstance(raw_data, dict):
             raise NodeDataValidationError(message="Node data must be an object.")
 
-        validated_data = self._validate_node_data(node_type=node_type, data=raw_data)
-        kwargs["data"] = validated_data
-        if node_type is NodeType.LLM:
-            await self._validate_llm_provider_data(
-                session=session, user_id=user_id, data=validated_data
-            )
-
-        return await self._node_repository.create(
+        normalized_data = cast("dict[str, Any]", raw_data)
+        validated_data = validate_node_data(node_type=node_type, data=normalized_data)
+        await self._validate_external_references(
             session=session,
-            data=kwargs,
+            user_id=user_id,
+            node_type=node_type,
+            data=validated_data,
         )
+        kwargs["data"] = validated_data
+
+        return await self._node_repository.create(session=session, data=kwargs)
 
     async def get_nodes(
-        self, session: AsyncSession, user_id: int, workflow_id: int
+        self,
+        session: AsyncSession,
+        user_id: int,
+        workflow_id: int,
     ) -> list[Node]:
         """List nodes for a workflow.
 
@@ -146,16 +155,24 @@ class NodeUsecase:
 
         """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=workflow_id, owner_id=user_id
+            session=session,
+            id=workflow_id,
+            owner_id=user_id,
         )
         if not workflow:
             raise WorkflowNotFoundError
 
         return await self._node_repository.get_all(
-            session=session, workflow_id=workflow_id
+            session=session,
+            workflow_id=workflow_id,
         )
 
-    async def get_node(self, session: AsyncSession, node_id: int, user_id: int) -> Node:
+    async def get_node(
+        self,
+        session: AsyncSession,
+        node_id: int,
+        user_id: int,
+    ) -> Node:
         """Fetch a node by ID.
 
         Args:
@@ -169,8 +186,6 @@ class NodeUsecase:
         Raises:
             NodeNotFoundError: If the node is not found.
             WorkflowNotFoundError: If the workflow is not found.
-            LLMProviderNotFoundError: If the LLM provider is not found.
-            NodeDataValidationError: If the node data is invalid.
 
         """
         node = await self._node_repository.get_by(session=session, id=node_id)
@@ -178,7 +193,9 @@ class NodeUsecase:
             raise NodeNotFoundError
 
         workflow = await self._workflow_repository.get_by(
-            session=session, id=node.workflow_id, owner_id=user_id
+            session=session,
+            id=node.workflow_id,
+            owner_id=user_id,
         )
         if not workflow:
             raise WorkflowNotFoundError
@@ -186,7 +203,11 @@ class NodeUsecase:
         return node
 
     async def update_node(
-        self, session: AsyncSession, node_id: int, user_id: int, **kwargs: object
+        self,
+        session: AsyncSession,
+        node_id: int,
+        user_id: int,
+        **kwargs: object,
     ) -> Node:
         """Update a node by ID.
 
@@ -202,11 +223,12 @@ class NodeUsecase:
         Raises:
             NodeNotFoundError: If the node is not found.
             WorkflowNotFoundError: If the workflow is not found.
+            NodeDataValidationError: If node data is invalid.
 
         """
         node = await self.get_node(session=session, node_id=node_id, user_id=user_id)
 
-        update_data = {k: v for k, v in kwargs.items() if v is not None}
+        update_data = {key: value for key, value in kwargs.items() if value is not None}
         if not update_data:
             return node
 
@@ -214,27 +236,32 @@ class NodeUsecase:
         if not isinstance(incoming_data, dict):
             raise NodeDataValidationError(message="Node data must be an object.")
 
-        validated_data = self._validate_node_data(
-            node_type=node.type, data=node.data | incoming_data
+        normalized_data = cast("dict[str, Any]", incoming_data)
+        merged_data = node.data | normalized_data
+        validated_data = validate_node_data(node_type=node.type, data=merged_data)
+        await self._validate_external_references(
+            session=session,
+            user_id=user_id,
+            node_type=node.type,
+            data=validated_data,
         )
         update_data["data"] = validated_data
-        if node.type is NodeType.LLM:
-            await self._validate_llm_provider_data(
-                session=session, user_id=user_id, data=validated_data
-            )
 
-        node = await self._node_repository.update_by(
+        updated = await self._node_repository.update_by(
             session=session,
             data=update_data,
             id=node_id,
         )
-        if not node:
+        if not updated:
             raise NodeNotFoundError
 
-        return node
+        return updated
 
     async def delete_node(
-        self, session: AsyncSession, node_id: int, user_id: int
+        self,
+        session: AsyncSession,
+        node_id: int,
+        user_id: int,
     ) -> None:
         """Delete a node by ID.
 

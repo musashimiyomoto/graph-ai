@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { NodeType, Workflow } from '../lib/types'
-import { InputIcon, LlmIcon, OutputIcon } from './NodeIcons'
+import type { NodeCatalogItem, NodeType, Workflow } from '../lib/types'
+import { NodeIcon } from './NodeIcons'
 
 interface WorkflowSidebarProps {
   workflows: Workflow[]
   activeWorkflowId: number | null
+  nodeCatalog: NodeCatalogItem[]
   onSelectWorkflow: (id: number) => void
   onCreateWorkflow: (name: string) => void
   onRenameWorkflow: (id: number, name: string) => void
@@ -16,6 +17,7 @@ interface WorkflowSidebarProps {
 export function WorkflowSidebar({
   workflows,
   activeWorkflowId,
+  nodeCatalog,
   onSelectWorkflow,
   onCreateWorkflow,
   onRenameWorkflow,
@@ -140,25 +142,26 @@ export function WorkflowSidebar({
       <div>
         <div className="pixel-section-title">Nodes</div>
         <div className="mt-3 grid grid-cols-1 gap-2">
-          {([
-            { type: 'input' as NodeType, Icon: InputIcon, label: 'Input' },
-            { type: 'llm' as NodeType, Icon: LlmIcon, label: 'LLM' },
-            { type: 'output' as NodeType, Icon: OutputIcon, label: 'Output' },
-          ]).map(({ type, Icon, label }) => (
-            <button
-              key={type}
-              type="button"
-              className="pixel-button ghost flex items-center gap-2"
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.setData('application/graphai-node-type', type)
-                event.dataTransfer.effectAllowed = 'move'
-              }}
-              onClick={() => onAddNode(type)}
-            >
-              <Icon /> {label}
-            </button>
-          ))}
+          {nodeCatalog.map((catalogNode) => {
+            return (
+              <button
+                key={catalogNode.type}
+                type="button"
+                className="pixel-button ghost flex items-center gap-2"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(
+                    'application/graphai-node-type',
+                    catalogNode.type,
+                  )
+                  event.dataTransfer.effectAllowed = 'move'
+                }}
+                onClick={() => onAddNode(catalogNode.type)}
+              >
+                <NodeIcon iconKey={catalogNode.icon_key} /> {catalogNode.label}
+              </button>
+            )
+          })}
         </div>
       </div>
     </aside>

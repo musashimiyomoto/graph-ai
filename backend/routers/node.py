@@ -7,10 +7,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, node
-from enums import NodeType
 from schemas import (
+    NodeCatalogItemResponse,
     NodeCreate,
-    NodeFieldResponse,
     NodeResponse,
     NodeUpdate,
     UserResponse,
@@ -32,7 +31,9 @@ async def create_node(
     """Create a node."""
     return NodeResponse.model_validate(
         await usecase.create_node(
-            session=session, user_id=current_user.id, **data.model_dump()
+            session=session,
+            user_id=current_user.id,
+            **data.model_dump(),
         )
     )
 
@@ -47,27 +48,28 @@ async def list_nodes(
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[NodeResponse]:
-    """List nodes, optionally filtered by workflow."""
+    """List nodes for a workflow."""
     return [
         NodeResponse.model_validate(node)
         for node in await usecase.get_nodes(
-            session=session, user_id=current_user.id, workflow_id=workflow_id
+            session=session,
+            user_id=current_user.id,
+            workflow_id=workflow_id,
         )
     ]
 
 
-@router.get(path="/fields")
-async def list_node_fields(
-    node_type: Annotated[NodeType, Query(description="Filter by node type")],
+@router.get(path="/catalog")
+async def list_node_catalog(
     usecase: Annotated[
         node.NodeUsecase,
         Depends(dependency=node.get_node_usecase),
     ],
-) -> list[NodeFieldResponse]:
-    """List data field definitions for node types."""
+) -> list[NodeCatalogItemResponse]:
+    """List full node catalog for frontend rendering."""
     return [
-        NodeFieldResponse.model_validate(field)
-        for field in usecase.get_node_fields(node_type=node_type)
+        NodeCatalogItemResponse.model_validate(entry)
+        for entry in usecase.get_node_catalog()
     ]
 
 
@@ -106,5 +108,6 @@ async def delete_node(
     """Delete a node by ID."""
     await usecase.delete_node(session=session, node_id=node_id, user_id=current_user.id)
     return JSONResponse(
-        status_code=status.HTTP_202_ACCEPTED, content={"detail": "Node deleted"}
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": "Node deleted"},
     )

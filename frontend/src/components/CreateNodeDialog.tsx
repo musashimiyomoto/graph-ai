@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Node as FlowNode } from 'reactflow'
 
 import { getLlmProviderModels, getLlmProviders } from '../lib/api'
 import type {
@@ -7,13 +6,13 @@ import type {
   LlmProvider,
   NodeCatalogItem,
   NodeCatalogField,
-  NodeType,
 } from '../lib/types'
 
-interface InspectorPanelProps {
-  node: FlowNode | null
-  nodeCatalog: NodeCatalogItem[]
-  onSaveNode: (id: string, data: Record<string, unknown>) => void
+interface CreateNodeDialogProps {
+  nodeSpec: NodeCatalogItem | null
+  initialData: Record<string, unknown>
+  onCancel: () => void
+  onConfirm: (data: Record<string, unknown>) => Promise<void>
 }
 
 function TextField({
@@ -68,10 +67,10 @@ function NumberField({
       className="pixel-input"
       type="number"
       value={Number(value ?? field.default ?? field.validators.ge ?? 0)}
-      onChange={(event) => onChange(Number(event.target.value))}
       min={field.validators.ge}
       max={field.validators.le}
       step={0.1}
+      onChange={(event) => onChange(Number(event.target.value))}
     />
   )
 }
@@ -150,24 +149,19 @@ function ModelField({
   )
 }
 
-export function InspectorPanel({
-  node,
-  nodeCatalog,
-  onSaveNode,
-}: InspectorPanelProps) {
-  const nodeType = (node?.data?.nodeType as NodeType | undefined) ?? null
-  const nodeData = (node?.data as Record<string, unknown>) ?? {}
+export function CreateNodeDialog({
+  nodeSpec,
+  initialData,
+  onCancel,
+  onConfirm,
+}: CreateNodeDialogProps) {
+  const [data, setData] = useState<Record<string, unknown>>(initialData)
   const [providers, setProviders] = useState<LlmProvider[]>([])
   const [models, setModels] = useState<LlmModel[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const catalogByType = useMemo(
-    () => Object.fromEntries(nodeCatalog.map((item) => [item.type, item])) as Record<string, NodeCatalogItem>,
-    [nodeCatalog],
-  )
-
-  const nodeSpec = nodeType ? catalogByType[nodeType] : undefined
-  const fields = nodeSpec?.fields ?? []
-
+  const fields = useMemo(() => nodeSpec?.fields ?? [], [nodeSpec])
   const hasProviderDatasource = fields.some(
     (field) => field.datasource?.kind === 'llm_provider',
   )
@@ -175,7 +169,7 @@ export function InspectorPanel({
     (field) => field.datasource?.kind === 'llm_model',
   )
 
-  const selectedProviderId = Number(nodeData['llm_provider_id'] ?? 0)
+  const selectedProviderId = Number(data['llm_provider_id'] ?? 0)
 
   useEffect(() => {
     let cancelled = false
@@ -186,13 +180,15 @@ export function InspectorPanel({
           setProviders([])
         }
       })
-      return () => { cancelled = true }
+      return () => {
+        cancelled = true
+      }
     }
 
     void getLlmProviders()
-      .then((data) => {
+      .then((items) => {
         if (!cancelled) {
-          setProviders(data)
+          setProviders(items)
         }
       })
       .catch(() => {
@@ -201,7 +197,9 @@ export function InspectorPanel({
         }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [hasProviderDatasource])
 
   useEffect(() => {
@@ -213,13 +211,15 @@ export function InspectorPanel({
           setModels([])
         }
       })
-      return () => { cancelled = true }
+      return () => {
+        cancelled = true
+      }
     }
 
     void getLlmProviderModels(selectedProviderId)
-      .then((data) => {
+      .then((items) => {
         if (!cancelled) {
-          setModels(data)
+          setModels(items)
         }
       })
       .catch(() => {
@@ -228,19 +228,56 @@ export function InspectorPanel({
         }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [hasModelDatasource, selectedProviderId])
 
-  function updateField(key: string, value: string | number) {
-    if (!node) {
-      return
+  const validationErrors = useMemo(() => {
+    const nextErrors: Record<string, string> = {}
+
+    for (const field of fields) {
+      if (!field.required) {
+        continue
+      }
+
+      const value = data[field.name]
+      if (field.ui.widget === 'number') {
+        if (typeof value !== 'number' || Number.isNaN(value)) {
+          nextErrors[field.name] = `${field.ui.label} is required`
+        }
+        continue
+      }
+
+      if (field.ui.widget === 'provider') {
+        if (!Number.isInteger(Number(value)) || Number(value) <= 0) {
+          nextErrors[field.name] = `${field.ui.label} is required`
+        }
+        continue
+      }
+
+      if (String(value ?? '').trim().length === 0) {
+        nextErrors[field.name] = `${field.ui.label} is required`
+      }
     }
-    const updated = { ...nodeData, [key]: value }
-    onSaveNode(node.id, updated)
+
+    return nextErrors
+  }, [data, fields])
+
+  function updateField(name: string, value: string | number) {
+    setData((previous) => ({ ...previous, [name]: value }))
+    setErrors((previous) => {
+      if (!(name in previous)) {
+        return previous
+      }
+      const { [name]: _removed, ...rest } = previous
+      void _removed
+      return rest
+    })
   }
 
   function renderField(field: NodeCatalogField) {
-    const value = nodeData[field.name]
+    const value = data[field.name]
 
     if (field.ui.widget === 'provider') {
       return (
@@ -304,31 +341,68 @@ export function InspectorPanel({
     )
   }
 
+  async function submit() {
+    if (!nodeSpec) {
+      return
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await onConfirm(data)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!nodeSpec) {
+    return null
+  }
+
   return (
-    <aside className="pixel-panel flex h-full flex-col gap-6">
-      <div>
-        <div className="pixel-section-title">Inspector</div>
-        {!node ? (
-          <div className="mt-4 text-xs text-[var(--muted)]">
-            Select a node to configure its parameters.
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-col gap-3">
-            <div className="text-xs text-[var(--muted)]">
-              Type: <span className="text-[var(--accent)]">{nodeType}</span>
-            </div>
-            {fields.map((field) => (
-              <label key={field.name} className="pixel-label">
-                {field.ui.label}
-                {renderField(field)}
-                {field.ui.help ? (
-                  <span className="text-xs text-[var(--muted)]">{field.ui.help}</span>
-                ) : null}
-              </label>
-            ))}
-          </div>
-        )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="pixel-panel max-h-[80vh] w-full max-w-xl overflow-y-auto">
+        <div className="pixel-section-title">Create {nodeSpec.label} Node</div>
+        <div className="mt-4 flex flex-col gap-3">
+          {fields.map((field) => (
+            <label key={field.name} className="pixel-label">
+              {field.ui.label}
+              {renderField(field)}
+              {errors[field.name] ? (
+                <span className="text-xs text-red-300">{errors[field.name]}</span>
+              ) : null}
+              {field.ui.help ? (
+                <span className="text-xs text-[var(--muted)]">{field.ui.help}</span>
+              ) : null}
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            className="pixel-button ghost"
+            onClick={onCancel}
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="pixel-button"
+            onClick={() => {
+              void submit()
+            }}
+            disabled={submitting}
+          >
+            {submitting ? 'Creating...' : 'Create'}
+          </button>
+        </div>
       </div>
-    </aside>
+    </div>
   )
 }

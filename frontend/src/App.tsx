@@ -1,489 +1,178 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Edge, Node as FlowNode, NodeChange } from 'reactflow'
-import { applyNodeChanges } from 'reactflow'
+import { useCallback, useMemo, useState } from 'react'
 
-import { AuthScreen } from './components/AuthScreen'
 import { AppShell } from './components/AppShell'
+import { AuthScreen } from './components/AuthScreen'
+import { CreateNodeDialog } from './components/CreateNodeDialog'
 import { GraphCanvas } from './components/GraphCanvas'
 import { InspectorPanel } from './components/InspectorPanel'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
-import {
-  createEdge,
-  createExecution,
-  createNode,
-  createWorkflow,
-  deleteEdge,
-  deleteMe,
-  deleteNode,
-  deleteWorkflow,
-  getEdges,
-  getExecutions,
-  getMe,
-  getNodeFields,
-  getNodes,
-  getWorkflows,
-  login,
-  register,
-  setToken,
-  updateNode,
-  updateWorkflow,
-} from './lib/api'
-import type {
-  ApiError,
-  Execution,
-  NodeCreatePayload,
-  NodeField,
-  NodeType,
-  Workflow,
-} from './lib/types'
+import { useAuthSession } from './hooks/useAuthSession'
+import { useExecutions } from './hooks/useExecutions'
+import { useGraphState } from './hooks/useGraphState'
+import { useNodeCatalog } from './hooks/useNodeCatalog'
+import { useWorkflowState } from './hooks/useWorkflowState'
+import type { ApiError, NodeType } from './lib/types'
 
-const TOKEN_KEY = 'graph_ai_token'
-
-function buildDefaultData(
-  fields: NodeField[],
-  label: string,
-): Record<string, unknown> {
-  const data: Record<string, unknown> = {}
-  for (const field of fields) {
-    if (field.name === 'label') {
-      data.label = label
-    } else if (field.validators.select?.length) {
-      data[field.name] = field.validators.select[0]
-    } else if (field.validators.ge !== undefined) {
-      data[field.name] = field.validators.ge
-    } else {
-      data[field.name] = ''
-    }
+interface NodeCreateDraft {
+  type: NodeType
+  position: {
+    x: number
+    y: number
   }
-  return data
 }
 
 export function App() {
-  const [token, setTokenState] = useState<string | null>(
-    () => localStorage.getItem(TOKEN_KEY),
-  )
-  const [email, setEmail] = useState<string>('')
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
-  const [activeWorkflowId, setActiveWorkflowId] = useState<number | null>(null)
-  const [nodes, setNodes] = useState<FlowNode[]>([])
-  const [edges, setEdges] = useState<Edge[]>([])
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [runInput, setRunInput] = useState<string>('{}')
-  const [executions, setExecutions] = useState<Execution[]>([])
-  const [executionsLoading, setExecutionsLoading] = useState<boolean>(false)
-  const [lastExecution, setLastExecution] = useState<Execution | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
+  const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
 
-  const activeWorkflow = useMemo(
-    () => workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null,
-    [activeWorkflowId, workflows],
-  )
+  const {
+    token,
+    email,
+    handleError,
+    handleLogin,
+    handleRegister,
+    handleLogout: logoutAuth,
+    handleDeleteAccount: deleteAccountAuth,
+  } = useAuthSession({
+    setLoading,
+    setError,
+  })
 
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [nodes, selectedNodeId],
-  )
+  const {
+    workflows,
+    activeWorkflowId,
+    setActiveWorkflowId,
+    clearWorkflowState,
+    handleCreateWorkflow,
+    handleRenameWorkflow,
+    handleDeleteWorkflow,
+  } = useWorkflowState({
+    token,
+    setLoading,
+    setError,
+    handleError,
+  })
 
-  const handleLogout = useCallback((): void => {
-    localStorage.removeItem(TOKEN_KEY)
-    setTokenState(null)
-    setEmail('')
-    setWorkflows([])
-    setActiveWorkflowId(null)
-    setNodes([])
-    setEdges([])
-    setSelectedNodeId(null)
-    setLastExecution(null)
-    setError(null)
-  }, [])
+  const {
+    nodeCatalog,
+    nodeCatalogByType,
+  } = useNodeCatalog({
+    handleError,
+  })
 
-  const handleDeleteAccount = useCallback(async (): Promise<void> => {
-    try {
-      await deleteMe()
-      handleLogout()
-    } catch (err) {
-      setError((err as ApiError).message)
-    }
-  }, [handleLogout])
+  const {
+    nodes,
+    edges,
+    selectedNode,
+    clearGraphState,
+    setSelectedNodeId,
+    createNodeWithData,
+    getInitialNodeData,
+    handleDeleteNode,
+    handleUpdateNodeData,
+    handleNodesChange,
+    handleMoveNode,
+    handleConnect,
+    handleDeleteEdge,
+  } = useGraphState({
+    token,
+    activeWorkflowId,
+    nodeCatalogByType,
+    setLoading,
+    setError,
+    handleError,
+  })
 
-  const handleError = useCallback(
-    (err: ApiError): void => {
-      if (err.status === 401) {
-        handleLogout()
+  const {
+    executions,
+    executionsLoading,
+    lastExecution,
+    runInput,
+    clearExecutions,
+    handleRun,
+  } = useExecutions({
+    token,
+    activeWorkflowId,
+    setLoading,
+    setError,
+    handleError,
+  })
+
+  const activeWorkflow = workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null
+
+  const handleLogout = useCallback(() => {
+    clearExecutions()
+    clearGraphState()
+    clearWorkflowState()
+    setNodeCreateDraft(null)
+    logoutAuth()
+  }, [clearExecutions, clearGraphState, clearWorkflowState, logoutAuth])
+
+  const handleDeleteAccount = useCallback(async () => {
+    await deleteAccountAuth()
+    clearExecutions()
+    clearGraphState()
+    clearWorkflowState()
+    setNodeCreateDraft(null)
+  }, [clearExecutions, clearGraphState, clearWorkflowState, deleteAccountAuth])
+
+  const requestCreateNode = useCallback(
+    (type: NodeType, position: { x: number; y: number }) => {
+      if (!activeWorkflowId) {
         return
       }
-      setError(err.message)
+      setNodeCreateDraft({ type, position })
     },
-    [handleLogout],
+    [activeWorkflowId],
   )
 
-  useEffect(() => {
-    setToken(token)
-  }, [token])
-
-  useEffect(() => {
-    if (!token) {
-      return
-    }
-
-    setLoading(true)
-    void getMe()
-      .then((profile) => setEmail(profile.email))
-      .catch((err: ApiError) => handleError(err))
-      .finally(() => setLoading(false))
-  }, [handleError, token])
-
-  useEffect(() => {
-    if (!token) {
-      return
-    }
-
-    setLoading(true)
-    void getWorkflows()
-      .then((items) => {
-        setWorkflows(items)
-        setActiveWorkflowId((prev) => prev ?? items[0]?.id ?? null)
+  const handleAddNode = useCallback(
+    (type: NodeType) => {
+      requestCreateNode(type, {
+        x: 120 + nodes.length * 36,
+        y: 120 + nodes.length * 36,
       })
-      .catch((err: ApiError) => handleError(err))
-      .finally(() => setLoading(false))
-  }, [handleError, token])
+    },
+    [nodes.length, requestCreateNode],
+  )
 
-  const fetchExecutions = useCallback(
-    async (workflowId: number): Promise<void> => {
-      setExecutionsLoading(true)
+  const handleDropNode = useCallback(
+    (type: string, position: { x: number; y: number }) => {
+      requestCreateNode(type, position)
+    },
+    [requestCreateNode],
+  )
+
+  const createNodeSpec = nodeCreateDraft
+    ? nodeCatalogByType[nodeCreateDraft.type] ?? null
+    : null
+
+  const createNodeInitialData = useMemo(() => {
+    if (!nodeCreateDraft) {
+      return {}
+    }
+    return getInitialNodeData(nodeCreateDraft.type)
+  }, [getInitialNodeData, nodeCreateDraft])
+
+  const confirmCreateNode = useCallback(
+    async (data: Record<string, unknown>) => {
+      if (!nodeCreateDraft) {
+        return
+      }
+
+      setLoading(true)
       try {
-        const items = await getExecutions(workflowId)
-        setExecutions(items)
-      } catch (err) {
-        handleError(err as ApiError)
+        await createNodeWithData(nodeCreateDraft.type, nodeCreateDraft.position, data)
+        setNodeCreateDraft(null)
+      } catch (issue) {
+        handleError(issue as ApiError)
       } finally {
-        setExecutionsLoading(false)
+        setLoading(false)
       }
     },
-    [handleError],
+    [createNodeWithData, handleError, nodeCreateDraft],
   )
-
-  useEffect(() => {
-    if (!token || !activeWorkflowId) {
-      setNodes([])
-      setEdges([])
-      setExecutions([])
-      return
-    }
-
-    setLoading(true)
-    void fetchExecutions(activeWorkflowId)
-    Promise.all([
-      getNodes(activeWorkflowId),
-      getEdges(activeWorkflowId),
-    ]).then(([nodeItems, edgeItems]) => {
-      setNodes(
-        nodeItems.map((node) => ({
-          id: String(node.id),
-          type: node.type,
-          position: { x: node.position_x, y: node.position_y },
-          data: {
-            ...node.data,
-            label: node.data?.label ?? `${node.type} node`,
-            nodeType: node.type,
-          },
-        })),
-      )
-      setEdges(
-        edgeItems.map((edge) => ({
-          id: String(edge.id),
-          source: String(edge.source_node_id),
-          target: String(edge.target_node_id),
-        })),
-      )
-    })
-      .catch((err: ApiError) => handleError(err))
-      .finally(() => setLoading(false))
-  }, [activeWorkflowId, fetchExecutions, handleError, token])
-
-  async function handleLogin(emailValue: string, password: string): Promise<void> {
-    setLoading(true)
-    try {
-      const response = await login(emailValue, password)
-      localStorage.setItem(TOKEN_KEY, response.access_token)
-      setTokenState(response.access_token)
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleRegister(
-    emailValue: string,
-    password: string,
-  ): Promise<void> {
-    setLoading(true)
-    try {
-      await register(emailValue, password)
-      await handleLogin(emailValue, password)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleCreateWorkflow(name: string): Promise<void> {
-    if (!name.trim()) {
-      return
-    }
-    setLoading(true)
-    try {
-      const created = await createWorkflow(name.trim())
-      setWorkflows((prev) => [created, ...prev])
-      setActiveWorkflowId(created.id)
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleRenameWorkflow(
-    workflowId: number,
-    name: string,
-  ): Promise<void> {
-    setLoading(true)
-    try {
-      const updated = await updateWorkflow(workflowId, name)
-      setWorkflows((prev) =>
-        prev.map((workflow) =>
-          workflow.id === workflowId ? updated : workflow,
-        ),
-      )
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDeleteWorkflow(workflowId: number): Promise<void> {
-    setLoading(true)
-    try {
-      await deleteWorkflow(workflowId)
-      setWorkflows((prev) => {
-        const next = prev.filter((workflow) => workflow.id !== workflowId)
-        if (activeWorkflowId === workflowId) {
-          setActiveWorkflowId(next[0]?.id ?? null)
-        }
-        return next
-      })
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleAddNode(type: NodeType): Promise<void> {
-    if (!activeWorkflowId) {
-      return
-    }
-    setLoading(true)
-    try {
-      const fields = await getNodeFields(type)
-      const payload: NodeCreatePayload = {
-        workflow_id: activeWorkflowId,
-        type,
-        data: buildDefaultData(fields, `${type} node`),
-        position_x: 120 + nodes.length * 36,
-        position_y: 120 + nodes.length * 36,
-      }
-      const created = await createNode(payload)
-      setNodes((prev) => [
-        ...prev,
-        {
-          id: String(created.id),
-          type: created.type,
-          position: { x: created.position_x, y: created.position_y },
-          data: {
-            ...created.data,
-            label: created.data?.label ?? `${created.type} node`,
-            nodeType: created.type,
-          },
-        },
-      ])
-      setSelectedNodeId(String(created.id))
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDropNode(type: string, position: { x: number; y: number }): Promise<void> {
-    if (!activeWorkflowId) {
-      return
-    }
-    setLoading(true)
-    try {
-      const nodeType = type as NodeType
-      const fields = await getNodeFields(nodeType)
-      const payload: NodeCreatePayload = {
-        workflow_id: activeWorkflowId,
-        type: nodeType,
-        data: buildDefaultData(fields, `${type} node`),
-        position_x: position.x,
-        position_y: position.y,
-      }
-      const created = await createNode(payload)
-      setNodes((prev) => [
-        ...prev,
-        {
-          id: String(created.id),
-          type: created.type,
-          position: { x: created.position_x, y: created.position_y },
-          data: {
-            ...created.data,
-            label: created.data?.label ?? `${created.type} node`,
-            nodeType: created.type,
-          },
-        },
-      ])
-      setSelectedNodeId(String(created.id))
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDeleteNode(nodeId: string): Promise<void> {
-    try {
-      await deleteNode(Number(nodeId))
-      setNodes((prev) => prev.filter((n) => n.id !== nodeId))
-      setEdges((prev) =>
-        prev.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      )
-      if (selectedNodeId === nodeId) {
-        setSelectedNodeId(null)
-      }
-    } catch (err) {
-      handleError(err as ApiError)
-    }
-  }
-
-  async function handleUpdateNodeData(
-    nodeId: string,
-    data: Record<string, unknown>,
-  ): Promise<void> {
-    setLoading(true)
-    try {
-      const { nodeType: _nodeType, ...cleanData } = data
-      void _nodeType
-      const updated = await updateNode(Number(nodeId), { data: cleanData })
-      setNodes((prev) =>
-        prev.map((node) =>
-          node.id === nodeId
-            ? {
-                ...node,
-                data: {
-                  ...updated.data,
-                  label: updated.data?.label ?? node.data?.label,
-                  nodeType: updated.type,
-                },
-              }
-            : node,
-        ),
-      )
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      setNodes((prev) => applyNodeChanges(changes, prev))
-    },
-    [],
-  )
-
-  async function handleMoveNode(nodeId: string, x: number, y: number): Promise<void> {
-    try {
-      await updateNode(Number(nodeId), { position_x: x, position_y: y })
-    } catch (err) {
-      handleError(err as ApiError)
-    }
-  }
-
-  async function handleConnect(
-    sourceId: string,
-    targetId: string,
-  ): Promise<void> {
-    if (!activeWorkflowId) {
-      return
-    }
-    setLoading(true)
-    try {
-      const created = await createEdge({
-        workflow_id: activeWorkflowId,
-        source_node_id: Number(sourceId),
-        target_node_id: Number(targetId),
-      })
-      setEdges((prev) => [
-        ...prev,
-        {
-          id: String(created.id),
-          source: String(created.source_node_id),
-          target: String(created.target_node_id),
-        },
-      ])
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleDeleteEdge(edgeId: string): Promise<void> {
-    setLoading(true)
-    try {
-      await deleteEdge(Number(edgeId))
-      setEdges((prev) => prev.filter((edge) => edge.id !== edgeId))
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleRun(input: string): Promise<void> {
-    if (!activeWorkflowId) {
-      return
-    }
-    setRunInput(input)
-    setLoading(true)
-    try {
-      const parsed = input.trim() ? (JSON.parse(input) as object) : null
-      const execution = await createExecution(activeWorkflowId, parsed)
-      setLastExecution(execution)
-      void fetchExecutions(activeWorkflowId)
-      setError(null)
-    } catch (err) {
-      handleError(err as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   if (!token) {
     return (
@@ -497,44 +186,61 @@ export function App() {
   }
 
   return (
-    <AppShell
-      email={email}
-      workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-      executionStatus={lastExecution?.status ?? null}
-      error={error}
-      loading={loading}
-      onRun={handleRun}
-      onLogout={handleLogout}
-      onDeleteAccount={handleDeleteAccount}
-      executions={executions}
-      executionsLoading={executionsLoading}
-      runInput={runInput}
-      onError={handleError}
-    >
-      <WorkflowSidebar
-        workflows={workflows}
-        activeWorkflowId={activeWorkflowId}
-        onSelectWorkflow={setActiveWorkflowId}
-        onCreateWorkflow={handleCreateWorkflow}
-        onRenameWorkflow={handleRenameWorkflow}
-        onDeleteWorkflow={handleDeleteWorkflow}
-        onAddNode={handleAddNode}
+    <>
+      <AppShell
+        email={email}
+        workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+        executionStatus={lastExecution?.status ?? null}
+        error={error}
+        loading={loading}
+        onRun={handleRun}
+        onLogout={handleLogout}
+        onDeleteAccount={handleDeleteAccount}
+        executions={executions}
+        executionsLoading={executionsLoading}
+        runInput={runInput}
+        onError={handleError}
+      >
+        <WorkflowSidebar
+          workflows={workflows}
+          activeWorkflowId={activeWorkflowId}
+          nodeCatalog={nodeCatalog}
+          onSelectWorkflow={setActiveWorkflowId}
+          onCreateWorkflow={handleCreateWorkflow}
+          onRenameWorkflow={handleRenameWorkflow}
+          onDeleteWorkflow={handleDeleteWorkflow}
+          onAddNode={handleAddNode}
+        />
+        <GraphCanvas
+          nodes={nodes}
+          edges={edges}
+          nodeCatalog={nodeCatalog}
+          onSelectNode={setSelectedNodeId}
+          onNodesChange={handleNodesChange}
+          onMoveNode={handleMoveNode}
+          onConnect={handleConnect}
+          onDeleteEdge={handleDeleteEdge}
+          onDropNode={handleDropNode}
+          onDeleteNode={handleDeleteNode}
+        />
+        <InspectorPanel
+          node={selectedNode}
+          nodeCatalog={nodeCatalog}
+          onSaveNode={handleUpdateNodeData}
+        />
+      </AppShell>
+
+      <CreateNodeDialog
+        key={
+          nodeCreateDraft
+            ? `${nodeCreateDraft.type}:${nodeCreateDraft.position.x}:${nodeCreateDraft.position.y}`
+            : 'no-draft'
+        }
+        nodeSpec={createNodeSpec}
+        initialData={createNodeInitialData}
+        onCancel={() => setNodeCreateDraft(null)}
+        onConfirm={confirmCreateNode}
       />
-      <GraphCanvas
-        nodes={nodes}
-        edges={edges}
-        onSelectNode={setSelectedNodeId}
-        onNodesChange={handleNodesChange}
-        onMoveNode={handleMoveNode}
-        onConnect={handleConnect}
-        onDeleteEdge={handleDeleteEdge}
-        onDropNode={handleDropNode}
-        onDeleteNode={handleDeleteNode}
-      />
-      <InspectorPanel
-        node={selectedNode}
-        onSaveNode={handleUpdateNodeData}
-      />
-    </AppShell>
+    </>
   )
 }

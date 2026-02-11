@@ -41,7 +41,7 @@ services:
     <<: *backend
     ports:
       - "5000:5000"
-    command: [ "bash", "/docker-entrypoint.sh", "gunicorn", "main:app" ]
+    command: [ "sh", "/docker-entrypoint.sh", "gunicorn", "main:app" ]
 
   postgres:
     image: ${POSTGRES_IMAGE}
@@ -101,10 +101,15 @@ services:
   ollama:
     image: ${OLLAMA_IMAGE}
     restart: always
+    entrypoint: [ "/bin/sh", "/docker-entrypoint.sh" ]
+    environment:
+      ENTRYPOINT_MODE: ollama
+      OLLAMA_BOOT_MODEL: qwen2.5:1.5b
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+      - ./backend/entrypoint.sh:/docker-entrypoint.sh:ro
     healthcheck:
       test:
         - "CMD"

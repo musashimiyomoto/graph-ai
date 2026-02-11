@@ -9,6 +9,23 @@ from models import LLMProvider
 from repositories import LLMProviderRepository
 
 
+def _extract_http_error_message(error: httpx.HTTPStatusError) -> str:
+    """Build readable message from upstream HTTP error.
+
+    Args:
+        error: Upstream HTTP status error.
+
+    Returns:
+        Human-readable error detail.
+
+    """
+    response = error.response
+    detail = response.text.strip()
+    if detail:
+        return f"LLM provider returned {response.status_code}: {detail[:300]}"
+    return f"LLM provider returned {response.status_code}"
+
+
 class LLMProviderUsecase:
     """LLM provider business logic."""
 
@@ -162,6 +179,14 @@ class LLMProviderUsecase:
         try:
             client = get_llm_client(provider=provider)
             return await client.list_models()
+        except httpx.TimeoutException as exc:
+            raise LLMProviderConnectionError(
+                message="LLM provider request timed out while listing models"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise LLMProviderConnectionError(
+                message=_extract_http_error_message(exc)
+            ) from exc
         except httpx.HTTPError as exc:
             raise LLMProviderConnectionError from exc
 
@@ -196,5 +221,13 @@ class LLMProviderUsecase:
         try:
             client = get_llm_client(provider=provider)
             return await client.chat(model=request.model, messages=request.messages)
+        except httpx.TimeoutException as exc:
+            raise LLMProviderConnectionError(
+                message="LLM provider request timed out while running chat"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise LLMProviderConnectionError(
+                message=_extract_http_error_message(exc)
+            ) from exc
         except httpx.HTTPError as exc:
             raise LLMProviderConnectionError from exc

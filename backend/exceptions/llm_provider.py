@@ -20,12 +20,13 @@ class LLMProviderNotFoundError(BaseError):
 class LLMProviderConnectionError(BaseError):
     """Raised when the LLM provider is unreachable."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        message: str = "LLM provider is unreachable",
+        status_code: HTTPStatus = HTTPStatus.BAD_GATEWAY,
+    ) -> None:
         """Initialize the error."""
-        super().__init__(
-            message="LLM provider is unreachable",
-            status_code=HTTPStatus.BAD_GATEWAY,
-        )
+        super().__init__(message=message, status_code=status_code)
 
 
 class LLMProviderConfigError(BaseError):

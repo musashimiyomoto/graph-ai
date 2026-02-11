@@ -1,4 +1,4 @@
-export type NodeType = 'input' | 'llm' | 'output'
+export type NodeType = string
 
 export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
 
@@ -76,9 +76,49 @@ export interface NodeFieldValidator {
   le?: number
 }
 
-export interface NodeField {
+export type NodeFieldWidget =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'select'
+  | 'provider'
+  | 'model'
+
+export type NodeFieldDataSourceKind = 'llm_provider' | 'llm_model'
+
+export interface NodeCatalogGraph {
+  has_input: boolean
+  has_output: boolean
+}
+
+export interface NodeCatalogFieldUI {
+  widget: NodeFieldWidget
+  label: string
+  placeholder: string | null
+  help: string | null
+}
+
+export interface NodeCatalogFieldDataSource {
+  kind: NodeFieldDataSourceKind
+  depends_on: string | null
+}
+
+export interface NodeCatalogField {
   name: string
+  required: boolean
   validators: NodeFieldValidator
+  ui: NodeCatalogFieldUI
+  default: unknown
+  datasource: NodeCatalogFieldDataSource | null
+}
+
+export interface NodeCatalogItem {
+  type: NodeType
+  label: string
+  icon_key: string
+  graph: NodeCatalogGraph
+  defaults: Record<string, unknown>
+  fields: NodeCatalogField[]
 }
 
 export interface LlmProvider {

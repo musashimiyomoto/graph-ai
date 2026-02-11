@@ -5,10 +5,9 @@ import type {
   LlmModel,
   LlmProvider,
   LlmProviderCreatePayload,
+  NodeCatalogItem,
   NodeCreatePayload,
-  NodeField,
   NodeResponse,
-  NodeType,
   NodeUpdatePayload,
   TokenResponse,
   UserProfile,
@@ -130,10 +129,8 @@ export async function deleteNode(nodeId: number): Promise<void> {
   await request(`/nodes/${nodeId}`, { method: 'DELETE' })
 }
 
-export async function getNodeFields(
-  nodeType: NodeType,
-): Promise<NodeField[]> {
-  return request<NodeField[]>(`/nodes/fields?node_type=${nodeType}`)
+export async function getNodeCatalog(): Promise<NodeCatalogItem[]> {
+  return request<NodeCatalogItem[]>('/nodes/catalog')
 }
 
 export async function getEdges(

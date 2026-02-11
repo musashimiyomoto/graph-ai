@@ -50,12 +50,14 @@ class TestNodeCreate(BaseTestCase):
         """Successful creation returns node data."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
+            session=self.session,
+            owner_id=user["id"],
         )
         llm_provider_id = None
         if node_type is NodeType.LLM:
             provider = await LLMProviderFactory.create_async(
-                session=self.session, user_id=user["id"]
+                session=self.session,
+                user_id=user["id"],
             )
             llm_provider_id = provider.id
         payload = {
@@ -83,7 +85,8 @@ class TestNodeCreate(BaseTestCase):
         """LLM nodes must reference existing providers."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
+            session=self.session,
+            owner_id=user["id"],
         )
 
         payload = {
@@ -108,7 +111,8 @@ class TestNodeList(BaseTestCase):
         """List returns nodes for the workflow."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
+            session=self.session,
+            owner_id=user["id"],
         )
 
         first = await NodeFactory.create_async(
@@ -135,23 +139,35 @@ class TestNodeList(BaseTestCase):
             pytest.fail("Expected nodes to appear in list")
 
 
-class TestNodeFields(BaseTestCase):
-    """Tests for GET /nodes/fields."""
+class TestNodeCatalog(BaseTestCase):
+    """Tests for GET /nodes/catalog."""
 
-    url = "/nodes/fields"
+    url = "/nodes/catalog"
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("node_type", list(NodeType))
-    async def test_ok(self, node_type: NodeType) -> None:
-        """Returns fields only for the requested node type."""
-        response = await self.client.get(url=self.url, params={"node_type": node_type})
+    async def test_ok(self) -> None:
+        """Catalog contains all node types and field schemas."""
+        response = await self.client.get(url=self.url)
 
         data = await self.assert_response_list(response=response)
-        field_names = {field["name"] for field in data}
-        expected = EXPECTED_FIELDS_BY_TYPE[node_type]
-        if not expected.issubset(field_names):
-            missing = expected - field_names
-            pytest.fail(f"Missing expected fields for {node_type}: {missing}")
+        types = {item["type"] for item in data}
+        if types != set(NodeType):
+            pytest.fail(f"Unexpected node types in catalog: {types}")
+
+        for item in data:
+            self.assert_has_keys(
+                item,
+                {"type", "label", "icon_key", "graph", "defaults", "fields"},
+            )
+            field_names = {
+                field["name"]
+                for field in item["fields"]
+                if isinstance(field, dict) and "name" in field
+            }
+            expected = EXPECTED_FIELDS_BY_TYPE[NodeType(item["type"])]
+            if not expected.issubset(field_names):
+                missing = expected - field_names
+                pytest.fail(f"Missing expected fields for {item['type']}: {missing}")
 
 
 class TestNodeUpdate(BaseTestCase):
@@ -165,12 +181,14 @@ class TestNodeUpdate(BaseTestCase):
         """Successful update returns updated node data."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
+            session=self.session,
+            owner_id=user["id"],
         )
         llm_provider_id = None
         if node_type is NodeType.LLM:
             provider = await LLMProviderFactory.create_async(
-                session=self.session, user_id=user["id"]
+                session=self.session,
+                user_id=user["id"],
             )
             llm_provider_id = provider.id
         node = await NodeFactory.create_async(
@@ -208,7 +226,8 @@ class TestNodeDelete(BaseTestCase):
         """Successful delete removes the node."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
-            session=self.session, owner_id=user["id"]
+            session=self.session,
+            owner_id=user["id"],
         )
         node = await NodeFactory.create_async(
             session=self.session,
@@ -219,7 +238,8 @@ class TestNodeDelete(BaseTestCase):
                 llm_provider_id=(
                     (
                         await LLMProviderFactory.create_async(
-                            session=self.session, user_id=user["id"]
+                            session=self.session,
+                            user_id=user["id"],
                         )
                     ).id
                     if node_type is NodeType.LLM
