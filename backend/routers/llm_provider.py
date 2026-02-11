@@ -33,7 +33,9 @@ async def create_llm_provider(
     """Create a new LLM provider."""
     return LLMProviderResponse.model_validate(
         await usecase.create_llm_provider(
-            session=session, user_id=current_user.id, **data.model_dump()
+            session=session,
+            user_id=current_user.id,
+            **data.model_dump(mode="json"),
         )
     )
 
@@ -75,7 +77,7 @@ async def update_llm_provider(
             session=session,
             provider_id=provider_id,
             user_id=current_user.id,
-            **data.model_dump(),
+            **data.model_dump(mode="json"),
         )
     )
 
