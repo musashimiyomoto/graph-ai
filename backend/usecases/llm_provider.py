@@ -7,7 +7,7 @@ from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
 from integrations import LLMClientFactory
 from models import LLMProvider
 from repositories import LLMProviderRepository
-from schemas.llm_provider import ChatRequest, ChatResponse, LLMModel
+from schemas import LLMModel
 
 
 class LLMProviderUsecase:
@@ -157,60 +157,17 @@ class LLMProviderUsecase:
             UnsupportedLLMProviderError: If the provider type is unsupported.
 
         """
-        provider = await self.get_llm_provider(
+        llm_provider = await self.get_llm_provider(
             session=session, provider_id=provider_id, user_id=user_id
         )
 
         try:
-            client = self._llm_client_factory.get_client(provider=provider)
-            return await client.list_models()
+            return await self._llm_client_factory.get_client(
+                provider=llm_provider
+            ).list_models()
         except httpx.TimeoutException as exc:
             raise LLMProviderConnectionError(
                 message="LLM provider request timed out while listing models"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            detail = exc.response.text.strip()
-            message = f"LLM provider returned {exc.response.status_code}"
-            if detail:
-                message = f"{message}: {detail[:300]}"
-            raise LLMProviderConnectionError(message=message) from exc
-        except httpx.HTTPError as exc:
-            raise LLMProviderConnectionError from exc
-
-    async def chat(
-        self,
-        session: AsyncSession,
-        provider_id: int,
-        user_id: int,
-        request: ChatRequest,
-    ) -> ChatResponse:
-        """Send chat messages to an LLM provider.
-
-        Args:
-            session: The session.
-            provider_id: The provider ID.
-            user_id: The owner user ID.
-            request: The chat request payload.
-
-        Returns:
-            The chat response payload.
-
-        Raises:
-            LLMProviderNotFoundError: If the provider is not found.
-            LLMProviderConnectionError: If the provider is unreachable.
-            UnsupportedLLMProviderError: If the provider type is unsupported.
-
-        """
-        provider = await self.get_llm_provider(
-            session=session, provider_id=provider_id, user_id=user_id
-        )
-
-        try:
-            client = self._llm_client_factory.get_client(provider=provider)
-            return await client.chat(model=request.model, messages=request.messages)
-        except httpx.TimeoutException as exc:
-            raise LLMProviderConnectionError(
-                message="LLM provider request timed out while running chat"
             ) from exc
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text.strip()

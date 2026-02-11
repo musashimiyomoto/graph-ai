@@ -316,8 +316,9 @@ class TestExecutionCreate(BaseTestCase):
     async def test_dispatch_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Request fails if execution dispatch to Prefect fails."""
 
-        async def fake_dispatch(_self: object, _execution_id: int) -> str:
+        async def fake_dispatch(_self: object, execution_id: int) -> str:
             """Raise dispatch error for testing."""
+            del execution_id
             raise ExecutionDispatchError(message="Prefect unavailable")
 
         monkeypatch.setattr(

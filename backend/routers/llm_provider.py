@@ -8,11 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import auth, db, llm_provider
 from schemas import (
-    ChatRequest as LLMChatRequest,
-)
-from schemas import (
-    LLMProviderChatRequest,
-    LLMProviderChatResponse,
     LLMProviderCreate,
     LLMProviderModelResponse,
     LLMProviderResponse,
@@ -121,27 +116,3 @@ async def list_provider_models(
             session=session, provider_id=provider_id, user_id=current_user.id
         )
     ]
-
-
-@router.post(path="/{provider_id}/chat")
-async def chat_provider(
-    provider_id: Annotated[int, Path(description="LLM provider ID", gt=0)],
-    data: Annotated[LLMProviderChatRequest, Body(description="Chat request payload")],
-    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
-    usecase: Annotated[
-        llm_provider.LLMProviderUsecase,
-        Depends(dependency=llm_provider.get_llm_provider_usecase),
-    ],
-    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
-) -> LLMProviderChatResponse:
-    """Send chat messages to an LLM provider."""
-    response = await usecase.chat(
-        session=session,
-        provider_id=provider_id,
-        user_id=current_user.id,
-        request=LLMChatRequest(
-            model=data.model,
-            messages=data.messages,
-        ),
-    )
-    return LLMProviderChatResponse.model_validate(response.raw)

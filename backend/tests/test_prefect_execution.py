@@ -108,9 +108,10 @@ async def test_run_workflow_execution_llm_failure(
             message = "LLM exploded"
             raise RuntimeError(message)
 
-    def fake_get_client(self: LLMClientFactory, _provider: object) -> _FailingClient:
+    def fake_get_client(self: LLMClientFactory, llm_provider: object) -> _FailingClient:
         """Return failing client."""
         del self
+        del llm_provider
         return _FailingClient()
 
     monkeypatch.setattr(
