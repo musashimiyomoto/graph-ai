@@ -24,12 +24,8 @@ async def create_execution(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> ExecutionResponse:
     """Create a new execution."""
-    return ExecutionResponse.model_validate(
-        await usecase.create_execution(
-            session=session,
-            user_id=current_user.id,
-            **data.model_dump(exclude_none=True),
-        )
+    return await usecase.create_execution(
+        session=session, user_id=current_user.id, data=data
     )
 
 
@@ -44,9 +40,6 @@ async def list_executions(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[ExecutionResponse]:
     """List executions, optionally filtered by workflow."""
-    return [
-        ExecutionResponse.model_validate(execution)
-        for execution in await usecase.get_executions(
-            session=session, user_id=current_user.id, workflow_id=workflow_id
-        )
-    ]
+    return await usecase.get_executions(
+        session=session, user_id=current_user.id, workflow_id=workflow_id
+    )

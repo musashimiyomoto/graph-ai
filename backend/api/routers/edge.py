@@ -23,10 +23,8 @@ async def create_edge(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> EdgeResponse:
     """Create a new edge."""
-    return EdgeResponse.model_validate(
-        await usecase.create_edge(
-            session=session, user_id=current_user.id, **data.model_dump()
-        )
+    return await usecase.create_edge(
+        session=session, user_id=current_user.id, data=data
     )
 
 
@@ -41,12 +39,9 @@ async def list_edges(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[EdgeResponse]:
     """List edges, optionally filtered by workflow."""
-    return [
-        EdgeResponse.model_validate(edge)
-        for edge in await usecase.get_edges(
-            session=session, user_id=current_user.id, workflow_id=workflow_id
-        )
-    ]
+    return await usecase.get_edges(
+        session=session, user_id=current_user.id, workflow_id=workflow_id
+    )
 
 
 @router.patch(path="/{edge_id}")
@@ -61,13 +56,8 @@ async def update_edge(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> EdgeResponse:
     """Update an edge by ID."""
-    return EdgeResponse.model_validate(
-        await usecase.update_edge(
-            session=session,
-            edge_id=edge_id,
-            user_id=current_user.id,
-            **data.model_dump(),
-        )
+    return await usecase.update_edge(
+        session=session, edge_id=edge_id, user_id=current_user.id, data=data
     )
 
 

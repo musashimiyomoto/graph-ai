@@ -1,10 +1,9 @@
 """Node use case implementation."""
 
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Node
 from db.repositories import LLMProviderRepository, NodeRepository, WorkflowRepository
 from enums import InputNodeFormat, NodeType, OutputNodeFormat, ValidatorType
 from exceptions import (
@@ -15,12 +14,16 @@ from exceptions import (
 )
 from schemas import (
     NodeCatalogItem,
+    NodeCatalogItemResponse,
+    NodeCreate,
     NodeFieldDataSource,
     NodeFieldDataSourceKind,
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
     NodeGraphSpec,
+    NodeResponse,
+    NodeUpdate,
 )
 
 
@@ -254,14 +257,17 @@ class NodeUsecase:
 
         return data
 
-    def get_node_catalog(self) -> tuple[NodeCatalogItem, ...]:
+    def get_node_catalog(self) -> list[NodeCatalogItemResponse]:
         """Return catalog metadata for all node types.
 
         Returns:
-            A tuple with node catalog entries.
+            Node catalog entries.
 
         """
-        return tuple(self._node_catalog[node_type] for node_type in NodeType)
+        return [
+            NodeCatalogItemResponse.model_validate(self._node_catalog[node_type])
+            for node_type in NodeType
+        ]
 
     async def _validate_external_references(
         self,
@@ -311,14 +317,14 @@ class NodeUsecase:
         self,
         session: AsyncSession,
         user_id: int,
-        **kwargs: object,
-    ) -> Node:
+        data: NodeCreate,
+    ) -> NodeResponse:
         """Create a node within a workflow.
 
         Args:
             session: The session.
             user_id: The owner user ID.
-            **kwargs: The node creation fields.
+            data: The node creation fields.
 
         Returns:
             The created node.
@@ -331,41 +337,33 @@ class NodeUsecase:
         """
         workflow = await self._workflow_repository.get_by(
             session=session,
-            id=kwargs["workflow_id"],
+            id=data.workflow_id,
             owner_id=user_id,
         )
         if not workflow:
             raise WorkflowNotFoundError
 
-        node_type = kwargs.get("type")
-        if not isinstance(node_type, NodeType):
-            raise NodeDataValidationError(message="Node type is required.")
-
-        raw_data = kwargs.get("data", {})
-        if not isinstance(raw_data, dict):
-            raise NodeDataValidationError(message="Node data must be an object.")
-
-        normalized_data = cast("dict[str, Any]", raw_data)
-        validated_data = self._validate_node_data(
-            node_type=node_type,
-            data=normalized_data,
-        )
+        validated_data = self._validate_node_data(node_type=data.type, data=data.data)
         await self._validate_external_references(
             session=session,
             user_id=user_id,
-            node_type=node_type,
+            node_type=data.type,
             data=validated_data,
         )
-        kwargs["data"] = validated_data
 
-        return await self._node_repository.create(session=session, data=kwargs)
+        return NodeResponse.model_validate(
+            await self._node_repository.create(
+                session=session,
+                data={**data.model_dump(), "data": validated_data},
+            )
+        )
 
     async def get_nodes(
         self,
         session: AsyncSession,
         user_id: int,
         workflow_id: int,
-    ) -> list[Node]:
+    ) -> list[NodeResponse]:
         """List nodes for a workflow.
 
         Args:
@@ -388,17 +386,20 @@ class NodeUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        return await self._node_repository.get_all(
-            session=session,
-            workflow_id=workflow_id,
-        )
+        return [
+            NodeResponse.model_validate(node)
+            for node in await self._node_repository.get_all(
+                session=session,
+                workflow_id=workflow_id,
+            )
+        ]
 
     async def get_node(
         self,
         session: AsyncSession,
         node_id: int,
         user_id: int,
-    ) -> Node:
+    ) -> NodeResponse:
         """Fetch a node by ID.
 
         Args:
@@ -426,22 +427,22 @@ class NodeUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        return node
+        return NodeResponse.model_validate(node)
 
     async def update_node(
         self,
         session: AsyncSession,
         node_id: int,
         user_id: int,
-        **kwargs: object,
-    ) -> Node:
+        data: NodeUpdate,
+    ) -> NodeResponse:
         """Update a node by ID.
 
         Args:
             session: The session.
             node_id: The node ID.
             user_id: The owner user ID.
-            **kwargs: The fields to update.
+            data: The fields to update.
 
         Returns:
             The updated node.
@@ -454,7 +455,7 @@ class NodeUsecase:
         """
         node = await self.get_node(session=session, node_id=node_id, user_id=user_id)
 
-        update_data = {key: value for key, value in kwargs.items() if value is not None}
+        update_data = data.model_dump(exclude_none=True)
         if not update_data:
             return node
 
@@ -482,7 +483,7 @@ class NodeUsecase:
         if not updated:
             raise NodeNotFoundError
 
-        return updated
+        return NodeResponse.model_validate(updated)
 
     async def delete_node(
         self,

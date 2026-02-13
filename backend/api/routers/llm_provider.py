@@ -31,12 +31,8 @@ async def create_llm_provider(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> LLMProviderResponse:
     """Create a new LLM provider."""
-    return LLMProviderResponse.model_validate(
-        await usecase.create_llm_provider(
-            session=session,
-            user_id=current_user.id,
-            **data.model_dump(mode="json"),
-        )
+    return await usecase.create_llm_provider(
+        session=session, user_id=current_user.id, data=data
     )
 
 
@@ -50,12 +46,7 @@ async def list_llm_providers(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[LLMProviderResponse]:
     """List LLM providers for the current user."""
-    return [
-        LLMProviderResponse.model_validate(llm_provider)
-        for llm_provider in await usecase.get_llm_providers(
-            session=session, user_id=current_user.id
-        )
-    ]
+    return await usecase.get_llm_providers(session=session, user_id=current_user.id)
 
 
 @router.patch(path="/{provider_id}")
@@ -72,13 +63,8 @@ async def update_llm_provider(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> LLMProviderResponse:
     """Update an LLM provider by ID."""
-    return LLMProviderResponse.model_validate(
-        await usecase.update_llm_provider(
-            session=session,
-            provider_id=provider_id,
-            user_id=current_user.id,
-            **data.model_dump(mode="json"),
-        )
+    return await usecase.update_llm_provider(
+        session=session, provider_id=provider_id, user_id=current_user.id, data=data
     )
 
 
@@ -112,9 +98,6 @@ async def list_provider_models(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[LLMProviderModelResponse]:
     """List available models for an LLM provider."""
-    return [
-        LLMProviderModelResponse.model_validate(model)
-        for model in await usecase.get_models(
-            session=session, provider_id=provider_id, user_id=current_user.id
-        )
-    ]
+    return await usecase.get_models(
+        session=session, provider_id=provider_id, user_id=current_user.id
+    )

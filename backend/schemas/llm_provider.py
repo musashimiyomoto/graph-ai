@@ -5,14 +5,6 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
 from enums import LLMProviderType
 
 
-class LLMModel(BaseModel):
-    """Model metadata returned by an LLM provider."""
-
-    model_config = ConfigDict(frozen=True)
-
-    name: str = Field(default=..., description="Model name")
-
-
 class ChatMessage(BaseModel):
     """Chat message payload."""
 

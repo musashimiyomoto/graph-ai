@@ -29,12 +29,8 @@ async def create_node(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> NodeResponse:
     """Create a node."""
-    return NodeResponse.model_validate(
-        await usecase.create_node(
-            session=session,
-            user_id=current_user.id,
-            **data.model_dump(),
-        )
+    return await usecase.create_node(
+        session=session, user_id=current_user.id, data=data
     )
 
 
@@ -49,14 +45,9 @@ async def list_nodes(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[NodeResponse]:
     """List nodes for a workflow."""
-    return [
-        NodeResponse.model_validate(node)
-        for node in await usecase.get_nodes(
-            session=session,
-            user_id=current_user.id,
-            workflow_id=workflow_id,
-        )
-    ]
+    return await usecase.get_nodes(
+        session=session, user_id=current_user.id, workflow_id=workflow_id
+    )
 
 
 @router.get(path="/catalog")
@@ -67,10 +58,7 @@ async def list_node_catalog(
     ],
 ) -> list[NodeCatalogItemResponse]:
     """List full node catalog for frontend rendering."""
-    return [
-        NodeCatalogItemResponse.model_validate(entry)
-        for entry in usecase.get_node_catalog()
-    ]
+    return usecase.get_node_catalog()
 
 
 @router.patch(path="/{node_id}")
@@ -85,13 +73,8 @@ async def update_node(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> NodeResponse:
     """Update a node by ID."""
-    return NodeResponse.model_validate(
-        await usecase.update_node(
-            session=session,
-            node_id=node_id,
-            user_id=current_user.id,
-            **data.model_dump(),
-        )
+    return await usecase.update_node(
+        session=session, node_id=node_id, user_id=current_user.id, data=data
     )
 
 

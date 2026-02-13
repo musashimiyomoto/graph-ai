@@ -58,8 +58,8 @@ class TestAuthRegister(BaseTestCase):
         provider = providers[0]
         if provider.type != LLMProviderType.OLLAMA:
             pytest.fail("Expected default provider type to be OLLAMA")
-        if provider.name != "Local Ollama":
-            pytest.fail("Expected default provider name to be 'Local Ollama'")
+        if provider.name != "ollama":
+            pytest.fail("Expected default provider name to be 'ollama'")
 
 
 class TestAuthLogin(BaseTestCase):

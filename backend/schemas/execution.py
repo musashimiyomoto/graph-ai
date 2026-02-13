@@ -1,6 +1,7 @@
 """Schemas for execution API payloads."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +24,25 @@ class ExecutionCreate(BaseModel):
     )
 
 
+class ExecutionOutputPayload(BaseModel):
+    """Output payload for workflow execution."""
+
+    value: str = Field(default=..., description="Text output value")
+
+
+class ExecutionGraphContext(BaseModel):
+    """Validated graph context used by execution usecase."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    input_node_id: int = Field(default=..., description="Input node ID", gt=0)
+    output_node_id: int = Field(default=..., description="Output node ID", gt=0)
+    nodes_by_id: dict[int, Any] = Field(default=..., description="Nodes map")
+    outbound: dict[int, list[int]] = Field(default=..., description="Outbound edges")
+    inbound: dict[int, list[int]] = Field(default=..., description="Inbound edges")
+    topological_order: list[int] = Field(default=..., description="Topological order")
+
+
 class ExecutionResponse(BaseModel):
     """Response model for executions."""
 
@@ -35,7 +55,9 @@ class ExecutionResponse(BaseModel):
         default=None,
         description="Execution input",
     )
-    output_data: dict | None = Field(default=None, description="Execution output")
+    output_data: dict[str, Any] | None = Field(
+        default=None, description="Execution output"
+    )
     error: str | None = Field(default=None, description="Error message")
     started_at: datetime = Field(default=..., description="Started at")
     finished_at: datetime | None = Field(default=None, description="Finished at")

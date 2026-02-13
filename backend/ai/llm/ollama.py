@@ -3,7 +3,7 @@
 import httpx
 
 from ai.llm.base import BaseLLMClient
-from schemas.llm_provider import ChatMessage, ChatResponse, LLMModel
+from schemas.llm_provider import ChatMessage, ChatResponse, LLMProviderModelResponse
 
 
 class OllamaClient(BaseLLMClient):
@@ -25,7 +25,7 @@ class OllamaClient(BaseLLMClient):
         self._base_url = base_url
         self._timeout = timeout
 
-    async def list_models(self) -> list[LLMModel]:
+    async def list_models(self) -> list[LLMProviderModelResponse]:
         """List available models from provider.
 
         Returns:
@@ -39,7 +39,10 @@ class OllamaClient(BaseLLMClient):
             response.raise_for_status()
             payload = response.json()
 
-        return [LLMModel(name=model["name"]) for model in payload.get("models", [])]
+        return [
+            LLMProviderModelResponse(name=model["name"])
+            for model in payload.get("models", [])
+        ]
 
     async def chat(self, model: str, messages: list[ChatMessage]) -> ChatResponse:
         """Send chat messages to provider.

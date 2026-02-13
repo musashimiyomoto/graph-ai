@@ -4,10 +4,14 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai import LLMClientFactory
-from db.models import LLMProvider
 from db.repositories import LLMProviderRepository
 from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
-from schemas import LLMModel
+from schemas import (
+    LLMProviderCreate,
+    LLMProviderModelResponse,
+    LLMProviderResponse,
+    LLMProviderUpdate,
+)
 
 
 class LLMProviderUsecase:
@@ -22,27 +26,29 @@ class LLMProviderUsecase:
         self,
         session: AsyncSession,
         user_id: int,
-        **kwargs: object,
-    ) -> LLMProvider:
+        data: LLMProviderCreate,
+    ) -> LLMProviderResponse:
         """Create a new LLM provider.
 
         Args:
             session: The session.
             user_id: The owner user ID.
-            **kwargs: The provider creation fields.
+            data: The provider creation fields.
 
         Returns:
             The created LLM provider.
 
         """
-        return await self._llm_provider_repository.create(
-            session=session,
-            data={**kwargs, "user_id": user_id},
+        return LLMProviderResponse.model_validate(
+            await self._llm_provider_repository.create(
+                session=session,
+                data={**data.model_dump(mode="json"), "user_id": user_id},
+            )
         )
 
     async def get_llm_providers(
         self, session: AsyncSession, user_id: int
-    ) -> list[LLMProvider]:
+    ) -> list[LLMProviderResponse]:
         """List LLM providers for a user.
 
         Args:
@@ -53,13 +59,16 @@ class LLMProviderUsecase:
             The list of LLM providers.
 
         """
-        return await self._llm_provider_repository.get_all(
-            session=session, user_id=user_id
-        )
+        return [
+            LLMProviderResponse.model_validate(llm_provider)
+            for llm_provider in await self._llm_provider_repository.get_all(
+                session=session, user_id=user_id
+            )
+        ]
 
     async def get_llm_provider(
         self, session: AsyncSession, provider_id: int, user_id: int
-    ) -> LLMProvider:
+    ) -> LLMProviderResponse:
         """Fetch an LLM provider by ID.
 
         Args:
@@ -81,18 +90,22 @@ class LLMProviderUsecase:
         if not provider:
             raise LLMProviderNotFoundError
 
-        return provider
+        return LLMProviderResponse.model_validate(provider)
 
     async def update_llm_provider(
-        self, session: AsyncSession, provider_id: int, user_id: int, **kwargs: object
-    ) -> LLMProvider:
+        self,
+        session: AsyncSession,
+        provider_id: int,
+        user_id: int,
+        data: LLMProviderUpdate,
+    ) -> LLMProviderResponse:
         """Update an LLM provider by ID.
 
         Args:
             session: The session.
             provider_id: The provider ID.
             user_id: The owner user ID.
-            **kwargs: The fields to update.
+            data: The fields to update.
 
         Returns:
             The updated LLM provider.
@@ -101,22 +114,21 @@ class LLMProviderUsecase:
             LLMProviderNotFoundError: If the LLM provider is not found.
 
         """
-        provider = await self.get_llm_provider(
+        llm_provider = await self.get_llm_provider(
             session=session, provider_id=provider_id, user_id=user_id
         )
 
-        update_data = {k: v for k, v in kwargs.items() if v is not None}
-
+        update_data = data.model_dump(exclude_none=True, mode="json")
         if not update_data:
-            return provider
+            return llm_provider
 
-        provider = await self._llm_provider_repository.update_by(
+        llm_provider = await self._llm_provider_repository.update_by(
             session=session, data=update_data, id=provider_id
         )
-        if not provider:
+        if not llm_provider:
             raise LLMProviderNotFoundError
 
-        return provider
+        return LLMProviderResponse.model_validate(llm_provider)
 
     async def delete_llm_provider(
         self, session: AsyncSession, provider_id: int, user_id: int
@@ -140,7 +152,7 @@ class LLMProviderUsecase:
 
     async def get_models(
         self, session: AsyncSession, provider_id: int, user_id: int
-    ) -> list[LLMModel]:
+    ) -> list[LLMProviderModelResponse]:
         """Fetch available models from an LLM provider.
 
         Args:

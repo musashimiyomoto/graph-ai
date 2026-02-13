@@ -2,15 +2,15 @@
 
 from ai.llm import BaseLLMClient, OllamaClient
 from constants import DEFAULT_TIMEOUT
-from db.models import LLMProvider
 from enums import LLMProviderType
 from exceptions import UnsupportedLLMProviderError
+from schemas import LLMProviderResponse
 
 
 class LLMClientFactory:
     """Factory for resolving integration client by provider type."""
 
-    def get_client(self, llm_provider: LLMProvider) -> BaseLLMClient:
+    def get_client(self, llm_provider: LLMProviderResponse) -> BaseLLMClient:
         """Create an LLM client for provider.
 
         Args:

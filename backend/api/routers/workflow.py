@@ -23,10 +23,8 @@ async def create_workflow(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> WorkflowResponse:
     """Create a workflow."""
-    return WorkflowResponse.model_validate(
-        await usecase.create_workflow(
-            session=session, user_id=current_user.id, name=data.name
-        )
+    return await usecase.create_workflow(
+        session=session, user_id=current_user.id, data=data
     )
 
 
@@ -40,12 +38,7 @@ async def list_workflows(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> list[WorkflowResponse]:
     """List workflows for the current user."""
-    return [
-        WorkflowResponse.model_validate(workflow)
-        for workflow in await usecase.get_workflows(
-            session=session, user_id=current_user.id
-        )
-    ]
+    return await usecase.get_workflows(session=session, user_id=current_user.id)
 
 
 @router.patch(path="/{workflow_id}")
@@ -60,13 +53,8 @@ async def update_workflow(
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
 ) -> WorkflowResponse:
     """Update a workflow by ID."""
-    return WorkflowResponse.model_validate(
-        await usecase.update_workflow(
-            session=session,
-            workflow_id=workflow_id,
-            user_id=current_user.id,
-            **data.model_dump(),
-        )
+    return await usecase.update_workflow(
+        session=session, workflow_id=workflow_id, user_id=current_user.id, data=data
     )
 
 

@@ -2,9 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Workflow
 from db.repositories import UserRepository, WorkflowRepository
 from exceptions import WorkflowNotFoundError
+from schemas import WorkflowCreate, WorkflowResponse, WorkflowUpdate
 
 
 class WorkflowUsecase:
@@ -16,27 +16,28 @@ class WorkflowUsecase:
         self._user_repository = UserRepository()
 
     async def create_workflow(
-        self, session: AsyncSession, user_id: int, name: str
-    ) -> Workflow:
+        self, session: AsyncSession, user_id: int, data: WorkflowCreate
+    ) -> WorkflowResponse:
         """Create a workflow for a user.
 
         Args:
             session: The session.
             user_id: The owner user ID.
-            name: The workflow name.
+            data: The fields to create.
 
         Returns:
             The created workflow.
 
         """
-        return await self._workflow_repository.create(
-            session=session,
-            data={"owner_id": user_id, "name": name},
+        return WorkflowResponse.model_validate(
+            await self._workflow_repository.create(
+                session=session, data={"owner_id": user_id, **data.model_dump()}
+            )
         )
 
     async def get_workflows(
         self, session: AsyncSession, user_id: int
-    ) -> list[Workflow]:
+    ) -> list[WorkflowResponse]:
         """List workflows for a user.
 
         Args:
@@ -47,13 +48,16 @@ class WorkflowUsecase:
             The list of workflows.
 
         """
-        return await self._workflow_repository.get_all(
-            session=session, owner_id=user_id
-        )
+        return [
+            WorkflowResponse.model_validate(workflow)
+            for workflow in await self._workflow_repository.get_all(
+                session=session, owner_id=user_id
+            )
+        ]
 
     async def get_workflow(
         self, session: AsyncSession, workflow_id: int, user_id: int
-    ) -> Workflow:
+    ) -> WorkflowResponse:
         """Fetch a workflow by ID for a user.
 
         Args:
@@ -74,18 +78,22 @@ class WorkflowUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        return workflow
+        return WorkflowResponse.model_validate(workflow)
 
     async def update_workflow(
-        self, session: AsyncSession, workflow_id: int, user_id: int, **kwargs: object
-    ) -> Workflow:
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        user_id: int,
+        data: WorkflowUpdate,
+    ) -> WorkflowResponse:
         """Update a workflow by ID for a user.
 
         Args:
             session: The session.
             workflow_id: The workflow ID.
             user_id: The owner user ID.
-            **kwargs: The fields to update.
+            data: The fields to update.
 
         Returns:
             The updated workflow.
@@ -98,7 +106,7 @@ class WorkflowUsecase:
             session=session, workflow_id=workflow_id, user_id=user_id
         )
 
-        update_data = {k: v for k, v in kwargs.items() if v is not None}
+        update_data = data.model_dump(exclude_none=True)
         if not update_data:
             return workflow
 
@@ -111,7 +119,7 @@ class WorkflowUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        return workflow
+        return WorkflowResponse.model_validate(workflow)
 
     async def delete_workflow(
         self, session: AsyncSession, workflow_id: int, user_id: int
