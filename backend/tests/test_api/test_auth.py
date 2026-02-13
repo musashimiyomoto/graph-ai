@@ -5,6 +5,8 @@ import uuid
 
 import pytest
 
+from db.repositories import LLMProviderRepository
+from enums import LLMProviderType
 from settings import auth_settings
 from tests.factories import UserFactory
 from tests.test_api.base import BaseTestCase
@@ -34,6 +36,30 @@ class TestAuthRegister(BaseTestCase):
             pytest.fail("Response must not include 'hashed_password'")
         if "password" in data:
             pytest.fail("Response must not include 'password'")
+
+    @pytest.mark.asyncio
+    async def test_creates_default_ollama_provider(self) -> None:
+        """Registration creates a default local Ollama provider."""
+        payload = {
+            "email": f"john.doe-{uuid.uuid4().hex[:8]}@example.com",
+            "password": secrets.token_urlsafe(16),
+        }
+
+        response = await self.client.post(url=self.url, json=payload)
+        data = await self.assert_response_dict(response=response)
+
+        providers = await LLMProviderRepository().get_all(
+            session=self.session, user_id=data["id"]
+        )
+
+        if len(providers) != 1:
+            pytest.fail("Expected exactly one default LLM provider for new user")
+
+        provider = providers[0]
+        if provider.type != LLMProviderType.OLLAMA:
+            pytest.fail("Expected default provider type to be OLLAMA")
+        if provider.name != "Local Ollama":
+            pytest.fail("Expected default provider name to be 'Local Ollama'")
 
 
 class TestAuthLogin(BaseTestCase):

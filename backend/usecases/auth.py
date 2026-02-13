@@ -6,13 +6,14 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import User
-from db.repositories import UserRepository
+from db.repositories import LLMProviderRepository, UserRepository
+from enums import LLMProviderType
 from exceptions import (
     AuthCredentialsError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
-from settings import auth_settings
+from settings import auth_settings, ollama_settings
 from utils.crypto import hash_password, verify_password
 
 
@@ -22,6 +23,7 @@ class AuthUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._user_repository = UserRepository()
+        self._llm_provider_repository = LLMProviderRepository()
 
     @staticmethod
     def _create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -204,7 +206,20 @@ class AuthUsecase:
         if await self._user_repository.get_by(session=session, email=email):
             raise UserAlreadyExistsError
 
-        return await self._user_repository.create(
+        user = await self._user_repository.create(
             session=session,
             data={"email": email, "hashed_password": hash_password(password=password)},
         )
+
+        await self._llm_provider_repository.create(
+            session=session,
+            data={
+                "user_id": user.id,
+                "name": "Local Ollama",
+                "type": LLMProviderType.OLLAMA,
+                "config": {},
+                "base_url": ollama_settings.url,
+            },
+        )
+
+        return user
