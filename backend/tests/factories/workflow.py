@@ -2,7 +2,7 @@
 
 from factory.declarations import LazyAttribute
 
-from models.workflow import Workflow
+from db.models.workflow import Workflow
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 

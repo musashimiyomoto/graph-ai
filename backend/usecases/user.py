@@ -2,8 +2,8 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.repositories import UserRepository
 from exceptions import UserNotFoundError
-from repositories import UserRepository
 
 
 class UserUsecase:

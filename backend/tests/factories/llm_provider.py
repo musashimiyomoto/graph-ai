@@ -2,8 +2,8 @@
 
 from factory.declarations import LazyAttribute
 
+from db.models import LLMProvider
 from enums import LLMProviderType
-from models import LLMProvider
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 

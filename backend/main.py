@@ -3,8 +3,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from exceptions import BaseError
-from routers import (
+from api.routers import (
     auth,
     edge,
     execution,
@@ -14,6 +13,7 @@ from routers import (
     user,
     workflow,
 )
+from exceptions import BaseError
 
 app = FastAPI(title="Graph AI Backend")
 

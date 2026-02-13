@@ -3,7 +3,7 @@
 from factory.declarations import LazyAttribute
 from factory.helpers import post_generation
 
-from models.user import User
+from db.models.user import User
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 

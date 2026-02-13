@@ -5,13 +5,13 @@ from datetime import UTC, datetime, timedelta
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.models import User
+from db.repositories import UserRepository
 from exceptions import (
     AuthCredentialsError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
-from models import User
-from repositories import UserRepository
 from settings import auth_settings
 from utils.crypto import hash_password, verify_password
 

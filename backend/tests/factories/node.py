@@ -2,9 +2,9 @@
 
 from factory.declarations import LazyAttribute
 
+from db.models.node import Node
 from enums import NodeType
 from enums.node import InputNodeFormat
-from models.node import Node
 from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
 
 

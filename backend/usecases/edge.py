@@ -2,14 +2,14 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.models import Edge
+from db.repositories import EdgeRepository, NodeRepository, WorkflowRepository
 from exceptions import (
     EdgeNodeMismatchError,
     EdgeNotFoundError,
     NodeNotFoundError,
     WorkflowNotFoundError,
 )
-from models import Edge
-from repositories import EdgeRepository, NodeRepository, WorkflowRepository
 
 
 class EdgeUsecase:

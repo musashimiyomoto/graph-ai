@@ -1,6 +1,6 @@
 """Edge model factory."""
 
-from models.edge import Edge
+from db.models.edge import Edge
 from tests.factories.base import AsyncSQLAlchemyModelFactory
 
 

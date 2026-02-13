@@ -39,15 +39,3 @@ class ExecutionInputValidationError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
-
-
-class ExecutionDispatchError(BaseError):
-    """Raised when execution dispatch to Prefect fails."""
-
-    def __init__(
-        self,
-        message: str = "Failed to dispatch execution",
-        status_code: HTTPStatus = HTTPStatus.SERVICE_UNAVAILABLE,
-    ) -> None:
-        """Initialize the error."""
-        super().__init__(message=message, status_code=status_code)

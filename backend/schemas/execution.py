@@ -37,9 +37,5 @@ class ExecutionResponse(BaseModel):
     )
     output_data: dict | None = Field(default=None, description="Execution output")
     error: str | None = Field(default=None, description="Error message")
-    prefect_flow_run_id: str | None = Field(
-        default=None,
-        description="Prefect flow run ID",
-    )
     started_at: datetime = Field(default=..., description="Started at")
     finished_at: datetime | None = Field(default=None, description="Finished at")

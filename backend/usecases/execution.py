@@ -7,23 +7,22 @@ from typing import cast
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from enums import ExecutionStatus, NodeType
-from exceptions import (
-    ExecutionDispatchError,
-    ExecutionGraphValidationError,
-    ExecutionInputValidationError,
-    ExecutionNotFoundError,
-    LLMProviderConnectionError,
-    WorkflowNotFoundError,
-)
-from integrations import LLMClientFactory, PrefectExecutionRunner
-from models import Edge, Execution, Node
-from repositories import (
+from ai import LLMClientFactory
+from db.models import Edge, Execution, Node
+from db.repositories import (
     EdgeRepository,
     ExecutionRepository,
     LLMProviderRepository,
     NodeRepository,
     WorkflowRepository,
+)
+from enums import ExecutionStatus, NodeType
+from exceptions import (
+    ExecutionGraphValidationError,
+    ExecutionInputValidationError,
+    ExecutionNotFoundError,
+    LLMProviderConnectionError,
+    WorkflowNotFoundError,
 )
 from schemas import ChatMessage
 
@@ -39,7 +38,6 @@ class ExecutionUsecase:
         self._edge_repository = EdgeRepository()
         self._provider_repository = LLMProviderRepository()
         self._llm_client_factory = LLMClientFactory()
-        self._prefect_runner = PrefectExecutionRunner()
 
     async def create_execution(
         self,
@@ -48,7 +46,7 @@ class ExecutionUsecase:
         workflow_id: int,
         input_data: dict | None = None,
     ) -> Execution:
-        """Create and dispatch execution for a workflow.
+        """Create and execute a workflow execution synchronously.
 
         Args:
             session: The session.
@@ -63,7 +61,6 @@ class ExecutionUsecase:
             WorkflowNotFoundError: If the workflow is not found.
             ExecutionGraphValidationError: If graph is invalid for execution.
             ExecutionInputValidationError: If input payload is invalid.
-            ExecutionDispatchError: If execution dispatch fails.
 
         """
         workflow = await self._workflow_repository.get_by(
@@ -95,30 +92,17 @@ class ExecutionUsecase:
             },
         )
 
-        try:
-            prefect_flow_run_id = await self._prefect_runner.dispatch_execution(
-                execution_id=execution.id
-            )
-        except ExecutionDispatchError as exc:
-            await self._execution_repository.update_by(
-                session=session,
-                id=execution.id,
-                data={
-                    "status": ExecutionStatus.FAILED,
-                    "error": str(exc.message),
-                    "finished_at": datetime.now(tz=UTC).replace(tzinfo=None),
-                },
-            )
-            raise
+        await self.execute_and_finalize(
+            session=session,
+            execution_id=execution.id,
+        )
 
-        updated_execution = await self._execution_repository.update_by(
+        updated_execution = await self._execution_repository.get_by(
             session=session,
             id=execution.id,
-            data={"prefect_flow_run_id": prefect_flow_run_id},
         )
         if updated_execution is None:
-            raise ExecutionDispatchError(message="Execution was not persisted")
-
+            raise ExecutionNotFoundError
         return updated_execution
 
     async def get_executions(
@@ -267,15 +251,12 @@ class ExecutionUsecase:
         self,
         session: AsyncSession,
         execution_id: int,
-    ) -> None:
+    ) -> Execution:
         """Run execution and persist terminal status.
 
         Args:
             session: Database session.
             execution_id: Execution ID.
-
-        Raises:
-            Exception: Re-raises execution errors after persisting failed status.
 
         """
         try:
@@ -283,18 +264,17 @@ class ExecutionUsecase:
                 session=session,
                 execution_id=execution_id,
             )
-            await self.mark_execution_success(
+            return await self.mark_execution_success(
                 session=session,
                 execution_id=execution_id,
                 output_data=output_data,
             )
-        except Exception as exc:
-            await self.mark_execution_failed(
+        except Exception as exc:  # noqa: BLE001
+            return await self.mark_execution_failed(
                 session=session,
                 execution_id=execution_id,
                 error=str(exc),
             )
-            raise
 
     async def mark_execution_success(
         self,

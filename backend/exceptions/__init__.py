@@ -4,7 +4,6 @@ from exceptions.auth import AuthCredentialsError
 from exceptions.base import BaseError
 from exceptions.edge import EdgeNodeMismatchError, EdgeNotFoundError
 from exceptions.execution import (
-    ExecutionDispatchError,
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
     ExecutionNotFoundError,
@@ -24,7 +23,6 @@ __all__ = [
     "BaseError",
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
-    "ExecutionDispatchError",
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",
     "ExecutionNotFoundError",

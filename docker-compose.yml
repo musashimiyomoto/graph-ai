@@ -1,30 +1,3 @@
-x-prefect: &prefect
-  image: ${PREFECT_IMAGE}
-  restart: always
-  env_file:
-    - .env
-  depends_on:
-    postgres:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-
-x-backend: &backend
-  build:
-    context: ./backend
-  restart: always
-  env_file:
-    - .env
-  depends_on:
-    postgres:
-      condition: service_healthy
-    chroma:
-      condition: service_healthy
-    redis:
-      condition: service_healthy
-    prefect-server:
-      condition: service_healthy
-
 services:
   frontend:
     build:
@@ -38,7 +11,16 @@ services:
       - backend
 
   backend:
-    <<: *backend
+    build:
+      context: ./backend
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "5000:5000"
     command: [ "sh", "/docker-entrypoint.sh", "gunicorn", "main:app" ]
@@ -54,7 +36,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test:
         - "CMD"
@@ -81,23 +62,6 @@ services:
     volumes:
       - redis_data:/data
 
-  chroma:
-    image: ${CHROMA_IMAGE}
-    restart: always
-    healthcheck:
-      test:
-        - "CMD"
-        - "/bin/bash"
-        - "-c"
-        - "cat < /dev/null > /dev/tcp/localhost/8000"
-      interval: 5s
-      timeout: 3s
-      retries: 40
-    ports:
-      - "8000:8000"
-    volumes:
-      - chroma_data:/data
-
   ollama:
     image: ${OLLAMA_IMAGE}
     restart: always
@@ -120,41 +84,7 @@ services:
       timeout: 3s
       retries: 40
 
-  prefect-server:
-    <<: *prefect
-    ports:
-      - "4200:4200"
-    environment:
-      PREFECT_API_URL: http://127.0.0.1:4200/api
-    healthcheck:
-      test:
-        - "CMD"
-        - "python"
-        - "-c"
-        - "import sys"
-        - "import httpx"
-        - "sys.exit(0 if httpx.get('http://localhost:4200/api/health', timeout=1).status_code==200 else 1)"
-      interval: 5s
-      timeout: 3s
-      retries: 60
-    command: [ "prefect", "server", "start", "--no-services" ]
-
-  prefect-services:
-    <<: *prefect
-    depends_on:
-      prefect-server:
-        condition: service_healthy
-    command: [ "prefect", "server", "services", "start" ]
-
-  prefect-worker:
-    <<: *backend
-    command: [ "prefect", "worker", "start", "--pool", "local-pool" ]
-    deploy:
-      replicas: 1
-
 volumes:
   postgres_data:
-  prefect_data:
-  chroma_data:
   redis_data:
   ollama_data:

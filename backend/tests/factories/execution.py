@@ -1,7 +1,7 @@
 """Execution model factory."""
 
+from db.models.execution import Execution
 from enums import ExecutionStatus
-from models.execution import Execution
 from tests.factories.base import AsyncSQLAlchemyModelFactory
 
 
@@ -16,4 +16,3 @@ class ExecutionFactory(AsyncSQLAlchemyModelFactory):
     workflow_id = None
     status = ExecutionStatus.CREATED
     input_data = None
-    prefect_flow_run_id = None

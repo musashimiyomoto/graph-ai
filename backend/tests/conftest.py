@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
-from dependencies import db
+from api.dependencies import db
+from db.models import Base
 from main import app
-from models import Base
 from settings import postgres_settings
 
 
