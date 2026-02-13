@@ -3,9 +3,9 @@
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai import create_llm_client
 from db.repositories import LLMProviderRepository
 from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
+from llm import create_llm_client
 from schemas import (
     LLMProviderCreate,
     LLMProviderModelResponse,

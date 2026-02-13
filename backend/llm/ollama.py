@@ -2,7 +2,7 @@
 
 import httpx
 
-from ai.llm.base import BaseLLMClient
+from llm.base import BaseLLMClient
 from schemas.llm_provider import ChatMessage, ChatResponse, LLMProviderModelResponse
 
 

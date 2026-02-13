@@ -1,9 +1,10 @@
 """AI package exports."""
 
-from ai.llm import BaseLLMClient, OllamaClient
 from constants import DEFAULT_TIMEOUT
 from enums import LLMProviderType
 from exceptions import UnsupportedLLMProviderError
+from llm.base import BaseLLMClient
+from llm.ollama import OllamaClient
 from schemas import LLMProviderResponse
 
 

@@ -3,10 +3,8 @@
 from collections import deque
 from datetime import UTC, datetime
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai import create_llm_client
 from db.repositories import (
     EdgeRepository,
     ExecutionRepository,
@@ -20,17 +18,15 @@ from exceptions import (
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
     ExecutionNotFoundError,
-    LLMProviderConnectionError,
     WorkflowNotFoundError,
 )
+from nodes import NodeExecutionContext, NodeHandlerRegistry
 from schemas import (
-    ChatMessage,
     EdgeResponse,
     ExecutionCreate,
     ExecutionGraphContext,
     ExecutionOutputPayload,
     ExecutionResponse,
-    LLMProviderResponse,
     NodeResponse,
 )
 
@@ -45,6 +41,9 @@ class ExecutionUsecase:
         self._node_repository = NodeRepository()
         self._edge_repository = EdgeRepository()
         self._llm_provider_repository = LLMProviderRepository()
+        self._node_registry = NodeHandlerRegistry(
+            llm_provider_repository=self._llm_provider_repository
+        )
 
     async def create_execution(
         self,
@@ -219,32 +218,23 @@ class ExecutionUsecase:
         outputs_by_node: dict[int, str] = {}
         for node_id in graph.topological_order:
             node = graph.nodes_by_id[node_id]
-            if node.type is NodeType.INPUT:
-                outputs_by_node[node_id] = input_value
-                continue
-
             parent_values = [
                 outputs_by_node[parent_id] for parent_id in graph.inbound[node_id]
             ]
-            if not parent_values:
+            if node.type is not NodeType.INPUT and not parent_values:
                 message = f"Node {node.id} does not have input value"
                 raise ExecutionGraphValidationError(message=message)
 
-            if node.type is NodeType.LLM:
-                outputs_by_node[node_id] = await self._execute_llm_node(
+            outputs_by_node[node_id] = await self._node_registry.execute(
+                node_type=node.type,
+                context=NodeExecutionContext(
                     session=session,
                     workflow_owner_id=workflow.owner_id,
                     node_data=node.data,
                     parent_values=parent_values,
-                )
-                continue
-
-            if node.type is NodeType.OUTPUT:
-                outputs_by_node[node_id] = "\n".join(parent_values)
-                continue
-
-            message = f"Unsupported node type: {node.type}"
-            raise ExecutionGraphValidationError(message=message)
+                    input_value=input_value,
+                ),
+            )
 
         return ExecutionOutputPayload(value=outputs_by_node[graph.output_node_id])
 
@@ -499,74 +489,3 @@ class ExecutionUsecase:
             raise ExecutionInputValidationError(message=message)
 
         return value
-
-    async def _execute_llm_node(
-        self,
-        session: AsyncSession,
-        workflow_owner_id: int,
-        node_data: dict[str, object],
-        parent_values: list[str],
-    ) -> str:
-        """Run one LLM node.
-
-        Args:
-            session: Database session.
-            workflow_owner_id: Workflow owner ID.
-            node_data: Persisted node data.
-            parent_values: Upstream values.
-
-        Returns:
-            LLM output text.
-
-        Raises:
-            ExecutionGraphValidationError: If node configuration is invalid.
-
-        """
-        llm_provider_id = node_data.get("llm_provider_id")
-        if not isinstance(llm_provider_id, int) or llm_provider_id <= 0:
-            message = "LLM node requires a valid llm_provider_id"
-            raise ExecutionGraphValidationError(message=message)
-
-        model = node_data.get("model")
-        if not isinstance(model, str) or not model:
-            message = "LLM node requires a non-empty model"
-            raise ExecutionGraphValidationError(message=message)
-
-        system_prompt_value = node_data.get("system_prompt", "")
-        if not isinstance(system_prompt_value, str):
-            message = "LLM node field system_prompt must be a string"
-            raise ExecutionGraphValidationError(message=message)
-
-        llm_provider = await self._llm_provider_repository.get_by(
-            session=session,
-            id=llm_provider_id,
-            user_id=workflow_owner_id,
-        )
-        if llm_provider is None:
-            message = "Referenced LLM provider does not exist"
-            raise ExecutionGraphValidationError(message=message)
-
-        try:
-            response = await create_llm_client(
-                llm_provider=LLMProviderResponse.model_validate(llm_provider)
-            ).chat(
-                model=model,
-                messages=[
-                    ChatMessage(role="system", content=system_prompt_value),
-                    ChatMessage(role="user", content="\n".join(parent_values)),
-                ],
-            )
-        except httpx.TimeoutException as exc:
-            raise LLMProviderConnectionError(
-                message="LLM provider request timed out while running execution"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            detail = exc.response.text.strip()
-            message = f"LLM provider returned {exc.response.status_code}"
-            if detail:
-                message = f"{message}: {detail[:300]}"
-            raise LLMProviderConnectionError(message=message) from exc
-        except httpx.HTTPError as exc:
-            raise LLMProviderConnectionError from exc
-
-        return response.message.content
