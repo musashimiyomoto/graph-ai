@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai import LLMClientFactory
+from ai import create_llm_client
 from db.repositories import (
     EdgeRepository,
     ExecutionRepository,
@@ -45,7 +45,6 @@ class ExecutionUsecase:
         self._node_repository = NodeRepository()
         self._edge_repository = EdgeRepository()
         self._llm_provider_repository = LLMProviderRepository()
-        self._llm_client_factory = LLMClientFactory()
 
     async def create_execution(
         self,
@@ -548,7 +547,7 @@ class ExecutionUsecase:
             raise ExecutionGraphValidationError(message=message)
 
         try:
-            response = await self._llm_client_factory.get_client(
+            response = await create_llm_client(
                 llm_provider=LLMProviderResponse.model_validate(llm_provider)
             ).chat(
                 model=model,

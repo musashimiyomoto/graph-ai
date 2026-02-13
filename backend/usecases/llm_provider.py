@@ -3,7 +3,7 @@
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai import LLMClientFactory
+from ai import create_llm_client
 from db.repositories import LLMProviderRepository
 from exceptions import LLMProviderConnectionError, LLMProviderNotFoundError
 from schemas import (
@@ -20,7 +20,6 @@ class LLMProviderUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._llm_provider_repository = LLMProviderRepository()
-        self._llm_client_factory = LLMClientFactory()
 
     async def create_llm_provider(
         self,
@@ -174,9 +173,7 @@ class LLMProviderUsecase:
         )
 
         try:
-            return await self._llm_client_factory.get_client(
-                llm_provider=llm_provider
-            ).list_models()
+            return await create_llm_client(llm_provider=llm_provider).list_models()
         except httpx.TimeoutException as exc:
             raise LLMProviderConnectionError(
                 message="LLM provider request timed out while listing models"
