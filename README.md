@@ -60,6 +60,6 @@ make front-build            # Production build (vite)
 
 ## Tech Stack
 
-**Backend** — FastAPI · SQLAlchemy · PostgreSQL · Redis · ChromaDB · Prefect · Ollama
+**Backend** — FastAPI · SQLAlchemy · PostgreSQL · ChromaDB · Prefect · Ollama
 
 **Frontend** — React 19 · Vite 7 · TypeScript · Tailwind CSS 4 · React Flow
