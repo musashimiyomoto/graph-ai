@@ -56,10 +56,10 @@ backend/
 ## Execution pipeline rules
 
 - Execution creation is initiated via `ExecutionUsecase.create_execution`.
-- Prefect dispatch is done through `integrations/prefect.py`.
-- Prefect flow entrypoint is `flows/prefect_execution_flow.py`.
-- Flow execution delegates back to usecase (`execute_and_finalize`) to persist final status.
+- Runtime node handlers live in `nodes/` and implement `NodeHandler.execute(...)`.
+- Node handler wiring is centralized in `nodes/registry.py` via `NodeHandlerRegistry`.
 - Graph validation (acyclic graph, single input/output, connectivity) stays in execution usecase.
+- For node handlers with external HTTP calls (e.g. `web_search`), API tests must mock outbound requests.
 
 ## Code style rules
 

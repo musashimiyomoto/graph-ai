@@ -7,6 +7,7 @@ from nodes.base import NodeExecutionContext, NodeHandler
 from nodes.input import InputNodeHandler
 from nodes.llm import LLMNodeHandler
 from nodes.output import OutputNodeHandler
+from nodes.web_search import WebSearchNodeHandler
 
 
 class NodeHandlerRegistry:
@@ -24,6 +25,7 @@ class NodeHandlerRegistry:
             NodeType.LLM: LLMNodeHandler(
                 llm_provider_repository=llm_provider_repository
             ),
+            NodeType.WEB_SEARCH: WebSearchNodeHandler(),
             NodeType.OUTPUT: OutputNodeHandler(),
         }
 

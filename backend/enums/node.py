@@ -8,6 +8,7 @@ class NodeType(StrEnum):
 
     INPUT = auto()
     LLM = auto()
+    WEB_SEARCH = auto()
     OUTPUT = auto()
 
 

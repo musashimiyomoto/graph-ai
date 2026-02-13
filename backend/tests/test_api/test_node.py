@@ -25,6 +25,11 @@ def build_node_data(node_type: NodeType, *, llm_provider_id: int | None = None) 
             "model": "gpt-4",
             "system_prompt": "You are a helpful assistant.",
         }
+    if node_type is NodeType.WEB_SEARCH:
+        return {
+            "label": f"node-{uuid.uuid4().hex[:8]}",
+            "max_results": 5,
+        }
     return {
         "label": f"node-{uuid.uuid4().hex[:8]}",
         "format": OutputNodeFormat.TXT,
@@ -34,6 +39,7 @@ def build_node_data(node_type: NodeType, *, llm_provider_id: int | None = None) 
 EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.INPUT: {"label", "format"},
     NodeType.LLM: {"label", "llm_provider_id", "model", "system_prompt"},
+    NodeType.WEB_SEARCH: {"label", "max_results"},
     NodeType.OUTPUT: {"label", "format"},
 }
 

@@ -1,3 +1,3 @@
 """Timeout constants."""
 
-DEFAULT_TIMEOUT = 90.0
+DEFAULT_TIMEOUT = 180

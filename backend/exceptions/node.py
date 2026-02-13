@@ -27,3 +27,15 @@ class NodeDataValidationError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
+
+
+class WebSearchConnectionError(BaseError):
+    """Raised when a web search request fails."""
+
+    def __init__(
+        self,
+        message: str = "Web search provider request failed",
+        status_code: HTTPStatus = HTTPStatus.BAD_GATEWAY,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)

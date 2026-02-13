@@ -14,7 +14,11 @@ from exceptions.llm_provider import (
     LLMProviderNotFoundError,
     UnsupportedLLMProviderError,
 )
-from exceptions.node import NodeDataValidationError, NodeNotFoundError
+from exceptions.node import (
+    NodeDataValidationError,
+    NodeNotFoundError,
+    WebSearchConnectionError,
+)
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
 from exceptions.workflow import WorkflowNotFoundError
 
@@ -34,5 +38,6 @@ __all__ = [
     "UnsupportedLLMProviderError",
     "UserAlreadyExistsError",
     "UserNotFoundError",
+    "WebSearchConnectionError",
     "WorkflowNotFoundError",
 ]

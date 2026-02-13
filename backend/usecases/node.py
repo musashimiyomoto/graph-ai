@@ -5,23 +5,20 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repositories import LLMProviderRepository, NodeRepository, WorkflowRepository
-from enums import InputNodeFormat, NodeType, OutputNodeFormat, ValidatorType
+from enums import NodeType, ValidatorType
 from exceptions import (
     LLMProviderNotFoundError,
     NodeDataValidationError,
     NodeNotFoundError,
     WorkflowNotFoundError,
 )
+from nodes.catalog import build_node_catalog
 from schemas import (
     NodeCatalogItem,
     NodeCatalogItemResponse,
     NodeCreate,
-    NodeFieldDataSource,
     NodeFieldDataSourceKind,
     NodeFieldSpec,
-    NodeFieldUI,
-    NodeFieldWidget,
-    NodeGraphSpec,
     NodeResponse,
     NodeUpdate,
 )
@@ -35,128 +32,7 @@ class NodeUsecase:
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
-        self._node_catalog = self._build_catalog()
-
-    def _build_catalog(self) -> dict[NodeType, NodeCatalogItem]:
-        """Build static node catalog.
-
-        Returns:
-            Mapping of node types to catalog entries.
-
-        """
-        input_fields = (
-            NodeFieldSpec(
-                name="label",
-                required=True,
-                validators={ValidatorType.MIN_LENGTH.value: 1},
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.TEXT,
-                    label="Label",
-                    placeholder="Input label",
-                ),
-                default="Input node",
-            ),
-            NodeFieldSpec(
-                name="format",
-                required=True,
-                validators={ValidatorType.SELECT.value: [InputNodeFormat.TXT.value]},
-                ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
-                default=InputNodeFormat.TXT.value,
-            ),
-        )
-
-        llm_fields = (
-            NodeFieldSpec(
-                name="label",
-                required=True,
-                validators={ValidatorType.MIN_LENGTH.value: 1},
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.TEXT,
-                    label="Label",
-                    placeholder="LLM label",
-                ),
-                default="LLM node",
-            ),
-            NodeFieldSpec(
-                name="llm_provider_id",
-                required=True,
-                validators={ValidatorType.GE.value: 1},
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.PROVIDER,
-                    label="Provider",
-                ),
-                datasource=NodeFieldDataSource(
-                    kind=NodeFieldDataSourceKind.LLM_PROVIDER
-                ),
-            ),
-            NodeFieldSpec(
-                name="model",
-                required=True,
-                validators={ValidatorType.MIN_LENGTH.value: 1},
-                ui=NodeFieldUI(widget=NodeFieldWidget.MODEL, label="Model"),
-                datasource=NodeFieldDataSource(
-                    kind=NodeFieldDataSourceKind.LLM_MODEL,
-                    depends_on="llm_provider_id",
-                ),
-                default="",
-            ),
-            NodeFieldSpec(
-                name="system_prompt",
-                required=True,
-                validators={},
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.TEXTAREA,
-                    label="System prompt",
-                    placeholder="You are a helpful assistant.",
-                ),
-                default="",
-            ),
-        )
-
-        output_fields = (
-            NodeFieldSpec(
-                name="label",
-                required=True,
-                validators={ValidatorType.MIN_LENGTH.value: 1},
-                ui=NodeFieldUI(
-                    widget=NodeFieldWidget.TEXT,
-                    label="Label",
-                    placeholder="Output label",
-                ),
-                default="Output node",
-            ),
-            NodeFieldSpec(
-                name="format",
-                required=True,
-                validators={ValidatorType.SELECT.value: [OutputNodeFormat.TXT.value]},
-                ui=NodeFieldUI(widget=NodeFieldWidget.SELECT, label="Format"),
-                default=OutputNodeFormat.TXT.value,
-            ),
-        )
-
-        return {
-            NodeType.INPUT: NodeCatalogItem(
-                type=NodeType.INPUT,
-                label="Input",
-                icon_key="input",
-                graph=NodeGraphSpec(has_input=False, has_output=True),
-                fields=input_fields,
-            ),
-            NodeType.LLM: NodeCatalogItem(
-                type=NodeType.LLM,
-                label="LLM",
-                icon_key="llm",
-                graph=NodeGraphSpec(has_input=True, has_output=True),
-                fields=llm_fields,
-            ),
-            NodeType.OUTPUT: NodeCatalogItem(
-                type=NodeType.OUTPUT,
-                label="Output",
-                icon_key="output",
-                graph=NodeGraphSpec(has_input=True, has_output=False),
-                fields=output_fields,
-            ),
-        }
+        self._node_catalog = build_node_catalog()
 
     def _get_node_spec(self, node_type: NodeType) -> NodeCatalogItem:
         """Return catalog entry for specific node type.

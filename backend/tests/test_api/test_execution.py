@@ -1,7 +1,9 @@
 """Execution API tests."""
 
 from http import HTTPStatus
+from typing import Self
 
+import httpx
 import pytest
 
 from enums import ExecutionStatus, NodeType
@@ -59,6 +61,194 @@ class TestExecutionCreate(BaseTestCase):
             pytest.fail("Execution output did not match expected value")
         if data["error"] is not None:
             pytest.fail("Execution error should be null for success")
+
+    @pytest.mark.asyncio
+    async def test_ok_with_web_search_node(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Execution succeeds with web search node in the path."""
+
+        class DummyResponse:
+            """Dummy HTTP response for web search tests."""
+
+            status_code = HTTPStatus.OK
+            text = ""
+
+            def raise_for_status(self) -> None:
+                """Keep successful status."""
+
+            def json(self) -> dict:
+                """Return mock DuckDuckGo payload."""
+                return {
+                    "AbstractText": "DuckDuckGo is a privacy-focused search engine.",
+                    "AbstractURL": "https://duckduckgo.com/about",
+                    "RelatedTopics": [
+                        {
+                            "Text": "DuckDuckGo Search",
+                            "FirstURL": "https://duckduckgo.com",
+                        }
+                    ],
+                }
+
+        class DummyAsyncClient:
+            """Dummy async client that returns fixed payload."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Allow constructing with any httpx kwargs."""
+
+            async def __aenter__(self) -> Self:
+                """Enter async context manager."""
+                return self
+
+            async def __aexit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc: BaseException | None,
+                tb: object,
+            ) -> bool:
+                """Exit async context manager."""
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, *args: object, **kwargs: object) -> DummyResponse:
+                """Return a successful response."""
+                del args, kwargs
+                return DummyResponse()
+
+        monkeypatch.setattr("nodes.web_search.httpx.AsyncClient", DummyAsyncClient)
+
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        web_search_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.WEB_SEARCH,
+            data={"label": "Web Search", "max_results": 2},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=web_search_node.id,
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=web_search_node.id,
+            target_node_id=output_node.id,
+        )
+
+        response = await self.client.post(
+            url=self.url,
+            json={"workflow_id": workflow.id, "input_data": {"value": "duckduckgo"}},
+            headers=headers,
+        )
+
+        data = await self.assert_response_dict(response=response)
+        if data["status"] != ExecutionStatus.SUCCESS:
+            pytest.fail("Execution with web search node should succeed")
+        output_value = (
+            data.get("output_data", {}).get("value")
+            if isinstance(data.get("output_data"), dict)
+            else None
+        )
+        if not isinstance(output_value, str) or "DuckDuckGo" not in output_value:
+            pytest.fail("Execution output does not contain expected web search text")
+
+    @pytest.mark.asyncio
+    async def test_web_search_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Execution is marked as failed when web search request fails."""
+
+        class FailingAsyncClient:
+            """Dummy async client that raises a timeout."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Allow constructing with any httpx kwargs."""
+
+            async def __aenter__(self) -> Self:
+                """Enter async context manager."""
+                return self
+
+            async def __aexit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc: BaseException | None,
+                tb: object,
+            ) -> bool:
+                """Exit async context manager."""
+                del exc_type, exc, tb
+                return False
+
+            async def get(self, *args: object, **kwargs: object) -> object:
+                """Raise timeout to emulate provider failure."""
+                del args, kwargs
+                message = "timeout"
+                raise httpx.TimeoutException(message)
+
+        monkeypatch.setattr("nodes.web_search.httpx.AsyncClient", FailingAsyncClient)
+
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        web_search_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.WEB_SEARCH,
+            data={"label": "Web Search", "max_results": 3},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=web_search_node.id,
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=web_search_node.id,
+            target_node_id=output_node.id,
+        )
+
+        response = await self.client.post(
+            url=self.url,
+            json={"workflow_id": workflow.id, "input_data": {"value": "duckduckgo"}},
+            headers=headers,
+        )
+
+        data = await self.assert_response_dict(response=response)
+        if data["status"] != ExecutionStatus.FAILED:
+            pytest.fail("Expected FAILED status for web search runtime error")
+        if not data.get("error"):
+            pytest.fail("Expected error details for failed web search execution")
 
     @pytest.mark.asyncio
     async def test_input_node_count_error(self) -> None:
