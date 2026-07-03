@@ -3,7 +3,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repositories import LLMProviderRepository
-from exceptions import LLMProviderNotFoundError
+from exceptions import BlockedURLError, LLMProviderNotFoundError
 from llm import create_llm_client
 from schemas import (
     LLMProviderCreate,
@@ -12,6 +12,26 @@ from schemas import (
     LLMProviderUpdate,
 )
 from utils.encryption import decrypt, encrypt
+from utils.network import blocked_url_reason
+
+
+async def _ensure_allowed_base_url(base_url: str) -> None:
+    """Reject provider base URLs that resolve to disallowed hosts.
+
+    Providers may legitimately be self-hosted (e.g. Ollama on a private host), so
+    loopback/private ranges are allowed; link-local (incl. cloud metadata),
+    multicast, reserved, and unspecified addresses are blocked.
+
+    Args:
+        base_url: The provider base URL.
+
+    Raises:
+        BlockedURLError: If the URL resolves to a disallowed address.
+
+    """
+    reason = await blocked_url_reason(base_url, allow_private=True)
+    if reason is not None:
+        raise BlockedURLError(message=reason)
 
 
 class LLMProviderUsecase:
@@ -39,6 +59,7 @@ class LLMProviderUsecase:
 
         """
         payload = data.model_dump(mode="json")
+        await _ensure_allowed_base_url(payload["base_url"])
         if payload.get("api_key") is not None:
             payload["api_key"] = encrypt(payload["api_key"])
 
@@ -125,6 +146,9 @@ class LLMProviderUsecase:
         if not update_data:
             return llm_provider
 
+        if update_data.get("base_url"):
+            await _ensure_allowed_base_url(update_data["base_url"])
+
         if "api_key" in update_data:
             update_data["api_key"] = encrypt(update_data["api_key"])
 
@@ -182,6 +206,7 @@ class LLMProviderUsecase:
         if not llm_provider:
             raise LLMProviderNotFoundError
 
+        await _ensure_allowed_base_url(llm_provider.base_url)
         api_key = decrypt(llm_provider.api_key) if llm_provider.api_key else None
 
         return await create_llm_client(

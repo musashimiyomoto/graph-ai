@@ -42,7 +42,7 @@ interface UseGraphStateResult {
   ) => Promise<void>
   getInitialNodeData: (type: NodeType) => Record<string, unknown>
   handleDeleteNode: (nodeId: string) => Promise<void>
-  handleUpdateNodeData: (nodeId: string, data: Record<string, unknown>) => Promise<void>
+  handleUpdateNodeData: (nodeId: string, data: Record<string, unknown>) => Promise<boolean>
   handleNodesChange: (changes: NodeChange[]) => void
   handleMoveNode: (nodeId: string, x: number, y: number) => Promise<void>
   handleConnect: (sourceId: string, targetId: string) => Promise<void>
@@ -232,7 +232,7 @@ export function useGraphState({
   )
 
   const handleUpdateNodeData = useCallback(
-    async (nodeId: string, data: Record<string, unknown>): Promise<void> => {
+    async (nodeId: string, data: Record<string, unknown>): Promise<boolean> => {
       try {
         const { nodeType: _nodeType, iconKey: _iconKey, graph: _graph, ...cleanData } = data
         void _nodeType
@@ -248,8 +248,10 @@ export function useGraphState({
           ),
         )
         setError(null)
+        return true
       } catch (error) {
         handleError(error as ApiError)
+        return false
       }
     },
     [handleError, nodeCatalogByType, setError],

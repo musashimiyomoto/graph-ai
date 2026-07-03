@@ -244,3 +244,15 @@ class TestHTTPRequestNode:
             await handler.execute(
                 _context({"url": "ftp://x", "method": "get"}, parent_values=["x"])
             )
+
+    @pytest.mark.asyncio
+    async def test_ssrf_loopback_rejected(self) -> None:
+        """A loopback URL is blocked by the SSRF guard (strict mode)."""
+        handler = HTTPRequestNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(
+                _context(
+                    {"url": "http://127.0.0.1/admin", "method": "get"},
+                    parent_values=["x"],
+                )
+            )

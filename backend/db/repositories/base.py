@@ -5,8 +5,10 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from db.models import BaseWithID
 
-class BaseRepository[Model: object]:
+
+class BaseRepository[Model: BaseWithID]:
     """Generic repository providing CRUD operations."""
 
     def __init__(self, model: type[Model]) -> None:
@@ -57,22 +59,33 @@ class BaseRepository[Model: object]:
     async def get_all(
         self,
         session: AsyncSession,
+        limit: int | None = None,
+        offset: int | None = None,
+        *,
+        descending: bool = False,
         **filters: object,
     ) -> list[Model]:
-        """Get all model instances with pagination and sorting.
+        """Get model instances ordered deterministically by primary key.
 
         Args:
             session: The async session.
-            **filters: The filters to apply to the query.
+            limit: Maximum rows to return (None = no limit).
+            offset: Rows to skip before returning results.
+            descending: Order by id descending instead of ascending.
+            **filters: The equality filters to apply to the query.
 
         Returns:
             The list of model instances.
 
         """
-        result = await session.execute(
-            statement=select(self.model).filter_by(**filters)
-        )
+        order = self.model.id.desc() if descending else self.model.id.asc()
+        statement = select(self.model).filter_by(**filters).order_by(order)
+        if offset is not None:
+            statement = statement.offset(offset)
+        if limit is not None:
+            statement = statement.limit(limit)
 
+        result = await session.execute(statement=statement)
         return list(result.scalars().all())
 
     async def get_by(self, session: AsyncSession, **filters: object) -> Model | None:
@@ -148,7 +161,10 @@ class BaseRepository[Model: object]:
             True if the model instances were deleted, False otherwise.
 
         """
-        for instance in await self.get_all(session=session, **filters):
+        result = await session.execute(
+            statement=select(self.model).filter_by(**filters)
+        )
+        for instance in result.scalars().all():
             await session.delete(instance)
 
         await session.commit()

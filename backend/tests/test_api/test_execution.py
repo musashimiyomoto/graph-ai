@@ -96,6 +96,75 @@ class TestExecutionCreate(BaseTestCase):
             pytest.fail("Execution error should be null for success")
 
     @pytest.mark.asyncio
+    async def test_fan_in_merge_order_is_deterministic(self) -> None:
+        """Multiple parents merge in stable node-id order, not edge-insert order."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        first = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.TEMPLATE,
+            data={"label": "A", "template": "A"},
+        )
+        second = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.TEMPLATE,
+            data={"label": "B", "template": "B"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        for source, target in (
+            (input_node.id, first.id),
+            (input_node.id, second.id),
+        ):
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source,
+                target_node_id=target,
+            )
+        # Insert the higher-id parent's edge first: without deterministic ordering
+        # the output would merge as "B\nA".
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=second.id,
+            target_node_id=output_node.id,
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=first.id,
+            target_node_id=output_node.id,
+        )
+
+        response = await self.client.post(
+            url=self.url,
+            json={"workflow_id": workflow.id, "input_data": {"value": "x"}},
+            headers=headers,
+        )
+        data = await self.assert_response_dict(response=response)
+
+        result = await run_execution(self.session, data["id"])
+        if result.status != ExecutionStatus.SUCCESS:
+            pytest.fail("Fan-in execution should succeed")
+        if result.output_data != {"value": "A\nB"}:
+            pytest.fail(f"Parents merged in wrong order: {result.output_data}")
+
+    @pytest.mark.asyncio
     async def test_ok_with_llm_node(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Execution succeeds with an LLM node, mocking the Ollama chat call."""
 
@@ -1118,6 +1187,44 @@ class TestExecutionReaper(BaseTestCase):
             pytest.fail("Stale RUNNING execution should be marked FAILED")
         if fresh_after is None or fresh_after.status != ExecutionStatus.RUNNING:
             pytest.fail("Recent RUNNING execution should be left untouched")
+
+    @pytest.mark.asyncio
+    async def test_status_cas_prevents_clobber(self) -> None:
+        """A finalized execution cannot be re-finalized (reaper/worker anti-clobber)."""
+        user, _ = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.RUNNING,
+        )
+        execution_id = execution.id
+        repository = ExecutionRepository()
+
+        first = await repository.update_status_if(
+            session=self.session,
+            execution_id=execution_id,
+            expected_status=ExecutionStatus.RUNNING,
+            data={"status": ExecutionStatus.SUCCESS},
+        )
+        second = await repository.update_status_if(
+            session=self.session,
+            execution_id=execution_id,
+            expected_status=ExecutionStatus.RUNNING,
+            data={"status": ExecutionStatus.FAILED},
+        )
+
+        if not first:
+            pytest.fail("First compare-and-set on RUNNING should win")
+        if second:
+            pytest.fail("Second compare-and-set should not win after finalization")
+
+        self.session.expire_all()
+        after = await repository.get_by(session=self.session, id=execution_id)
+        if after is None or after.status != ExecutionStatus.SUCCESS:
+            pytest.fail("Finalized status must not be clobbered")
 
 
 class TestExecutionParallel(BaseTestCase):

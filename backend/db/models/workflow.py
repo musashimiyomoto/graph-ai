@@ -14,6 +14,7 @@ class Workflow(BaseWithID, BaseWithDate):
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
         comment="Owner user ID",
     )
 

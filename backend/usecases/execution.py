@@ -13,6 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from constants import (
+    DEFAULT_PAGE_SIZE,
     MAX_NODE_ATTEMPTS,
     NODE_TIMEOUT_SECONDS,
     RETRY_BACKOFF_BASE_SECONDS,
@@ -190,11 +191,23 @@ class ExecutionUsecase:
         if workflow is None:
             raise WorkflowNotFoundError
 
-        await self._execution_repository.update_by(
+        claimed = await self._execution_repository.update_status_if(
             session=session,
-            id=execution_id,
-            data={"status": ExecutionStatus.RUNNING},
+            execution_id=execution_id,
+            expected_status=ExecutionStatus.CREATED,
+            data={
+                "status": ExecutionStatus.RUNNING,
+                "started_at": datetime.now(tz=UTC).replace(tzinfo=None),
+            },
         )
+        if not claimed:
+            # Already claimed or finalized (e.g. duplicate delivery); do not re-run.
+            current = await self._execution_repository.get_by(
+                session=session, id=execution_id
+            )
+            if current is None:
+                raise ExecutionNotFoundError
+            return ExecutionResponse.model_validate(current)
 
         graph = await self._load_graph(
             session=session, workflow_id=execution.workflow_id
@@ -298,14 +311,21 @@ class ExecutionUsecase:
         )
 
     async def get_executions(
-        self, session: AsyncSession, user_id: int, workflow_id: int
+        self,
+        session: AsyncSession,
+        user_id: int,
+        workflow_id: int,
+        limit: int = DEFAULT_PAGE_SIZE,
+        offset: int = 0,
     ) -> list[ExecutionResponse]:
-        """List executions for a workflow.
+        """List executions for a workflow, newest first.
 
         Args:
             session: The session.
             user_id: The owner user ID.
             workflow_id: The workflow ID.
+            limit: Maximum executions to return.
+            offset: Executions to skip (for paging).
 
         Returns:
             The list of executions.
@@ -323,7 +343,11 @@ class ExecutionUsecase:
         return [
             ExecutionResponse.model_validate(execution)
             for execution in await self._execution_repository.get_all(
-                session=session, workflow_id=workflow_id
+                session=session,
+                limit=limit,
+                offset=offset,
+                descending=True,
+                workflow_id=workflow_id,
             )
         ]
 
@@ -360,7 +384,12 @@ class ExecutionUsecase:
         return ExecutionResponse.model_validate(execution)
 
     async def get_node_executions(
-        self, session: AsyncSession, execution_id: int, user_id: int
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        user_id: int,
+        limit: int = DEFAULT_PAGE_SIZE,
+        offset: int = 0,
     ) -> list[NodeExecutionResponse]:
         """List per-node results for an execution.
 
@@ -368,6 +397,8 @@ class ExecutionUsecase:
             session: The session.
             execution_id: The execution ID.
             user_id: The owner user ID.
+            limit: Maximum node results to return.
+            offset: Node results to skip (for paging).
 
         Returns:
             The list of node execution results.
@@ -384,7 +415,10 @@ class ExecutionUsecase:
         return [
             NodeExecutionResponse.model_validate(node_execution)
             for node_execution in await self._node_execution_repository.get_all(
-                session=session, execution_id=execution_id
+                session=session,
+                limit=limit,
+                offset=offset,
+                execution_id=execution_id,
             )
         ]
 
@@ -862,24 +896,19 @@ class ExecutionUsecase:
         session: AsyncSession,
         execution_id: int,
         output_data: ExecutionOutputPayload,
-    ) -> ExecutionResponse:
-        """Persist successful execution result.
+    ) -> None:
+        """Persist successful execution result (only if still RUNNING).
 
         Args:
             session: Database session.
             execution_id: Execution ID.
             output_data: Final output payload.
 
-        Returns:
-            Updated execution.
-
-        Raises:
-            ExecutionNotFoundError: If execution record does not exist.
-
         """
-        updated_execution = await self._execution_repository.update_by(
+        won = await self._execution_repository.update_status_if(
             session=session,
-            id=execution_id,
+            execution_id=execution_id,
+            expected_status=ExecutionStatus.RUNNING,
             data={
                 "status": ExecutionStatus.SUCCESS,
                 "output_data": output_data.model_dump(),
@@ -887,44 +916,41 @@ class ExecutionUsecase:
                 "finished_at": datetime.now(tz=UTC).replace(tzinfo=None),
             },
         )
-        if updated_execution is None:
-            raise ExecutionNotFoundError
-
-        return ExecutionResponse.model_validate(updated_execution)
+        if not won:
+            logger.warning(
+                "Execution %s already finalized; skipping success write",
+                execution_id,
+            )
 
     async def _mark_execution_failed(
         self,
         session: AsyncSession,
         execution_id: int,
         error: str,
-    ) -> ExecutionResponse:
-        """Persist failed execution result.
+    ) -> None:
+        """Persist failed execution result (only if still RUNNING).
 
         Args:
             session: Database session.
             execution_id: Execution ID.
             error: Failure reason.
 
-        Returns:
-            Updated execution.
-
-        Raises:
-            ExecutionNotFoundError: If execution record does not exist.
-
         """
-        updated_execution = await self._execution_repository.update_by(
+        won = await self._execution_repository.update_status_if(
             session=session,
-            id=execution_id,
+            execution_id=execution_id,
+            expected_status=ExecutionStatus.RUNNING,
             data={
                 "status": ExecutionStatus.FAILED,
                 "error": error,
                 "finished_at": datetime.now(tz=UTC).replace(tzinfo=None),
             },
         )
-        if updated_execution is None:
-            raise ExecutionNotFoundError
-
-        return ExecutionResponse.model_validate(updated_execution)
+        if not won:
+            logger.warning(
+                "Execution %s already finalized; skipping failure write",
+                execution_id,
+            )
 
     def _build_graph_context(
         self, nodes: list[NodeResponse], edges: list[EdgeResponse]
@@ -956,10 +982,13 @@ class ExecutionUsecase:
             message = "Workflow must contain exactly one output node"
             raise ExecutionGraphValidationError(message=message)
 
-        nodes_by_id = {node.id: node for node in nodes}
-        outbound: dict[int, list[int]] = {node.id: [] for node in nodes}
-        inbound: dict[int, list[int]] = {node.id: [] for node in nodes}
-        indegree: dict[int, int] = {node.id: 0 for node in nodes}
+        # Process nodes in a stable id order so graph traversal and parent-value
+        # merging are deterministic across runs of the same workflow.
+        ordered_nodes = sorted(nodes, key=lambda node: node.id)
+        nodes_by_id = {node.id: node for node in ordered_nodes}
+        outbound: dict[int, list[int]] = {node.id: [] for node in ordered_nodes}
+        inbound: dict[int, list[int]] = {node.id: [] for node in ordered_nodes}
+        indegree: dict[int, int] = {node.id: 0 for node in ordered_nodes}
         for edge in edges:
             source_id = edge.source_node_id
             target_id = edge.target_node_id
@@ -976,6 +1005,13 @@ class ExecutionUsecase:
             outbound[source_id].append(target_id)
             inbound[target_id].append(source_id)
             indegree[target_id] += 1
+
+        # Deterministic adjacency: parent merge order and wave order no longer
+        # depend on edge-return order from the database.
+        for neighbours in outbound.values():
+            neighbours.sort()
+        for parents in inbound.values():
+            parents.sort()
 
         topological_order = self._topological_order(
             indegree=indegree, outbound=outbound

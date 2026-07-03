@@ -19,6 +19,7 @@ from exceptions.llm_provider import (
     LLMProviderNotFoundError,
     UnsupportedLLMProviderError,
 )
+from exceptions.network import BlockedURLError
 from exceptions.node import (
     HTTPRequestError,
     NodeDataValidationError,
@@ -31,6 +32,7 @@ from exceptions.workflow import WorkflowNotFoundError
 __all__ = [
     "AuthCredentialsError",
     "BaseError",
+    "BlockedURLError",
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
     "EdgePortMismatchError",

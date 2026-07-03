@@ -20,6 +20,7 @@ from schemas import (
     NodeGraphSpec,
 )
 from utils.encryption import decrypt
+from utils.network import blocked_url_reason
 
 _GENERATION_PARAM_FIELDS = ("temperature", "max_tokens", "top_p")
 
@@ -104,6 +105,12 @@ class LLMNodeHandler:
         if llm_provider is None:
             message = "Referenced LLM provider does not exist"
             raise ExecutionGraphValidationError(message=message)
+
+        block_reason = await blocked_url_reason(
+            llm_provider.base_url, allow_private=True
+        )
+        if block_reason is not None:
+            raise ExecutionGraphValidationError(message=block_reason)
 
         api_key = decrypt(llm_provider.api_key) if llm_provider.api_key else None
         client = create_llm_client(

@@ -32,6 +32,16 @@ export function NumberInput({
     onChangeRaw(String(next))
   }
 
+  function handleBlur(): void {
+    if (displayValue === '' || Number.isNaN(displayValue)) {
+      return
+    }
+    const clamped = clamp(displayValue)
+    if (clamped !== displayValue) {
+      onChangeRaw(String(clamped))
+    }
+  }
+
   return (
     <div className="relative">
       <input
@@ -43,6 +53,7 @@ export function NumberInput({
         max={max}
         step={NUMBER_STEP}
         onChange={(event) => onChangeRaw(event.target.value)}
+        onBlur={handleBlur}
       />
       <div className="pixel-stepper">
         <button

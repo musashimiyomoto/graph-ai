@@ -8,6 +8,7 @@ import type {
 } from '../lib/types'
 import { useLlmProviders } from '../hooks/useLlmProviders'
 import { useProviderModels } from '../hooks/useProviderModels'
+import { validateFields } from '../lib/validation'
 import { NumberInput } from './NumberInput'
 
 interface CreateNodeDialogProps {
@@ -203,36 +204,10 @@ export function CreateNodeDialog({
     enabled: hasModelDatasource,
   })
 
-  const validationErrors = useMemo(() => {
-    const nextErrors: Record<string, string> = {}
-
-    for (const field of fields) {
-      if (!field.required) {
-        continue
-      }
-
-      const value = data[field.name]
-      if (field.ui.widget === 'number') {
-        if (typeof value !== 'number' || Number.isNaN(value)) {
-          nextErrors[field.name] = `${field.ui.label} is required`
-        }
-        continue
-      }
-
-      if (field.ui.widget === 'provider') {
-        if (!Number.isInteger(Number(value)) || Number(value) <= 0) {
-          nextErrors[field.name] = `${field.ui.label} is required`
-        }
-        continue
-      }
-
-      if (String(value ?? '').trim().length === 0) {
-        nextErrors[field.name] = `${field.ui.label} is required`
-      }
-    }
-
-    return nextErrors
-  }, [data, fields])
+  const validationErrors = useMemo(
+    () => validateFields(fields, data),
+    [data, fields],
+  )
 
   function updateField(name: string, value: string | number | null) {
     setData((previous) => ({ ...previous, [name]: value }))

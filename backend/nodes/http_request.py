@@ -17,6 +17,7 @@ from schemas import (
     NodeFieldWidget,
     NodeGraphSpec,
 )
+from utils.network import blocked_url_reason
 
 _MAX_RESPONSE_CHARS = 10_000
 _ALLOWED_SCHEMES = ("http://", "https://")
@@ -41,6 +42,9 @@ class HTTPRequestNodeHandler:
         """
         method = self._read_method(context)
         url = self._read_url(context)
+        reason = await blocked_url_reason(url)
+        if reason is not None:
+            raise ExecutionGraphValidationError(message=reason)
         headers = self._read_headers(context)
         body = self._read_body(context, method=method)
 

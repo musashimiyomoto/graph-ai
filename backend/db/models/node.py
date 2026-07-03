@@ -16,6 +16,7 @@ class Node(BaseWithID):
     workflow_id: Mapped[int] = mapped_column(
         ForeignKey("workflows.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
         comment="Parent workflow ID",
     )
 

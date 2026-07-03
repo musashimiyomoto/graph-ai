@@ -17,11 +17,13 @@ class NodeExecution(BaseWithID):
     execution_id: Mapped[int] = mapped_column(
         ForeignKey("executions.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
         comment="Parent execution ID",
     )
     node_id: Mapped[int] = mapped_column(
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
         comment="Executed node ID",
     )
 

@@ -8,3 +8,7 @@ STUCK_EXECUTION_TIMEOUT_SECONDS = 3600
 # iterations so a stream cannot stay open indefinitely.
 STREAM_POLL_SECONDS = 1.0
 STREAM_MAX_ITERATIONS = 300
+
+# Pagination defaults for growing list endpoints (executions, node results).
+DEFAULT_PAGE_SIZE = 50
+MAX_PAGE_SIZE = 100

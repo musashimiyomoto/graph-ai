@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import auth, db, execution, queue
+from api.dependencies.pagination import Pagination, get_pagination
 from schemas import (
     ExecutionCreate,
     ExecutionResponse,
@@ -56,10 +57,15 @@ async def list_executions(
         Depends(dependency=execution.get_execution_usecase),
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+    pagination: Annotated[Pagination, Depends(dependency=get_pagination)],
 ) -> list[ExecutionResponse]:
-    """List executions, optionally filtered by workflow."""
+    """List executions for a workflow, newest first."""
     return await usecase.get_executions(
-        session=session, user_id=current_user.id, workflow_id=workflow_id
+        session=session,
+        user_id=current_user.id,
+        workflow_id=workflow_id,
+        limit=pagination.limit,
+        offset=pagination.offset,
     )
 
 
@@ -72,10 +78,15 @@ async def list_node_executions(
         Depends(dependency=execution.get_execution_usecase),
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+    pagination: Annotated[Pagination, Depends(dependency=get_pagination)],
 ) -> list[NodeExecutionResponse]:
     """List per-node results for an execution."""
     return await usecase.get_node_executions(
-        session=session, execution_id=execution_id, user_id=current_user.id
+        session=session,
+        execution_id=execution_id,
+        user_id=current_user.id,
+        limit=pagination.limit,
+        offset=pagination.offset,
     )
 
 
