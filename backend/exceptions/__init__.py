@@ -20,6 +20,7 @@ from exceptions.llm_provider import (
     UnsupportedLLMProviderError,
 )
 from exceptions.node import (
+    HTTPRequestError,
     NodeDataValidationError,
     NodeNotFoundError,
     WebSearchConnectionError,
@@ -36,6 +37,7 @@ __all__ = [
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",
     "ExecutionNotFoundError",
+    "HTTPRequestError",
     "LLMProviderConfigError",
     "LLMProviderConnectionError",
     "LLMProviderNotFoundError",

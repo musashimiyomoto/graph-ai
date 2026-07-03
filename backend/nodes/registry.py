@@ -9,9 +9,11 @@ from enums import NodeType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeHandler
 from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
+from nodes.http_request import DEFINITION as HTTP_REQUEST_DEFINITION
 from nodes.input import DEFINITION as INPUT_DEFINITION
 from nodes.llm import DEFINITION as LLM_DEFINITION
 from nodes.output import DEFINITION as OUTPUT_DEFINITION
+from nodes.template import DEFINITION as TEMPLATE_DEFINITION
 from nodes.web_search import DEFINITION as WEB_SEARCH_DEFINITION
 from schemas import NodeCatalogItem
 
@@ -19,6 +21,8 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     INPUT_DEFINITION,
     LLM_DEFINITION,
     WEB_SEARCH_DEFINITION,
+    TEMPLATE_DEFINITION,
+    HTTP_REQUEST_DEFINITION,
     OUTPUT_DEFINITION,
 )
 

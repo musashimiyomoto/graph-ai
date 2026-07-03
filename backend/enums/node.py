@@ -9,7 +9,16 @@ class NodeType(StrEnum):
     INPUT = auto()
     LLM = auto()
     WEB_SEARCH = auto()
+    TEMPLATE = auto()
+    HTTP_REQUEST = auto()
     OUTPUT = auto()
+
+
+class HttpMethod(StrEnum):
+    """HTTP methods supported by the HTTP request node."""
+
+    GET = auto()
+    POST = auto()
 
 
 class PortType(StrEnum):

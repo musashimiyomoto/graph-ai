@@ -104,7 +104,11 @@ Unblocks streaming, long pipelines, and scale.
       `ports_compatible` choke point (exact-match today; ready for a coercion table). Frontend
       guards connections client-side via `isValidConnection` in `GraphCanvas`. All current nodes
       are `text`, so this installs the machinery future non-text nodes need.
-- [ ] New nodes: Prompt/Template, Condition/Router, Code/Transform, HTTP Request, RAG/Vector search, Loop/Map.
+- [~] New nodes — shipped on the plugin foundation: **Prompt/Template** (`nodes/template.py`,
+      `{{input}}` substitution) and **HTTP Request** (`nodes/http_request.py`, GET/POST, http(s)-only,
+      transport errors → `HTTPRequestError`). Remaining need dedicated infra/engine work:
+      Condition/Router (branch selection in the executor), Code/Transform (sandbox), RAG/Vector
+      search (vector DB + embeddings), Loop/Map (sub-graph iteration).
 - [x] Plugin-based node registration: a single `NodeDefinition` (in `nodes/definition.py`)
       co-locates a node's type, label, icon, ports, field specs, and handler factory next to its
       handler; `nodes/registry.py` derives both the handler map and the UI catalog from one

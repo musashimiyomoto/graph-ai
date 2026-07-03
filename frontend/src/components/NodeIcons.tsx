@@ -63,6 +63,32 @@ export function WebSearchIcon(props: IconProps) {
   )
 }
 
+export function TemplateIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="2" y="2" width="12" height="2" fill="var(--accent-2)" />
+      <rect x="2" y="4" width="2" height="10" fill="var(--accent-2)" />
+      <rect x="12" y="4" width="2" height="10" fill="var(--accent-2)" />
+      <rect x="2" y="12" width="12" height="2" fill="var(--accent-2)" />
+      <rect x="5" y="6" width="6" height="2" fill="var(--accent)" />
+      <rect x="5" y="9" width="4" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
+export function HttpRequestIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="2" y="7" width="8" height="2" fill="var(--accent)" />
+      <rect x="8" y="5" width="2" height="2" fill="var(--accent)" />
+      <rect x="10" y="7" width="2" height="2" fill="var(--accent)" />
+      <rect x="8" y="9" width="2" height="2" fill="var(--accent)" />
+      <rect x="2" y="2" width="2" height="2" fill="var(--accent-2)" />
+      <rect x="2" y="12" width="2" height="2" fill="var(--accent-2)" />
+    </svg>
+  )
+}
+
 export function NodeIcon({ iconKey }: { iconKey: string }) {
   if (iconKey === 'llm') {
     return <LlmIcon />
@@ -70,6 +96,14 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'web_search') {
     return <WebSearchIcon />
+  }
+
+  if (iconKey === 'template') {
+    return <TemplateIcon />
+  }
+
+  if (iconKey === 'http_request') {
+    return <HttpRequestIcon />
   }
 
   if (iconKey === 'output') {

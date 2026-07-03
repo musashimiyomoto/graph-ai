@@ -41,3 +41,17 @@ class WebSearchConnectionError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
+
+
+class HTTPRequestError(BaseError):
+    """Raised when an HTTP request node call fails."""
+
+    retryable = True
+
+    def __init__(
+        self,
+        message: str = "HTTP request failed",
+        status_code: HTTPStatus = HTTPStatus.BAD_GATEWAY,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)

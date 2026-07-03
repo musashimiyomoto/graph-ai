@@ -1,15 +1,37 @@
 """Plugin node registry and typed-port compatibility tests."""
 
+from typing import TYPE_CHECKING, ClassVar, Self, cast
+
 import pytest
 
 from enums import NodeType, PortType
+from exceptions import ExecutionGraphValidationError
 from nodes import (
     NODE_DEFINITIONS,
+    HTTPRequestNodeHandler,
+    TemplateNodeHandler,
     build_node_catalog,
     check_edge_ports,
     get_node_definition,
     ports_compatible,
 )
+from nodes.base import NodeExecutionContext
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _context(
+    node_data: dict[str, object], parent_values: list[str]
+) -> NodeExecutionContext:
+    """Build a minimal node execution context for handler tests."""
+    return NodeExecutionContext(
+        session=cast("AsyncSession", None),
+        workflow_owner_id=1,
+        node_data=node_data,
+        parent_values=parent_values,
+        input_value="",
+    )
 
 
 class TestRegistryCompleteness:
@@ -76,3 +98,93 @@ class TestPortCompatibility:
         """A node without an input port cannot be a target."""
         if check_edge_ports(NodeType.INPUT, NodeType.INPUT) is None:
             pytest.fail("Input node has no input port and cannot be a target")
+
+
+class TestTemplateNode:
+    """Tests for the prompt/template node handler."""
+
+    @pytest.mark.asyncio
+    async def test_substitutes_placeholder(self) -> None:
+        """The upstream text replaces the {{input}} placeholder."""
+        handler = TemplateNodeHandler()
+        output = await handler.execute(
+            _context(
+                {"template": "Summary: {{input}}"},
+                parent_values=["hello world"],
+            )
+        )
+        if output != "Summary: hello world":
+            pytest.fail("Template placeholder was not substituted")
+
+    @pytest.mark.asyncio
+    async def test_empty_template_rejected(self) -> None:
+        """A missing template raises a graph validation error."""
+        handler = TemplateNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(_context({}, parent_values=["x"]))
+
+
+class _DummyHTTPResponse:
+    """Fixed HTTP response for the request-node test."""
+
+    status_code = 200
+    text = "response body"
+
+    def raise_for_status(self) -> None:
+        """Keep the successful status."""
+
+
+class _DummyHTTPClient:
+    """Async httpx client capturing the request and returning a fixed body."""
+
+    calls: ClassVar[dict[str, object]] = {}
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Accept any httpx kwargs."""
+
+    async def __aenter__(self) -> Self:
+        """Enter the context manager."""
+        return self
+
+    async def __aexit__(self, *args: object) -> bool:
+        """Exit the context manager."""
+        return False
+
+    async def post(self, url: str, **kwargs: object) -> _DummyHTTPResponse:
+        """Record a POST call and return the fixed response."""
+        _DummyHTTPClient.calls = {"method": "post", "url": url, **kwargs}
+        return _DummyHTTPResponse()
+
+    async def get(self, url: str, **kwargs: object) -> _DummyHTTPResponse:
+        """Record a GET call and return the fixed response."""
+        _DummyHTTPClient.calls = {"method": "get", "url": url, **kwargs}
+        return _DummyHTTPResponse()
+
+
+class TestHTTPRequestNode:
+    """Tests for the HTTP request node handler."""
+
+    @pytest.mark.asyncio
+    async def test_post_sends_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A POST request forwards the upstream text as the body."""
+        monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", _DummyHTTPClient)
+        handler = HTTPRequestNodeHandler()
+        output = await handler.execute(
+            _context(
+                {"url": "https://api.example.com", "method": "post"},
+                parent_values=["payload"],
+            )
+        )
+        if output != "response body":
+            pytest.fail("Handler did not return the response body")
+        if _DummyHTTPClient.calls.get("content") != "payload":
+            pytest.fail("Upstream text was not sent as the POST body")
+
+    @pytest.mark.asyncio
+    async def test_non_http_url_rejected(self) -> None:
+        """A non-http(s) URL raises a graph validation error."""
+        handler = HTTPRequestNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(
+                _context({"url": "ftp://x", "method": "get"}, parent_values=["x"])
+            )
