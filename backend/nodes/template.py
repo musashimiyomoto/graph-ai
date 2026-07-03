@@ -4,14 +4,13 @@ from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext
 from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.rendering import render_input
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
     NodeGraphSpec,
 )
-
-_PLACEHOLDER = "{{input}}"
 
 
 class TemplateNodeHandler:
@@ -35,12 +34,7 @@ class TemplateNodeHandler:
             message = "Template node requires a non-empty template"
             raise ExecutionGraphValidationError(message=message)
 
-        upstream = (
-            "\n".join(context.parent_values)
-            if context.parent_values
-            else context.input_value
-        )
-        return template.replace(_PLACEHOLDER, upstream)
+        return render_input(template, context)
 
 
 def _build_handler(deps: NodeHandlerDeps) -> TemplateNodeHandler:

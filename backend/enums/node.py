@@ -19,6 +19,14 @@ class HttpMethod(StrEnum):
 
     GET = auto()
     POST = auto()
+    PUT = auto()
+    PATCH = auto()
+    DELETE = auto()
+
+    @property
+    def allows_body(self) -> bool:
+        """Whether this method sends a request body."""
+        return self in {HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH}
 
 
 class PortType(StrEnum):

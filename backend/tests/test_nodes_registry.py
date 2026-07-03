@@ -150,14 +150,11 @@ class _DummyHTTPClient:
         """Exit the context manager."""
         return False
 
-    async def post(self, url: str, **kwargs: object) -> _DummyHTTPResponse:
-        """Record a POST call and return the fixed response."""
-        _DummyHTTPClient.calls = {"method": "post", "url": url, **kwargs}
-        return _DummyHTTPResponse()
-
-    async def get(self, url: str, **kwargs: object) -> _DummyHTTPResponse:
-        """Record a GET call and return the fixed response."""
-        _DummyHTTPClient.calls = {"method": "get", "url": url, **kwargs}
+    async def request(
+        self, method: str, url: str, **kwargs: object
+    ) -> _DummyHTTPResponse:
+        """Record the request and return the fixed response."""
+        _DummyHTTPClient.calls = {"method": method, "url": url, **kwargs}
         return _DummyHTTPResponse()
 
 
@@ -165,8 +162,10 @@ class TestHTTPRequestNode:
     """Tests for the HTTP request node handler."""
 
     @pytest.mark.asyncio
-    async def test_post_sends_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A POST request forwards the upstream text as the body."""
+    async def test_post_falls_back_to_upstream_body(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """POST with no body field sends the upstream text."""
         monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", _DummyHTTPClient)
         handler = HTTPRequestNodeHandler()
         output = await handler.execute(
@@ -177,8 +176,65 @@ class TestHTTPRequestNode:
         )
         if output != "response body":
             pytest.fail("Handler did not return the response body")
+        if _DummyHTTPClient.calls.get("method") != "POST":
+            pytest.fail("Method was not forwarded")
         if _DummyHTTPClient.calls.get("content") != "payload":
             pytest.fail("Upstream text was not sent as the POST body")
+
+    @pytest.mark.asyncio
+    async def test_renders_url_body_and_headers(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """URL and body render {{input}}; headers parse from JSON."""
+        monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", _DummyHTTPClient)
+        handler = HTTPRequestNodeHandler()
+        await handler.execute(
+            _context(
+                {
+                    "url": "https://api.example.com/?q={{input}}",
+                    "method": "post",
+                    "headers": '{"Authorization": "Bearer t"}',
+                    "body": '{"query": "{{input}}"}',
+                },
+                parent_values=["cats"],
+            )
+        )
+        if _DummyHTTPClient.calls.get("url") != "https://api.example.com/?q=cats":
+            pytest.fail("URL placeholder was not rendered")
+        if _DummyHTTPClient.calls.get("content") != '{"query": "cats"}':
+            pytest.fail("Body placeholder was not rendered")
+        if _DummyHTTPClient.calls.get("headers") != {"Authorization": "Bearer t"}:
+            pytest.fail("Headers were not parsed and forwarded")
+
+    @pytest.mark.asyncio
+    async def test_get_sends_no_body(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GET requests carry no body even with upstream text."""
+        monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", _DummyHTTPClient)
+        handler = HTTPRequestNodeHandler()
+        await handler.execute(
+            _context(
+                {"url": "https://api.example.com", "method": "get"},
+                parent_values=["ignored"],
+            )
+        )
+        if _DummyHTTPClient.calls.get("content") is not None:
+            pytest.fail("GET requests must not send a body")
+
+    @pytest.mark.asyncio
+    async def test_invalid_headers_rejected(self) -> None:
+        """Malformed header JSON raises a graph validation error."""
+        handler = HTTPRequestNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(
+                _context(
+                    {
+                        "url": "https://api.example.com",
+                        "method": "get",
+                        "headers": "not-json",
+                    },
+                    parent_values=["x"],
+                )
+            )
 
     @pytest.mark.asyncio
     async def test_non_http_url_rejected(self) -> None:
