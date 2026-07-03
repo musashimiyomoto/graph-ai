@@ -57,6 +57,42 @@ function GraphCanvasInner({
 }: GraphCanvasProps) {
   const { screenToFlowPosition } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+
+  const catalogByType = useMemo(
+    () => Object.fromEntries(nodeCatalog.map((item) => [item.type, item])),
+    [nodeCatalog],
+  )
+  const nodeTypeById = useMemo(
+    () =>
+      Object.fromEntries(
+        nodes.map((node) => [node.id, String(node.data?.nodeType ?? node.type)]),
+      ),
+    [nodes],
+  )
+
+  const isValidConnection = useCallback(
+    (connection: Connection): boolean => {
+      if (!connection.source || !connection.target) {
+        return false
+      }
+      if (connection.source === connection.target) {
+        return false
+      }
+      const sourceGraph = catalogByType[nodeTypeById[connection.source]]?.graph
+      const targetGraph = catalogByType[nodeTypeById[connection.target]]?.graph
+      if (!sourceGraph || !targetGraph) {
+        return true
+      }
+      const output = sourceGraph.output_port
+      const input = targetGraph.input_port
+      if (!output || !input) {
+        return false
+      }
+      return output === input
+    },
+    [catalogByType, nodeTypeById],
+  )
+
   const defaultEdgeOptions = useMemo<DefaultEdgeOptions>(
     () => ({
       type: 'step',
@@ -175,6 +211,7 @@ function GraphCanvasInner({
             onConnect(params.source, params.target)
           }
         }}
+        isValidConnection={isValidConnection}
         defaultEdgeOptions={defaultEdgeOptions}
         connectionLineType={ConnectionLineType.Step}
         onDragOver={handleDragOver}

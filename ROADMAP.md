@@ -97,9 +97,19 @@ Unblocks streaming, long pipelines, and scale.
 
 ## Phase 3 — Richer graph & node types (4–6 weeks)
 
-- [ ] Typed ports (text / json / file / list) instead of `str`-only; edge type-compat validation.
+- [x] Typed ports (`PortType` = text / json / file / list) on `NodeGraphSpec`
+      (`input_port`/`output_port`); edge type-compat validated at two layers —
+      `EdgeUsecase.create_edge` (→ `EdgePortMismatchError`, HTTP 400) and
+      `ExecutionUsecase._build_graph_context` (defense in depth). Compatibility is the single
+      `ports_compatible` choke point (exact-match today; ready for a coercion table). Frontend
+      guards connections client-side via `isValidConnection` in `GraphCanvas`. All current nodes
+      are `text`, so this installs the machinery future non-text nodes need.
 - [ ] New nodes: Prompt/Template, Condition/Router, Code/Transform, HTTP Request, RAG/Vector search, Loop/Map.
-- [ ] Plugin-based node registration (today manual in 3 places: enum, `registry.py`, `catalog.py`).
+- [x] Plugin-based node registration: a single `NodeDefinition` (in `nodes/definition.py`)
+      co-locates a node's type, label, icon, ports, field specs, and handler factory next to its
+      handler; `nodes/registry.py` derives both the handler map and the UI catalog from one
+      `NODE_DEFINITIONS` list (adding a node = one module + one list entry + its `NodeType` member).
+      `nodes/catalog.py` removed.
 - [ ] Workflow versioning + run a specific version (today edits mutate the live graph).
 
 ## Phase 4 — Product UX (parallel, 3–5 weeks)

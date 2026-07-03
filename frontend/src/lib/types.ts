@@ -105,9 +105,13 @@ export type NodeFieldWidget =
 
 export type NodeFieldDataSourceKind = 'llm_provider' | 'llm_model'
 
+export type PortType = 'text' | 'json' | 'file' | 'list'
+
 export interface NodeCatalogGraph {
   has_input: boolean
   has_output: boolean
+  input_port: PortType | null
+  output_port: PortType | null
 }
 
 export interface NodeCatalogFieldUI {

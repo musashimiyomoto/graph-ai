@@ -1,5 +1,7 @@
 """Edge API tests."""
 
+from http import HTTPStatus
+
 import pytest
 
 from enums import NodeType
@@ -47,6 +49,39 @@ class TestEdgeCreate(BaseTestCase):
         )
         if data["workflow_id"] != workflow.id:
             pytest.fail("Edge workflow_id did not match request")
+
+    @pytest.mark.asyncio
+    async def test_incompatible_ports_rejected(self) -> None:
+        """Connecting into an input node (no input port) returns 400."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+        )
+        target = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+        )
+
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "source_node_id": source.id,
+                "target_node_id": target.id,
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail(
+                f"Expected 400 for incompatible ports, got {response.status_code}"
+            )
 
 
 class TestEdgeList(BaseTestCase):

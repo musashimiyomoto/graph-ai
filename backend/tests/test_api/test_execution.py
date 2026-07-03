@@ -544,6 +544,65 @@ class TestExecutionCreate(BaseTestCase):
             pytest.fail("Expected BAD_REQUEST for cyclic workflow graph")
 
     @pytest.mark.asyncio
+    async def test_incompatible_ports_error(self) -> None:
+        """Request fails if an edge connects incompatible node ports."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        llm_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.LLM,
+            data={
+                "label": "LLM",
+                "llm_provider_id": 1,
+                "model": "test-model",
+                "system_prompt": "",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=llm_node.id,
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=llm_node.id,
+            target_node_id=output_node.id,
+        )
+        # Edge feeding into the input node, which has no input port.
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=llm_node.id,
+            target_node_id=input_node.id,
+        )
+
+        response = await self.client.post(
+            url=self.url,
+            json={"workflow_id": workflow.id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail("Expected BAD_REQUEST for incompatible node ports")
+
+    @pytest.mark.asyncio
     async def test_invalid_input_payload(self) -> None:
         """Request fails if input payload does not match txt contract."""
         user, headers = await self.create_user_and_get_token()
