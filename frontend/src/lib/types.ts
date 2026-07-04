@@ -53,6 +53,7 @@ export interface EdgeResponse {
 export interface Execution {
   id: number
   workflow_id: number
+  version_id: number | null
   status: ExecutionStatus
   input_data: RunInputPayload | null
   output_data: Record<string, unknown> | null
@@ -60,6 +61,13 @@ export interface Execution {
   prefect_flow_run_id: string | null
   started_at: string
   finished_at: string | null
+}
+
+export interface WorkflowVersion {
+  id: number
+  workflow_id: number
+  version: number
+  created_at: string
 }
 
 export interface TokenStreamEvent {

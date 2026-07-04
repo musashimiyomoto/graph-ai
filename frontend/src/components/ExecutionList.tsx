@@ -4,6 +4,7 @@ import type { Execution, ExecutionStatus } from '../lib/types'
 
 interface ExecutionListProps {
   executions: Execution[]
+  versionNumbers?: Record<number, number>
 }
 
 const STATUS_COLORS: Record<ExecutionStatus, string> = {
@@ -15,6 +16,9 @@ const STATUS_COLORS: Record<ExecutionStatus, string> = {
 
 function formatTime(iso: string): string {
   const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) {
+    return '—'
+  }
   return date.toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -23,7 +27,10 @@ function formatTime(iso: string): string {
   })
 }
 
-export function ExecutionList({ executions }: ExecutionListProps) {
+export function ExecutionList({
+  executions,
+  versionNumbers,
+}: ExecutionListProps) {
   const [expandedExecutionId, setExpandedExecutionId] = useState<number | null>(null)
 
   if (executions.length === 0) {
@@ -52,8 +59,14 @@ export function ExecutionList({ executions }: ExecutionListProps) {
           }}
         >
           <div className="flex w-full items-center justify-between">
-            <span className="text-xs text-[var(--muted)]">
+            <span className="flex items-center gap-2 text-xs text-[var(--muted)]">
               #{execution.id}
+              {execution.version_id !== null &&
+              versionNumbers?.[execution.version_id] !== undefined ? (
+                <span className="pixel-pill text-[10px]">
+                  v{versionNumbers[execution.version_id]}
+                </span>
+              ) : null}
             </span>
             <span className={`text-xs uppercase ${STATUS_COLORS[execution.status]}`}>
               {execution.status}

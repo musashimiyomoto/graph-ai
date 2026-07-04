@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react'
+
+import { getWorkflowVersions } from '../lib/api'
 import type { Execution } from '../lib/types'
 import { ExecutionList } from './ExecutionList'
 
@@ -10,6 +13,36 @@ export function ExecutionHistory({
   executions,
   onClose,
 }: ExecutionHistoryProps) {
+  const [versionNumbers, setVersionNumbers] = useState<Record<number, number>>(
+    {},
+  )
+
+  const workflowId = executions[0]?.workflow_id ?? null
+
+  useEffect(() => {
+    if (workflowId === null) {
+      return
+    }
+    let cancelled = false
+    getWorkflowVersions(workflowId)
+      .then((versions) => {
+        if (cancelled) {
+          return
+        }
+        const map: Record<number, number> = {}
+        for (const version of versions) {
+          map[version.id] = version.version
+        }
+        setVersionNumbers(map)
+      })
+      .catch(() => {
+        // version labels are best-effort; ignore fetch failures
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workflowId])
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
@@ -32,7 +65,10 @@ export function ExecutionHistory({
             ✕
           </button>
         </div>
-        <ExecutionList executions={executions} />
+        <ExecutionList
+          executions={executions}
+          versionNumbers={versionNumbers}
+        />
       </div>
     </div>
   )

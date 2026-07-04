@@ -6,8 +6,14 @@ from fastapi import APIRouter, Body, Depends, Path, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.dependencies import auth, db, workflow
-from schemas import UserResponse, WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from api.dependencies import auth, db, execution, workflow
+from schemas import (
+    UserResponse,
+    WorkflowCreate,
+    WorkflowResponse,
+    WorkflowUpdate,
+    WorkflowVersionResponse,
+)
 
 router = APIRouter(prefix="/workflows", tags=["Workflows"])
 
@@ -39,6 +45,22 @@ async def list_workflows(
 ) -> list[WorkflowResponse]:
     """List workflows for the current user."""
     return await usecase.get_workflows(session=session, user_id=current_user.id)
+
+
+@router.get(path="/{workflow_id}/versions")
+async def list_workflow_versions(
+    workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        execution.ExecutionUsecase,
+        Depends(dependency=execution.get_execution_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> list[WorkflowVersionResponse]:
+    """List a workflow's version snapshots, newest first."""
+    return await usecase.get_workflow_versions(
+        session=session, workflow_id=workflow_id, user_id=current_user.id
+    )
 
 
 @router.patch(path="/{workflow_id}")

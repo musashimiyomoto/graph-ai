@@ -114,7 +114,17 @@ Unblocks streaming, long pipelines, and scale.
       handler; `nodes/registry.py` derives both the handler map and the UI catalog from one
       `NODE_DEFINITIONS` list (adding a node = one module + one list entry + its `NodeType` member).
       `nodes/catalog.py` removed.
-- [ ] Workflow versioning + run a specific version (today edits mutate the live graph).
+- [x] Workflow versioning + run a specific version. Each run snapshots the live graph into an
+      immutable `workflow_versions` row (`db/models/workflow_version.py`, per-workflow sequential
+      `version` number, deduped against the latest identical snapshot) and the execution is pinned
+      via `executions.version_id`. Runs load the graph from the pinned snapshot, not the live tables,
+      so a run is reproducible even after later edits (`ExecutionUsecase._snapshot_workflow`,
+      `_build_graph_from_snapshot`, `_load_execution_graph`). Clients can re-run a past version by
+      passing `version_id` to `POST /executions`, and list snapshots via
+      `GET /workflows/{id}/versions`. Frontend surfaces the per-workflow `v{n}` on each run in the
+      history. Known limitation: `node_executions.node_id` still FKs the live `nodes` table, so a
+      pinned rerun whose nodes were *deleted* (not edited) cannot record per-node rows — tracked in
+      DEEPENING.md.
 
 ## Phase 4 — Product UX (parallel, 3–5 weeks)
 

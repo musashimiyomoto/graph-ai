@@ -15,3 +15,15 @@ class WorkflowNotFoundError(BaseError):
     ) -> None:
         """Initialize the error."""
         super().__init__(message=message, status_code=status_code)
+
+
+class WorkflowVersionNotFoundError(BaseError):
+    """Raised when a workflow version cannot be found."""
+
+    def __init__(
+        self,
+        message: str = "Workflow version not found",
+        status_code: HTTPStatus = HTTPStatus.NOT_FOUND,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)

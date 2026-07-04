@@ -7,6 +7,7 @@ from db.repositories.node import NodeRepository
 from db.repositories.node_execution import NodeExecutionRepository
 from db.repositories.user import UserRepository
 from db.repositories.workflow import WorkflowRepository
+from db.repositories.workflow_version import WorkflowVersionRepository
 
 __all__ = [
     "EdgeRepository",
@@ -16,4 +17,5 @@ __all__ = [
     "NodeRepository",
     "UserRepository",
     "WorkflowRepository",
+    "WorkflowVersionRepository",
 ]

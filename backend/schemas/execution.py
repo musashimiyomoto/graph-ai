@@ -22,6 +22,11 @@ class ExecutionCreate(BaseModel):
         default=...,
         description="Execution input",
     )
+    version_id: int | None = Field(
+        default=None,
+        description="Run a specific workflow version; omit to snapshot the live graph",
+        gt=0,
+    )
 
 
 class ExecutionOutputPayload(BaseModel):
@@ -50,6 +55,9 @@ class ExecutionResponse(BaseModel):
 
     id: int = Field(default=..., description="Execution ID", gt=0)
     workflow_id: int = Field(default=..., description="Workflow ID", gt=0)
+    version_id: int | None = Field(
+        default=None, description="Pinned workflow version ID"
+    )
     status: ExecutionStatus = Field(default=..., description="Execution status")
     input_data: ExecutionInputPayload | None = Field(
         default=None,

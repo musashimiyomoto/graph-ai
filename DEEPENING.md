@@ -107,6 +107,13 @@ Legend: **[H]** high · **[M]** medium · **[L]** low.
   **Fix:** composite unique constraints + migration + clean 409.
 - **[L]** `delete_all` is N+1 (`db/repositories/base.py:140-156`); `delete_by`/`update_by`
   read-then-write. Use bulk statements as data grows.
+- **[M] Pinned reruns can't record per-node rows for deleted nodes.** Workflow versioning pins a
+  run to an immutable graph snapshot (`workflow_versions.graph`), but `node_executions.node_id`
+  still FKs the live `nodes` table (`db/models/node_execution.py`). Re-running a past version whose
+  nodes were *edited* is fine (IDs persist), but a version whose nodes were *deleted* raises a
+  `ForeignKeyViolationError` when the worker tries to persist that node's result. **Fix:** either
+  denormalize node identity into `node_executions` (store `node_type` + snapshot node id without a
+  live FK), or key node executions off `(version_id, snapshot_node_id)`.
 
 ## 3. Execution engine
 

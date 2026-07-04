@@ -27,7 +27,7 @@ from exceptions.node import (
     WebSearchConnectionError,
 )
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
-from exceptions.workflow import WorkflowNotFoundError
+from exceptions.workflow import WorkflowNotFoundError, WorkflowVersionNotFoundError
 
 __all__ = [
     "AuthCredentialsError",
@@ -51,4 +51,5 @@ __all__ = [
     "UserNotFoundError",
     "WebSearchConnectionError",
     "WorkflowNotFoundError",
+    "WorkflowVersionNotFoundError",
 ]

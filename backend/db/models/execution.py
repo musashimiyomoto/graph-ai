@@ -21,6 +21,12 @@ class Execution(BaseWithID):
         index=True,
         comment="Parent workflow ID",
     )
+    version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_versions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Pinned workflow version snapshot",
+    )
 
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(ExecutionStatus),

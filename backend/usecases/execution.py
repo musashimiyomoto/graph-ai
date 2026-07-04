@@ -8,9 +8,13 @@ from collections import deque
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+if TYPE_CHECKING:
+    from db.models import Execution, WorkflowVersion
 
 from constants import (
     DEFAULT_PAGE_SIZE,
@@ -28,6 +32,7 @@ from db.repositories import (
     NodeExecutionRepository,
     NodeRepository,
     WorkflowRepository,
+    WorkflowVersionRepository,
 )
 from enums import ExecutionStatus, NodeType
 from exceptions import (
@@ -37,6 +42,7 @@ from exceptions import (
     ExecutionNotFoundError,
     NodeExecutionTimeoutError,
     WorkflowNotFoundError,
+    WorkflowVersionNotFoundError,
 )
 from nodes import (
     NodeExecutionContext,
@@ -53,6 +59,7 @@ from schemas import (
     ExecutionResponse,
     NodeExecutionResponse,
     NodeResponse,
+    WorkflowVersionResponse,
 )
 from streaming import subscribe_tokens
 
@@ -95,6 +102,7 @@ class ExecutionUsecase:
         self._edge_repository = EdgeRepository()
         self._node_execution_repository = NodeExecutionRepository()
         self._llm_provider_repository = LLMProviderRepository()
+        self._workflow_version_repository = WorkflowVersionRepository()
         self._node_registry = NodeHandlerRegistry(
             NodeHandlerDeps(llm_provider_repository=self._llm_provider_repository)
         )
@@ -134,13 +142,27 @@ class ExecutionUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        # Validate the graph up front (fail-fast); the worker rebuilds it at run time.
-        await self._load_graph(session=session, workflow_id=data.workflow_id)
+        # Pin the run to an immutable graph snapshot: either a requested past
+        # version, or a fresh snapshot of the current live graph (deduped).
+        if data.version_id is not None:
+            version = await self._workflow_version_repository.get_by(
+                session=session, id=data.version_id, workflow_id=data.workflow_id
+            )
+            if version is None:
+                raise WorkflowVersionNotFoundError
+        else:
+            version = await self._snapshot_workflow(
+                session=session, workflow_id=data.workflow_id
+            )
+
+        # Validate the snapshot up front (fail-fast); the worker reuses it at run time.
+        self._build_graph_from_snapshot(version.graph)
 
         execution = await self._execution_repository.create(
             session=session,
             data={
                 "workflow_id": data.workflow_id,
+                "version_id": version.id,
                 "input_data": data.input_data.model_dump(),
                 "status": ExecutionStatus.CREATED,
             },
@@ -209,9 +231,7 @@ class ExecutionUsecase:
                 raise ExecutionNotFoundError
             return ExecutionResponse.model_validate(current)
 
-        graph = await self._load_graph(
-            session=session, workflow_id=execution.workflow_id
-        )
+        graph = await self._load_execution_graph(session=session, execution=execution)
 
         try:
             output_data = await self._run_execution(
@@ -309,6 +329,135 @@ class ExecutionUsecase:
                 )
             ],
         )
+
+    async def _load_execution_graph(
+        self, session: AsyncSession, execution: "Execution"
+    ) -> ExecutionGraphContext:
+        """Load the graph an execution should run: its pinned snapshot if any.
+
+        Args:
+            session: The session.
+            execution: The execution ORM row.
+
+        Returns:
+            The validated graph context.
+
+        Raises:
+            ExecutionGraphValidationError: If the graph is invalid.
+
+        """
+        if execution.version_id is not None:
+            version = await self._workflow_version_repository.get_by(
+                session=session, id=execution.version_id
+            )
+            if version is not None:
+                return self._build_graph_from_snapshot(version.graph)
+
+        # No pinned version (legacy execution) or it was removed: use the live graph.
+        return await self._load_graph(
+            session=session, workflow_id=execution.workflow_id
+        )
+
+    def _build_graph_from_snapshot(
+        self, graph: dict[str, object]
+    ) -> ExecutionGraphContext:
+        """Build the graph context from a stored version snapshot.
+
+        Args:
+            graph: Snapshot dict with ``nodes`` and ``edges`` lists.
+
+        Returns:
+            The validated graph context.
+
+        Raises:
+            ExecutionGraphValidationError: If the snapshot graph is invalid.
+
+        """
+        raw_nodes = graph.get("nodes", [])
+        raw_edges = graph.get("edges", [])
+        nodes = list(raw_nodes) if isinstance(raw_nodes, list) else []
+        edges = list(raw_edges) if isinstance(raw_edges, list) else []
+        return self._build_graph_context(
+            nodes=[NodeResponse.model_validate(node) for node in nodes],
+            edges=[EdgeResponse.model_validate(edge) for edge in edges],
+        )
+
+    async def _snapshot_workflow(
+        self, session: AsyncSession, workflow_id: int
+    ) -> "WorkflowVersion":
+        """Snapshot the live graph into a version, reusing the latest if unchanged.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+
+        Returns:
+            The new or reused workflow version.
+
+        """
+        nodes = await self._node_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
+        edges = await self._edge_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
+        graph = {
+            "nodes": [
+                NodeResponse.model_validate(node).model_dump(mode="json")
+                for node in nodes
+            ],
+            "edges": [
+                EdgeResponse.model_validate(edge).model_dump(mode="json")
+                for edge in edges
+            ],
+        }
+
+        latest_versions = await self._workflow_version_repository.get_all(
+            session=session, limit=1, descending=True, workflow_id=workflow_id
+        )
+        latest = latest_versions[0] if latest_versions else None
+        if latest is not None and latest.graph == graph:
+            return latest
+
+        next_number = latest.version + 1 if latest is not None else 1
+        return await self._workflow_version_repository.create(
+            session=session,
+            data={
+                "workflow_id": workflow_id,
+                "version": next_number,
+                "graph": graph,
+            },
+        )
+
+    async def get_workflow_versions(
+        self, session: AsyncSession, workflow_id: int, user_id: int
+    ) -> list[WorkflowVersionResponse]:
+        """List a workflow's version snapshots, newest first.
+
+        Args:
+            session: The session.
+            workflow_id: The workflow ID.
+            user_id: The owner user ID.
+
+        Returns:
+            The list of version metadata.
+
+        Raises:
+            WorkflowNotFoundError: If the workflow is not found.
+
+        """
+        workflow = await self._workflow_repository.get_by(
+            session=session, id=workflow_id, owner_id=user_id
+        )
+        if not workflow:
+            raise WorkflowNotFoundError
+
+        return [
+            WorkflowVersionResponse.model_validate(version)
+            for version in await self._workflow_version_repository.get_all(
+                session=session, descending=True, workflow_id=workflow_id
+            )
+        ]
 
     async def get_executions(
         self,
@@ -537,7 +686,7 @@ class ExecutionUsecase:
         if not reached_terminal:
             # Cap hit while still running: tell the client to resume polling
             # instead of silently closing (which reads as "done").
-            await queue.put(f'data: {json.dumps({"type": "expired"})}\n\n')
+            await queue.put(f"data: {json.dumps({'type': 'expired'})}\n\n")
         await queue.put(None)
 
     async def _run_execution(

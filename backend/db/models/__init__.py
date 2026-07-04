@@ -8,6 +8,7 @@ from db.models.node import Node
 from db.models.node_execution import NodeExecution
 from db.models.user import User
 from db.models.workflow import Workflow
+from db.models.workflow_version import WorkflowVersion
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "NodeExecution",
     "User",
     "Workflow",
+    "WorkflowVersion",
 ]

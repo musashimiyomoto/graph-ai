@@ -39,6 +39,7 @@ from schemas.node import (
 )
 from schemas.user import UserCreate, UserResponse
 from schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from schemas.workflow_version import WorkflowVersionResponse
 
 __all__ = [
     "ChatMessage",
@@ -82,4 +83,5 @@ __all__ = [
     "WorkflowCreate",
     "WorkflowResponse",
     "WorkflowUpdate",
+    "WorkflowVersionResponse",
 ]
