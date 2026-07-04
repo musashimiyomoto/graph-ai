@@ -73,7 +73,14 @@ export interface StatusStreamEvent {
   execution: Execution
 }
 
-export type ExecutionStreamEvent = TokenStreamEvent | StatusStreamEvent
+export interface ExpiredStreamEvent {
+  type: 'expired'
+}
+
+export type ExecutionStreamEvent =
+  | TokenStreamEvent
+  | StatusStreamEvent
+  | ExpiredStreamEvent
 
 export interface UserProfile {
   id: number

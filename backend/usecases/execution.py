@@ -519,6 +519,7 @@ class ExecutionUsecase:
 
         """
         terminal = {ExecutionStatus.SUCCESS, ExecutionStatus.FAILED}
+        reached_terminal = False
         for _ in range(STREAM_MAX_ITERATIONS):
             session.expire_all()
             execution = await self.get_execution(
@@ -529,8 +530,14 @@ class ExecutionUsecase:
             )
             await queue.put(f"data: {frame}\n\n")
             if execution.status in terminal:
+                reached_terminal = True
                 break
             await asyncio.sleep(STREAM_POLL_SECONDS)
+
+        if not reached_terminal:
+            # Cap hit while still running: tell the client to resume polling
+            # instead of silently closing (which reads as "done").
+            await queue.put(f'data: {json.dumps({"type": "expired"})}\n\n')
         await queue.put(None)
 
     async def _run_execution(

@@ -11,6 +11,9 @@ import type {
 // Executions in these states are still being processed by the worker.
 const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 
+// Interval for the polling fallback when the SSE stream ends before settling.
+const STREAM_POLL_FALLBACK_MS = 3000
+
 interface UseExecutionsParams {
   token: string | null
   activeWorkflowId: number | null
@@ -88,16 +91,45 @@ export function useExecutions({
 
     const controller = new AbortController()
     const workflowId = activeWorkflowId
+    const executionId = activeExecutionId
+    let stopped = false
     setLiveTokens({})
 
+    // Fallback when the SSE stream ends before the execution settles (stream
+    // unsupported/blocked, or the server capped the stream and sent `expired`).
+    async function pollUntilSettled(): Promise<void> {
+      while (!stopped && !controller.signal.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, STREAM_POLL_FALLBACK_MS))
+        if (stopped || controller.signal.aborted) {
+          return
+        }
+        try {
+          const items = await getExecutions(workflowId)
+          setExecutions(items)
+          const current = items.find((item) => item.id === executionId)
+          if (current) {
+            setLastExecution(current)
+            if (!ACTIVE_STATUSES.includes(current.status)) {
+              return
+            }
+          }
+        } catch {
+          // Transient fetch failure; keep polling until aborted.
+        }
+      }
+    }
+
     void streamExecution(
-      activeExecutionId,
+      executionId,
       (event) => {
         if (event.type === 'token') {
           setLiveTokens((previous) => ({
             ...previous,
             [event.node_id]: (previous[event.node_id] ?? '') + event.delta,
           }))
+          return
+        }
+        if (event.type === 'expired') {
           return
         }
 
@@ -112,16 +144,19 @@ export function useExecutions({
       controller.signal,
     )
       .catch(() => {
-        // Stream unsupported or interrupted; the finally block re-syncs state.
+        // Stream unsupported or interrupted; the polling fallback recovers.
       })
       .finally(() => {
         if (!controller.signal.aborted) {
-          void refreshExecutions(workflowId)
+          void pollUntilSettled()
         }
       })
 
-    return () => controller.abort()
-  }, [activeExecutionId, activeWorkflowId, refreshExecutions, token])
+    return () => {
+      stopped = true
+      controller.abort()
+    }
+  }, [activeExecutionId, activeWorkflowId, token])
 
   const handleRun = useCallback(
     async (input: RunInputPayload): Promise<void> => {

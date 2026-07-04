@@ -203,8 +203,13 @@ export async function streamExecution(
       }
 
       const payload = dataLine.slice('data:'.length).trim()
-      if (payload) {
+      if (!payload) {
+        continue
+      }
+      try {
         onEvent(JSON.parse(payload) as ExecutionStreamEvent)
+      } catch {
+        // Skip a malformed frame rather than killing the whole stream.
       }
     }
   }

@@ -40,9 +40,16 @@ Legend: **[H]** high · **[M]** medium · **[L]** low.
    (`GET /executions`, `/executions/{id}/nodes`) take `limit`/`offset` query params via a shared
    `Pagination` dependency (default 50, max 100), executions returned newest-first. Bounded lists
    (nodes/edges) get deterministic order without truncation.
-8. **Auth rate limiting** + **secure-by-default keys** (remove committed Fernet key) (`[H]`, security).
-9. **Workflow delete confirmation** — one misclick destroys a whole flow (`[H]`, frontend).
-10. **SSE 5-minute cap** — streams close mid-run for any execution > 5 min (`[M]`, engine+API).
+8. 🟡 **secure-by-default keys** ✅ done — JWT/Fernet default keys now boot only when
+   `ENVIRONMENT ∈ {local, test}` (shared `settings/environment.py`); any other env (prod/staging/…)
+   fails fast. `.env` confirmed gitignored. **Auth rate limiting** ⬜ still open (needs a
+   Redis-in-tests decision — self-written token bucket vs slowapi).
+9. ~~**Workflow delete confirmation**~~ ✅ done — the sidebar "Del" now requires an inline ✓/✕
+   confirm (mirrors the account-delete pattern) instead of deleting on a single click.
+10. ~~**SSE 5-minute cap**~~ ✅ done — cap raised to ~15 min and, when hit while still running, the
+    stream emits an explicit `expired` frame; the frontend has a 3s polling fallback that recovers
+    the terminal status whenever the stream ends early (also covers SSE-blocked networks). SSE frame
+    parsing is now per-frame try/caught so one bad frame can't kill the stream.
 
 ---
 

@@ -6,8 +6,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from settings.base import BaseSettings
-
-PRODUCTION_ENVIRONMENT = "production"
+from settings.environment import INSECURE_KEY_ENVIRONMENTS
 
 
 class AuthSettings(BaseSettings):
@@ -20,6 +19,7 @@ class AuthSettings(BaseSettings):
         title="Environment",
         validation_alias="ENVIRONMENT",
     )
+    # Dev-only secret, usable ONLY when ENVIRONMENT is local/test (enforced below).
     secret_key: str = Field(default="secret", title="Secret key")
     algorithm: str = Field(default="HS256", title="Algorithm")
     access_token_expire_minutes: int = Field(
@@ -28,24 +28,24 @@ class AuthSettings(BaseSettings):
     token_type: str = Field(default="Bearer", title="Token type")
 
     @model_validator(mode="after")
-    def _reject_default_secret_in_production(self) -> Self:
-        """Fail fast when the secret key is left at its default in production.
+    def _require_real_secret_outside_dev(self) -> Self:
+        """Fail fast unless a real secret is set outside local/test (secure default).
 
         Returns:
             The validated settings instance.
 
         Raises:
-            ValueError: If running in production without overriding the secret key.
+            ValueError: If the default secret is used outside local/test.
 
         """
         default_secret = type(self).model_fields["secret_key"].default
         if (
-            self.environment.lower() == PRODUCTION_ENVIRONMENT
-            and self.secret_key == default_secret
+            self.secret_key == default_secret
+            and self.environment.lower() not in INSECURE_KEY_ENVIRONMENTS
         ):
             message = (
-                "AUTH_SECRET_KEY must be set to a non-default value when "
-                "ENVIRONMENT=production"
+                "AUTH_SECRET_KEY must be set to a non-default value unless "
+                "ENVIRONMENT is 'local' or 'test'"
             )
             raise ValueError(message)
 

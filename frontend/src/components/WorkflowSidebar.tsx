@@ -27,6 +27,7 @@ export function WorkflowSidebar({
   const [draftName, setDraftName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -127,13 +128,37 @@ export function WorkflowSidebar({
                   </button>
                 </>
               )}
-              <button
-                type="button"
-                className="pixel-icon danger"
-                onClick={() => onDeleteWorkflow(workflow.id)}
-              >
-                Del
-              </button>
+              {confirmDeleteId === workflow.id ? (
+                <>
+                  <button
+                    type="button"
+                    className="pixel-icon danger"
+                    title="Confirm delete"
+                    onClick={() => {
+                      onDeleteWorkflow(workflow.id)
+                      setConfirmDeleteId(null)
+                    }}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-icon"
+                    title="Cancel"
+                    onClick={() => setConfirmDeleteId(null)}
+                  >
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="pixel-icon danger"
+                  onClick={() => setConfirmDeleteId(workflow.id)}
+                >
+                  Del
+                </button>
+              )}
             </div>
           ))}
         </div>
