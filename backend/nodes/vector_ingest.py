@@ -16,7 +16,14 @@ from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import upstream_text
 from rag.ingest import ingest_document
 from rag.qdrant import get_qdrant_client
-from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget, NodeGraphSpec
+from schemas import (
+    NodeFieldDataSource,
+    NodeFieldDataSourceKind,
+    NodeFieldSpec,
+    NodeFieldUI,
+    NodeFieldWidget,
+    NodeGraphSpec,
+)
 
 
 class VectorIngestNodeHandler:
@@ -99,11 +106,13 @@ DEFINITION = NodeDefinition(
             required=True,
             validators={ValidatorType.MIN_LENGTH.value: 1},
             ui=NodeFieldUI(
-                widget=NodeFieldWidget.TEXT,
+                widget=NodeFieldWidget.VECTOR_COLLECTION,
                 label="Collection",
                 placeholder="my-documents",
-                help="Qdrant collection to store chunks in. Created if missing.",
+                help="Qdrant collection to store chunks in. Pick an existing "
+                "one or type a new name to create it.",
             ),
+            datasource=NodeFieldDataSource(kind=NodeFieldDataSourceKind.VECTOR_COLLECTION),
             default="",
         ),
         NodeFieldSpec(

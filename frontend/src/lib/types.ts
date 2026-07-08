@@ -131,8 +131,13 @@ export type NodeFieldWidget =
   | 'provider'
   | 'model'
   | 'telegram_bot'
+  | 'vector_collection'
 
-export type NodeFieldDataSourceKind = 'llm_provider' | 'llm_model' | 'telegram_bot'
+export type NodeFieldDataSourceKind =
+  | 'llm_provider'
+  | 'llm_model'
+  | 'telegram_bot'
+  | 'vector_collection'
 
 export type PortType = 'text' | 'json' | 'file' | 'list'
 

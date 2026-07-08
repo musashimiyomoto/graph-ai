@@ -15,7 +15,14 @@ from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import upstream_text
 from rag.embeddings import embed_texts
 from rag.qdrant import get_qdrant_client
-from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget, NodeGraphSpec
+from schemas import (
+    NodeFieldDataSource,
+    NodeFieldDataSourceKind,
+    NodeFieldSpec,
+    NodeFieldUI,
+    NodeFieldWidget,
+    NodeGraphSpec,
+)
 
 _MIN_TOP_K = 1
 _MAX_TOP_K = 20
@@ -110,11 +117,12 @@ DEFINITION = NodeDefinition(
             required=True,
             validators={ValidatorType.MIN_LENGTH.value: 1},
             ui=NodeFieldUI(
-                widget=NodeFieldWidget.TEXT,
+                widget=NodeFieldWidget.VECTOR_COLLECTION,
                 label="Collection",
                 placeholder="my-documents",
                 help="Qdrant collection to search, populated by a Vector Ingest node.",
             ),
+            datasource=NodeFieldDataSource(kind=NodeFieldDataSourceKind.VECTOR_COLLECTION),
             default="",
         ),
         NodeFieldSpec(

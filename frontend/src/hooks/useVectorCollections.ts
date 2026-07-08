@@ -7,6 +7,7 @@ import {
 import type { ApiError, VectorCollection } from '../lib/types'
 
 interface UseVectorCollectionsParams {
+  enabled?: boolean
   onError?: (error: ApiError) => void
 }
 
@@ -18,6 +19,7 @@ interface UseVectorCollectionsResult {
 }
 
 export function useVectorCollections({
+  enabled = true,
   onError,
 }: UseVectorCollectionsParams): UseVectorCollectionsResult {
   const [collections, setCollections] = useState<VectorCollection[]>([])
@@ -33,6 +35,11 @@ export function useVectorCollections({
   )
 
   const refreshCollections = useCallback(async (): Promise<void> => {
+    if (!enabled) {
+      setCollections([])
+      return
+    }
+
     setLoading(true)
     try {
       const items = await getVectorCollections()
@@ -43,7 +50,7 @@ export function useVectorCollections({
     } finally {
       setLoading(false)
     }
-  }, [reportError])
+  }, [enabled, reportError])
 
   useEffect(() => {
     void refreshCollections()

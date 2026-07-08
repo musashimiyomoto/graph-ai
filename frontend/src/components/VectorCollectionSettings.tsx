@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 
 import { uploadVectorDocument } from '../lib/api'
 import type { ApiError } from '../lib/types'
@@ -80,6 +80,7 @@ function VectorDocumentList({
 }
 
 export function VectorCollectionSettings({ onError }: VectorCollectionSettingsProps) {
+  const uploadCollectionListId = useId()
   const [expandedCollection, setExpandedCollection] = useState<string | null>(null)
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null)
   const [uploadCollection, setUploadCollection] = useState('')
@@ -197,10 +198,16 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
             Collection
             <input
               className="pixel-input"
+              list={uploadCollectionListId}
               value={uploadCollection}
               onChange={(e) => setUploadCollection(e.target.value)}
               placeholder="my-documents"
             />
+            <datalist id={uploadCollectionListId}>
+              {collections.map((collection) => (
+                <option key={collection.name} value={collection.name} />
+              ))}
+            </datalist>
           </label>
           <label className="pixel-label">
             File

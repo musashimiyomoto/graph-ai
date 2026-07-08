@@ -1,9 +1,16 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 
 import { useLlmProviders } from '../hooks/useLlmProviders'
 import { useProviderModels } from '../hooks/useProviderModels'
 import { useTelegramBots } from '../hooks/useTelegramBots'
-import type { LlmModel, LlmProvider, NodeCatalogField, TelegramBot } from '../lib/types'
+import { useVectorCollections } from '../hooks/useVectorCollections'
+import type {
+  LlmModel,
+  LlmProvider,
+  NodeCatalogField,
+  TelegramBot,
+  VectorCollection,
+} from '../lib/types'
 import { matchesVisibility } from '../lib/validation'
 import { NumberInput } from './NumberInput'
 
@@ -192,6 +199,42 @@ function TelegramBotField({
   )
 }
 
+function VectorCollectionField({
+  collections,
+  value,
+  placeholder,
+  onChange,
+}: {
+  collections: VectorCollection[]
+  value: unknown
+  placeholder: string | null
+  onChange: (value: string) => void
+}) {
+  // A datalist-backed text input rather than a strict <select>: unlike
+  // providers/models/bots, a collection isn't a pre-existing entity you
+  // must pick — typing a name that doesn't exist yet is how a new
+  // collection gets created. This keeps that free-text path while still
+  // surfacing existing collections so the user isn't typing blind.
+  const datalistId = useId()
+
+  return (
+    <>
+      <input
+        className="pixel-input"
+        list={datalistId}
+        value={String(value ?? '')}
+        placeholder={placeholder ?? ''}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <datalist id={datalistId}>
+        {collections.map((collection) => (
+          <option key={collection.name} value={collection.name} />
+        ))}
+      </datalist>
+    </>
+  )
+}
+
 interface NodeFieldsFormProps {
   fields: NodeCatalogField[]
   data: Record<string, unknown>
@@ -206,6 +249,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   const hasModelDatasource = fields.some((field) => field.datasource?.kind === 'llm_model')
   const hasTelegramBotDatasource = fields.some(
     (field) => field.datasource?.kind === 'telegram_bot',
+  )
+  const hasVectorCollectionDatasource = fields.some(
+    (field) => field.datasource?.kind === 'vector_collection',
   )
 
   const selectedProviderRaw = Number(data['llm_provider_id'] ?? 0)
@@ -223,6 +269,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   })
   const { bots, loading: botsLoading } = useTelegramBots({
     enabled: hasTelegramBotDatasource,
+  })
+  const { collections } = useVectorCollections({
+    enabled: hasVectorCollectionDatasource,
   })
 
   // A saved id/name that no longer matches anything in its data source (the
@@ -318,6 +367,17 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
           bots={bots}
           value={value}
           onChange={(botId) => updateField(field.name, botId)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'vector_collection') {
+      return (
+        <VectorCollectionField
+          collections={collections}
+          value={value}
+          placeholder={field.ui.placeholder}
+          onChange={(collection) => updateField(field.name, collection)}
         />
       )
     }
