@@ -73,7 +73,11 @@ DEFINITION = NodeDefinition(
                 widget=NodeFieldWidget.TEXTAREA,
                 label="Template",
                 placeholder="Summarize the following:\n\n{{input}}",
-                help="Use {{input}} where the upstream text should be inserted.",
+                help=(
+                    "Use {{input}} where the upstream text should be inserted. "
+                    "With multiple incoming connections, {{input[0]}}, "
+                    "{{input[1]}}, ... reference one parent at a time."
+                ),
             ),
             default="{{input}}",
         ),

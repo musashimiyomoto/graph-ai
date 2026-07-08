@@ -127,6 +127,57 @@ class TestTemplateNode:
         with pytest.raises(ExecutionGraphValidationError):
             await handler.execute(_context({}, parent_values=["x"]))
 
+    @pytest.mark.asyncio
+    async def test_substitutes_placeholder_with_internal_whitespace(self) -> None:
+        """`{{ input }}` substitutes the same as `{{input}}`."""
+        handler = TemplateNodeHandler()
+        result = await handler.execute(
+            _context(
+                {"template": "Summary: {{ input }}"},
+                parent_values=["hello world"],
+            )
+        )
+        if result.output != "Summary: hello world":
+            pytest.fail("Whitespace-padded placeholder was not substituted")
+
+    @pytest.mark.asyncio
+    async def test_substitutes_uppercase_placeholder(self) -> None:
+        """`{{INPUT}}` substitutes the same as `{{input}}`."""
+        handler = TemplateNodeHandler()
+        result = await handler.execute(
+            _context(
+                {"template": "Summary: {{INPUT}}"},
+                parent_values=["hello world"],
+            )
+        )
+        if result.output != "Summary: hello world":
+            pytest.fail("Uppercase placeholder was not substituted")
+
+    @pytest.mark.asyncio
+    async def test_indexed_placeholder_selects_one_parent(self) -> None:
+        """`{{input[N]}}` references a single parent by position."""
+        handler = TemplateNodeHandler()
+        result = await handler.execute(
+            _context(
+                {"template": "{{input[1]}} then {{ INPUT[0] }}"},
+                parent_values=["first", "second"],
+            )
+        )
+        if result.output != "second then first":
+            pytest.fail("Indexed placeholder did not select the right parent")
+
+    @pytest.mark.asyncio
+    async def test_indexed_placeholder_out_of_range_rejected(self) -> None:
+        """An out-of-range index raises a graph validation error."""
+        handler = TemplateNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(
+                _context(
+                    {"template": "{{input[2]}}"},
+                    parent_values=["only one"],
+                )
+            )
+
 
 class _DummyHTTPResponse:
     """Fixed HTTP response for the request-node test."""

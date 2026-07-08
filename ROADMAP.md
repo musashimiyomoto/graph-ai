@@ -393,9 +393,20 @@ Second pass (closed out everything remaining):
       and skipped — the node pipeline is text-only end to end, so there's no
       binary/structured-response path that character truncation could
       corrupt differently than it already does for text.
-- [ ] **Template node: single exact-match `{{input}}`** — `{{ input }}` or
-      `{{INPUT}}` silently drops the entire upstream text with no error, and
-      there's no way to reference an individual parent by index.
+- [x] **Template node: single exact-match `{{input}}`** — `_PLACEHOLDER_PATTERN`
+      (`nodes/rendering.py`) replaces the old literal `str.replace`: matching
+      is now case-insensitive and tolerant of internal whitespace, so
+      `{{ input }}`/`{{INPUT}}` substitute the same as `{{input}}` instead of
+      silently passing through unrendered. Also added an indexed form,
+      `{{input[N]}}` (0-based, same case/whitespace tolerance), to reference
+      one live parent by its deterministic ascending-parent-id position
+      instead of always getting every parent's output newline-joined; an
+      out-of-range index raises `ExecutionGraphValidationError` rather than
+      silently rendering empty. Both `render_input` and
+      `render_input_url_encoded` share the one regex, so Template and HTTP
+      Request (URL/headers/body) nodes picked up the fix and the new syntax
+      together. `TemplateNodeHandler`'s field help text now documents
+      `{{input[0]}}`/`{{input[1]}}` for multi-parent templates.
 - [ ] **Vector Ingest has no real document intake** — the only way to feed a
       document in today is pasting its full text through an Input node (or
       fetching it via HTTP Request); there's no file upload (PDF/docx/etc.),
