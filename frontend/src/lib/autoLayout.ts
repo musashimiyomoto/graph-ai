@@ -45,5 +45,42 @@ export function computeAutoLayout(
       y: laidOut.y - height / 2,
     })
   }
+
+  // dagre always lays out starting near its own coordinate origin,
+  // regardless of where the graph currently sits — left uncorrected, the
+  // whole graph would jump to that origin and could land outside the
+  // visible viewport. Shift every new position by the same offset so the
+  // new layout's center lands exactly where the old graph's center was.
+  const oldCenter = centerOf(
+    nodes.map((node) => ({
+      x: node.position.x + (node.width ?? FALLBACK_WIDTH) / 2,
+      y: node.position.y + (node.height ?? FALLBACK_HEIGHT) / 2,
+    })),
+  )
+  const newCenter = centerOf(
+    nodes.map((node) => {
+      const position = positions.get(node.id)
+      const width = node.width ?? FALLBACK_WIDTH
+      const height = node.height ?? FALLBACK_HEIGHT
+      return { x: (position?.x ?? 0) + width / 2, y: (position?.y ?? 0) + height / 2 }
+    }),
+  )
+  const offsetX = oldCenter.x - newCenter.x
+  const offsetY = oldCenter.y - newCenter.y
+  for (const [id, position] of positions) {
+    positions.set(id, { x: position.x + offsetX, y: position.y + offsetY })
+  }
+
   return positions
+}
+
+function centerOf(points: LayoutPosition[]): LayoutPosition {
+  if (points.length === 0) {
+    return { x: 0, y: 0 }
+  }
+  const sum = points.reduce(
+    (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+    { x: 0, y: 0 },
+  )
+  return { x: sum.x / points.length, y: sum.y / points.length }
 }
