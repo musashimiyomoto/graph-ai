@@ -364,7 +364,7 @@ Second pass (closed out everything remaining):
       upfront ownership check also moved onto its own short-lived session,
       dropping the plain `db.get_session` dependency from that route entirely.
 
-## Phase 6 — Node handler depth (usability, not new node types)
+## Phase 6 — Node handler depth (usability, not new node types) ✅ done
 
 - [x] **"Web Search" isn't a real web search** — replaced the near-always-empty
       Instant Answer API with DuckDuckGo's HTML lite endpoint
@@ -407,12 +407,35 @@ Second pass (closed out everything remaining):
       Request (URL/headers/body) nodes picked up the fix and the new syntax
       together. `TemplateNodeHandler`'s field help text now documents
       `{{input[0]}}`/`{{input[1]}}` for multi-parent templates.
-- [ ] **Vector Ingest has no real document intake** — the only way to feed a
-      document in today is pasting its full text through an Input node (or
-      fetching it via HTTP Request); there's no file upload (PDF/docx/etc.),
-      no way to browse/delete what's already in a Qdrant collection from the
-      UI, and no dedup on re-ingest (re-running the same document appends
-      duplicate chunks).
+- [x] **Vector Ingest document intake (upload, browse/delete, dedup)** — every
+      ingested chunk now carries a `source` payload field identifying its
+      document (`rag/ingest.py::ingest_document`, shared by the node handler
+      and the new upload endpoint); re-ingesting the same `(collection,
+      source)` deletes the prior chunks before inserting the new ones
+      (`rag/qdrant.py::delete_by_source`), so re-running a Vector Ingest node
+      or re-uploading a file replaces instead of duplicating — including
+      when the new version has fewer chunks than the old one. The node
+      gained an optional `source` field (defaults to the node's label).
+      **New "Vector Collections" Settings tab**
+      (`VectorCollectionSettings.tsx`, alongside LLM Providers/Telegram
+      Bots) lists every collection with its chunk count, expands to list
+      each document (source + chunk count) with inline delete, whole-collection
+      delete, and a file-upload form (`.pdf`/`.docx`/`.txt`/`.md`,
+      `rag/documents.py::extract_text` via `pypdf`/`python-docx`, 20 MB cap)
+      that ingests directly into any collection — bypassing the graph
+      entirely, so a document no longer has to be pasted through an Input
+      node. Backed by a new `/vector-collections` router (list/upload/
+      delete-document/delete-collection, `api/routers/vector.py`,
+      `usecases/vector.py`) — collections stay global/shared, matching the
+      feature's existing design. `lib/api.ts`'s shared `request()` helper
+      now skips forcing a JSON content-type when the body is `FormData`, so
+      the upload call reuses the same auth/error-handling path as every
+      other request instead of a bespoke fetch. Vector Ingest/Search node
+      handler tests (previously the only RAG test coverage) extended with
+      dedup-replace and multi-source coexistence cases; new
+      `tests/test_api/test_vector.py` covers the router end to end against
+      a shared in-memory `FakeQdrantClient` (`tests/fakes.py`) — no real
+      Qdrant server or fastembed model download needed in CI.
 
 ## Phase 7 — Product breadth (parallel track)
 

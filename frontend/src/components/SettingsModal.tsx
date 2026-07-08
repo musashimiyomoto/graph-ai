@@ -4,6 +4,7 @@ import type { ApiError } from '../lib/types'
 import { Modal } from './Modal'
 import { ProviderSettings } from './ProviderSettings'
 import { TelegramSettings } from './TelegramSettings'
+import { VectorCollectionSettings } from './VectorCollectionSettings'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -21,6 +22,7 @@ interface SettingsSection {
 const SECTIONS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
+  { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
 
 export function SettingsModal({ onClose, onError }: SettingsModalProps) {

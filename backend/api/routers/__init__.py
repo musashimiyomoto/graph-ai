@@ -9,6 +9,7 @@ from api.routers import (
     node,
     telegram_bot,
     user,
+    vector,
     workflow,
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "node",
     "telegram_bot",
     "user",
+    "vector",
     "workflow",
 ]

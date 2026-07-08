@@ -17,6 +17,9 @@ import type {
   TelegramBotCreatePayload,
   TokenResponse,
   UserProfile,
+  VectorCollection,
+  VectorDocument,
+  VectorUploadResult,
   Workflow,
   WorkflowVersion,
 } from './types'
@@ -33,8 +36,11 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  // A FormData body (file upload) must not get a forced JSON content type —
+  // the browser sets its own multipart boundary.
+  const isFormData = options.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...((options.headers as Record<string, string>) ?? {}),
   }
 
@@ -291,4 +297,48 @@ export async function createTelegramBot(
 
 export async function deleteTelegramBot(botId: number): Promise<void> {
   await request(`/telegram-bots/${botId}`, { method: 'DELETE' })
+}
+
+export async function getVectorCollections(): Promise<VectorCollection[]> {
+  return request<VectorCollection[]>('/vector-collections')
+}
+
+export async function deleteVectorCollection(collection: string): Promise<void> {
+  await request(`/vector-collections/${encodeURIComponent(collection)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getVectorDocuments(
+  collection: string,
+): Promise<VectorDocument[]> {
+  return request<VectorDocument[]>(
+    `/vector-collections/${encodeURIComponent(collection)}/documents`,
+  )
+}
+
+export async function deleteVectorDocument(
+  collection: string,
+  source: string,
+): Promise<void> {
+  await request(
+    `/vector-collections/${encodeURIComponent(collection)}/documents/${encodeURIComponent(source)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function uploadVectorDocument(
+  collection: string,
+  file: File,
+  source?: string,
+): Promise<VectorUploadResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (source) {
+    formData.append('source', source)
+  }
+  return request<VectorUploadResult>(
+    `/vector-collections/${encodeURIComponent(collection)}/documents`,
+    { method: 'POST', body: formData },
+  )
 }

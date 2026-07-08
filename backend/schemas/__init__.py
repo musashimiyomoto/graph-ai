@@ -45,6 +45,11 @@ from schemas.telegram_bot import (
     TelegramBotUpdate,
 )
 from schemas.user import UserCreate, UserResponse
+from schemas.vector import (
+    VectorCollectionResponse,
+    VectorDocumentResponse,
+    VectorUploadResponse,
+)
 from schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
 from schemas.workflow_version import WorkflowVersionResponse
 
@@ -92,6 +97,9 @@ __all__ = [
     "TelegramBotUpdate",
     "UserCreate",
     "UserResponse",
+    "VectorCollectionResponse",
+    "VectorDocumentResponse",
+    "VectorUploadResponse",
     "WorkflowCreate",
     "WorkflowResponse",
     "WorkflowUpdate",

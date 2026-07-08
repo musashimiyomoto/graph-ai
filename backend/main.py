@@ -18,6 +18,7 @@ from api.routers import (
     node,
     telegram_bot,
     user,
+    vector,
     workflow,
 )
 from exceptions import BaseError
@@ -86,3 +87,4 @@ app.include_router(router=edge.router)
 app.include_router(router=execution.router)
 app.include_router(router=llm_provider.router)
 app.include_router(router=telegram_bot.router)
+app.include_router(router=vector.router)

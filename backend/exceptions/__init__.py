@@ -29,6 +29,13 @@ from exceptions.node import (
     NodeNotFoundError,
     WebSearchConnectionError,
 )
+from exceptions.rag import (
+    DocumentTooLargeError,
+    EmptyDocumentError,
+    UnsupportedDocumentTypeError,
+    VectorCollectionNotFoundError,
+    VectorDocumentNotFoundError,
+)
 from exceptions.rate_limit import RateLimitExceededError
 from exceptions.telegram import TelegramAPIError, TelegramBotNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
@@ -38,11 +45,13 @@ __all__ = [
     "AuthCredentialsError",
     "BaseError",
     "BlockedURLError",
+    "DocumentTooLargeError",
     "EdgeAlreadyExistsError",
     "EdgeHandleMismatchError",
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
     "EdgePortMismatchError",
+    "EmptyDocumentError",
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",
     "ExecutionNotFoundError",
@@ -57,9 +66,12 @@ __all__ = [
     "RateLimitExceededError",
     "TelegramAPIError",
     "TelegramBotNotFoundError",
+    "UnsupportedDocumentTypeError",
     "UnsupportedLLMProviderError",
     "UserAlreadyExistsError",
     "UserNotFoundError",
+    "VectorCollectionNotFoundError",
+    "VectorDocumentNotFoundError",
     "WebSearchConnectionError",
     "WorkflowNotFoundError",
     "WorkflowVersionNotFoundError",

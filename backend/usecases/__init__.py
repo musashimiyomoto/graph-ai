@@ -8,6 +8,7 @@ from usecases.llm_provider import LLMProviderUsecase
 from usecases.node import NodeUsecase
 from usecases.telegram_bot import TelegramBotUsecase
 from usecases.user import UserUsecase
+from usecases.vector import VectorUsecase
 from usecases.workflow import WorkflowUsecase
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "NodeUsecase",
     "TelegramBotUsecase",
     "UserUsecase",
+    "VectorUsecase",
     "WorkflowUsecase",
 ]

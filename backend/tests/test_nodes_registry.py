@@ -20,6 +20,7 @@ from nodes import (
     ports_compatible,
 )
 from nodes.base import NodeExecutionContext
+from tests.fakes import FakeQdrantClient
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -636,48 +637,6 @@ class TestCodeTransformNode:
             )
 
 
-class _FakePoint:
-    """Minimal stand-in for a Qdrant ScoredPoint."""
-
-    def __init__(self, payload: dict[str, object]) -> None:
-        self.payload = payload
-
-
-class _FakeQueryResponse:
-    """Minimal stand-in for a Qdrant QueryResponse."""
-
-    def __init__(self, points: list[_FakePoint]) -> None:
-        self.points = points
-
-
-class _FakeQdrantClient:
-    """In-memory stand-in for AsyncQdrantClient."""
-
-    def __init__(self) -> None:
-        self.collections: dict[str, list[tuple[list[float], dict[str, object]]]] = {}
-
-    async def collection_exists(self, name: str) -> bool:
-        return name in self.collections
-
-    async def create_collection(
-        self, collection_name: str, vectors_config: object
-    ) -> None:
-        del vectors_config
-        self.collections.setdefault(collection_name, [])
-
-    async def upsert(self, collection_name: str, points: list) -> None:
-        store = self.collections.setdefault(collection_name, [])
-        for point in points:
-            store.append((point.vector, point.payload))
-
-    async def query_points(
-        self, collection_name: str, query: list[float], limit: int
-    ) -> _FakeQueryResponse:
-        del query
-        store = self.collections.get(collection_name, [])
-        return _FakeQueryResponse([_FakePoint(payload) for _, payload in store[:limit]])
-
-
 def _fake_embed_texts(texts: list[str]) -> list[list[float]]:
     """Deterministic fake embedding: a single feature, the text length."""
     return [[float(len(text))] for text in texts]
@@ -691,26 +650,30 @@ class TestVectorIngestNode:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Ingesting text stores one chunk per call and reports the count."""
-        client = _FakeQdrantClient()
-        monkeypatch.setattr("nodes.vector_ingest.embed_texts", _fake_embed_texts)
+        client = FakeQdrantClient()
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
         monkeypatch.setattr("nodes.vector_ingest.get_qdrant_client", lambda: client)
 
         handler = VectorIngestNodeHandler()
         result = await handler.execute(
-            _context({"collection": "docs"}, parent_values=["hello world"])
+            _context(
+                {"collection": "docs", "source": "doc-a"},
+                parent_values=["hello world"],
+            )
         )
 
         if result.output != "Ingested 1 chunk(s) into 'docs'.":
             pytest.fail("Unexpected confirmation message")
-        if client.collections["docs"][0][1] != {"text": "hello world"}:
-            pytest.fail("Chunk text was not stored in the collection")
+        stored_payload = client.collections["docs"][0][1]
+        if stored_payload != {"text": "hello world", "source": "doc-a"}:
+            pytest.fail("Chunk text/source was not stored in the collection")
 
     @pytest.mark.asyncio
     async def test_missing_collection_rejected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """An empty collection name raises a graph validation error."""
-        monkeypatch.setattr("nodes.vector_ingest.embed_texts", _fake_embed_texts)
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
         handler = VectorIngestNodeHandler()
         with pytest.raises(ExecutionGraphValidationError):
             await handler.execute(_context({}, parent_values=["hello"]))
@@ -720,12 +683,80 @@ class TestVectorIngestNode:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Empty upstream text raises a graph validation error."""
-        monkeypatch.setattr("nodes.vector_ingest.embed_texts", _fake_embed_texts)
+        client = FakeQdrantClient()
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+        monkeypatch.setattr("nodes.vector_ingest.get_qdrant_client", lambda: client)
         handler = VectorIngestNodeHandler()
         with pytest.raises(ExecutionGraphValidationError):
             await handler.execute(
                 _context({"collection": "docs"}, parent_values=["   "])
             )
+
+    @pytest.mark.asyncio
+    async def test_reingesting_same_source_replaces_not_appends(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Re-running the node with the same source replaces its chunks."""
+        client = FakeQdrantClient()
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+        monkeypatch.setattr("nodes.vector_ingest.get_qdrant_client", lambda: client)
+        handler = VectorIngestNodeHandler()
+        node_data = {"collection": "docs", "source": "doc-a"}
+
+        await handler.execute(_context(node_data, parent_values=["hello world"]))
+        first_count = len(client.collections["docs"])
+
+        await handler.execute(_context(node_data, parent_values=["a different text"]))
+        second_count = len(client.collections["docs"])
+
+        if second_count != first_count:
+            pytest.fail("Re-ingesting the same source should replace, not append")
+        if client.collections["docs"][0][1]["text"] != "a different text":
+            pytest.fail("Expected the replaced chunk's text to be the new version")
+
+    @pytest.mark.asyncio
+    async def test_different_sources_coexist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two different sources in the same collection don't collide."""
+        client = FakeQdrantClient()
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+        monkeypatch.setattr("nodes.vector_ingest.get_qdrant_client", lambda: client)
+        handler = VectorIngestNodeHandler()
+
+        await handler.execute(
+            _context(
+                {"collection": "docs", "source": "doc-a"}, parent_values=["hello"]
+            )
+        )
+        await handler.execute(
+            _context(
+                {"collection": "docs", "source": "doc-b"}, parent_values=["world"]
+            )
+        )
+
+        sources = {payload["source"] for _, payload in client.collections["docs"]}
+        if sources != {"doc-a", "doc-b"}:
+            pytest.fail("Expected chunks from both sources to coexist")
+
+    @pytest.mark.asyncio
+    async def test_blank_source_falls_back_to_label(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A blank source falls back to the node's label."""
+        client = FakeQdrantClient()
+        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+        monkeypatch.setattr("nodes.vector_ingest.get_qdrant_client", lambda: client)
+        handler = VectorIngestNodeHandler()
+
+        await handler.execute(
+            _context(
+                {"collection": "docs", "label": "My Doc"}, parent_values=["hello"]
+            )
+        )
+
+        if client.collections["docs"][0][1]["source"] != "My Doc":
+            pytest.fail("Expected the node label to be used as the source")
 
 
 class TestVectorSearchNode:
@@ -736,7 +767,7 @@ class TestVectorSearchNode:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Search returns up to top_k stored chunks joined by a separator."""
-        client = _FakeQdrantClient()
+        client = FakeQdrantClient()
         client.collections["docs"] = [
             ([1.0], {"text": "chunk one"}),
             ([2.0], {"text": "chunk two"}),
@@ -758,7 +789,7 @@ class TestVectorSearchNode:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Searching a collection that was never ingested into raises an error."""
-        client = _FakeQdrantClient()
+        client = FakeQdrantClient()
         monkeypatch.setattr("nodes.vector_search.embed_texts", _fake_embed_texts)
         monkeypatch.setattr("nodes.vector_search.get_qdrant_client", lambda: client)
 
@@ -778,7 +809,7 @@ class TestVectorSearchNode:
     @pytest.mark.asyncio
     async def test_empty_query_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """An empty upstream query raises a graph validation error."""
-        client = _FakeQdrantClient()
+        client = FakeQdrantClient()
         client.collections["docs"] = []
         monkeypatch.setattr("nodes.vector_search.get_qdrant_client", lambda: client)
 

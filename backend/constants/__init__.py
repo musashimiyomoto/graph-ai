@@ -13,6 +13,7 @@ from constants.llm import (
     DEFAULT_ANTHROPIC_MAX_TOKENS,
     DEFAULT_ANTHROPIC_MODEL,
 )
+from constants.rag import MAX_DOCUMENT_UPLOAD_BYTES
 from constants.retry import (
     MAX_NODE_ATTEMPTS,
     NODE_TIMEOUT_SECONDS,
@@ -25,6 +26,7 @@ __all__ = [
     "DEFAULT_ANTHROPIC_MODEL",
     "DEFAULT_PAGE_SIZE",
     "DEFAULT_TIMEOUT",
+    "MAX_DOCUMENT_UPLOAD_BYTES",
     "MAX_NODE_ATTEMPTS",
     "MAX_NODE_OUTPUT_CHARS",
     "MAX_PAGE_SIZE",

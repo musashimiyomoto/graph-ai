@@ -226,6 +226,21 @@ export interface NodeExecutionResult {
   finished_at: string | null
 }
 
+export interface VectorCollection {
+  name: string
+  point_count: number
+}
+
+export interface VectorDocument {
+  source: string
+  chunk_count: number
+}
+
+export interface VectorUploadResult {
+  source: string
+  chunks_ingested: number
+}
+
 export interface ApiError {
   message: string
   status: number

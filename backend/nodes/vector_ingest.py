@@ -2,24 +2,20 @@
 
 Chunks the upstream text, embeds each chunk locally via fastembed
 (``rag.embeddings``), and upserts the chunks into a Qdrant collection
-(``rag.qdrant``). Pairs with the Vector Search node, which reads back from
-the same collection. Collection names are free text and shared globally —
-no per-user/per-workflow namespacing — and re-ingesting the same text simply
-appends duplicate chunks; there's no dedup.
+(``rag.ingest``). Pairs with the Vector Search node, which reads back from
+the same collection, and with the Vector Collections Settings tab, which
+lets a document ingested here be browsed/deleted (and lets documents be
+uploaded directly, bypassing the graph). Collection names are free text and
+shared globally — no per-user/per-workflow namespacing.
 """
-
-from asyncio import to_thread
-from uuid import uuid4
-
-from qdrant_client.http.models import PointStruct
 
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
 from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import upstream_text
-from rag.embeddings import embed_texts
-from rag.qdrant import chunk_text, ensure_collection, get_qdrant_client
+from rag.ingest import ingest_document
+from rag.qdrant import get_qdrant_client
 from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget, NodeGraphSpec
 
 
@@ -45,23 +41,28 @@ class VectorIngestNodeHandler:
             message = "Vector Ingest node requires a non-empty collection name"
             raise ExecutionGraphValidationError(message=message)
 
-        chunks = chunk_text(upstream_text(context))
-        if not chunks:
+        source = context.node_data.get("source")
+        if not isinstance(source, str) or not source.strip():
+            label = context.node_data.get("label")
+            source = label if isinstance(label, str) and label.strip() else "untitled"
+
+        client = get_qdrant_client()
+        try:
+            chunks_ingested = await ingest_document(
+                client=client,
+                collection=collection,
+                text=upstream_text(context),
+                source=source,
+            )
+        finally:
+            await client.close()
+
+        if chunks_ingested == 0:
             message = "Vector Ingest node received no text to ingest"
             raise ExecutionGraphValidationError(message=message)
 
-        vectors = await to_thread(embed_texts, chunks)
-        client = get_qdrant_client()
-        await ensure_collection(client, collection, vector_size=len(vectors[0]))
-        await client.upsert(
-            collection_name=collection,
-            points=[
-                PointStruct(id=str(uuid4()), vector=vector, payload={"text": chunk})
-                for vector, chunk in zip(vectors, chunks, strict=True)
-            ],
-        )
         return NodeExecutionResult(
-            output=f"Ingested {len(chunks)} chunk(s) into '{collection}'."
+            output=f"Ingested {chunks_ingested} chunk(s) into '{collection}'."
         )
 
 
@@ -102,6 +103,20 @@ DEFINITION = NodeDefinition(
                 label="Collection",
                 placeholder="my-documents",
                 help="Qdrant collection to store chunks in. Created if missing.",
+            ),
+            default="",
+        ),
+        NodeFieldSpec(
+            name="source",
+            required=False,
+            validators={},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.TEXT,
+                label="Source (optional)",
+                placeholder="Defaults to this node's label",
+                help="Identifies this document. Re-running the node with "
+                "the same source replaces its chunks instead of "
+                "duplicating them.",
             ),
             default="",
         ),
