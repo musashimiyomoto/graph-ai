@@ -11,6 +11,7 @@
     "gen:api-types": "openapi-typescript http://localhost:5000/openapi.json -o src/lib/api-types.gen.ts"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "reactflow": "^11.11.4"

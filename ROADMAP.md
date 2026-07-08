@@ -439,7 +439,55 @@ Second pass (closed out everything remaining):
 
 ## Phase 7 — Product breadth (parallel track)
 
-- [ ] Undo/redo, copy-paste, multi-select, auto-layout in the graph editor.
+- [x] **Undo/redo, copy-paste, multi-select, auto-layout in the graph editor**
+      — nodes/edges get server-assigned IDs (nothing client-generated), so
+      undo/redo couldn't be a client-side snapshot diff; it's a stack of
+      reversible commands (`useUndoRedo.ts`) that replay the same
+      create/delete/update API calls, each command remembering its
+      *current* server ID across redo cycles since a redone "create" gets a
+      new one every time. `useGraphState.ts` builds a command after every
+      structural mutation (create/delete/move node, create/delete edge,
+      paste, auto-layout) and pushes it; deliberately does **not** cover
+      Inspector field-data edits (label/config), which keep their existing
+      autosave-on-change UX rather than sharing one linear undo stack with
+      graph-shape changes. Multi-node delete needed one atomic batch
+      command rather than N independently-composed per-node commands —
+      undoing a delete of two nodes that were connected *to each other*
+      requires recreating both nodes first (building a fresh
+      original-id → new-id map) before recreating the edge between them,
+      otherwise the second node's edge-recreation call references a
+      already-stale, still-deleted id (`makeDeleteNodesCommand`; caught by
+      the Playwright verification pass below, not by inspection). Deleting
+      a node's edges relies on the existing DB `ON DELETE CASCADE` — undo
+      is the only direction that needs to manually recreate them via
+      `createEdge`. Multi-select and edge-select both come from React
+      Flow's `onSelectionChange` (not each element's own `.selected`
+      field) so one code path drives both `selectedNodeIds`/
+      `selectedEdgeIds`; box-select is now plain left-drag
+      (`selectionMode`/`selectionOnDrag`), panning moved to middle/
+      right-mouse-drag (`panOnDrag={[1, 2]}`). Also fixed a related latent
+      bug while wiring the Delete key: React Flow v11's own
+      `deleteKeyCode` defaults to `'Backspace'`, and since `onNodesChange`
+      was already wired to blindly `applyNodeChanges` (including `remove`
+      changes), pressing Backspace with a node selected was silently
+      deleting it from local visual state *without* calling the delete API
+      — a pre-existing frontend/backend desync bug, now closed by setting
+      `deleteKeyCode={null}` and routing Delete/Backspace through the new
+      app-level keyboard handler (`App.tsx`) that properly calls the API
+      and records an undo command. Copy-paste uses an in-memory clipboard
+      (a ref, not the OS clipboard); paste remaps copied-internal-edges'
+      endpoints through a fresh id map, same pattern as delete-undo.
+      Auto-layout is a new `@dagrejs/dagre` dependency
+      (`lib/autoLayout.ts`, `rankdir: 'LR'` to match the existing
+      Input→...→Output convention), wired as one composite move-command so
+      it's a single undo step. New toolbar buttons: Undo/Redo (disabled
+      when the respective stack is empty)/Auto-layout
+      (`AppShell.tsx`). Verified via a real headless-browser pass (not just
+      lint/build): multi-select delete → undo → redo restores edges
+      correctly, copy/paste, auto-layout → undo restores exact prior
+      positions, box-select vs. right-drag-pan, toolbar buttons, and a
+      page reload after each step confirming state actually persisted
+      server-side rather than being a client-side illusion.
 - [ ] React Query in place of hand-rolled `useState`/`useEffect` data fetching.
 - [ ] Workflow template library, JSON export/import, duplication.
 - [ ] Frontend tests (Vitest + Testing Library) — currently zero.

@@ -13,6 +13,11 @@ interface AppShellProps {
   workflowName: string
   executionStatus: string | null
   error: string | null
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
+  onAutoLayout: () => void
   onOpenHistory: () => void
   onDismissError: () => void
   onLogout: () => void
@@ -26,6 +31,11 @@ export function AppShell({
   workflowName,
   executionStatus,
   error,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+  onAutoLayout,
   onOpenHistory,
   onDismissError,
   onLogout,
@@ -56,6 +66,32 @@ export function AppShell({
           {executionStatus ? (
             <div className="pixel-pill">Status: {executionStatus}</div>
           ) : null}
+          <button
+            type="button"
+            className="pixel-icon"
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            onClick={onUndo}
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="pixel-icon"
+            disabled={!canRedo}
+            title="Redo (Ctrl+Shift+Z)"
+            onClick={onRedo}
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            className="pixel-icon"
+            title="Auto-layout"
+            onClick={onAutoLayout}
+          >
+            Auto-layout
+          </button>
           <button type="button" className="pixel-icon" onClick={onOpenHistory}>
             History
           </button>

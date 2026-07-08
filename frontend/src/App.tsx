@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { AppShell } from './components/AppShell'
 import { AuthScreen } from './components/AuthScreen'
@@ -67,17 +67,26 @@ export function App() {
   const {
     nodes,
     edges,
+    selectedNodeIds,
     selectedNode,
+    canUndo,
+    canRedo,
     clearGraphState,
-    setSelectedNodeId,
+    handleSelectionChange,
     createNodeWithData,
     getInitialNodeData,
     handleDeleteNode,
+    handleDeleteSelected,
     handleUpdateNodeData,
     handleNodesChange,
     handleMoveNode,
     handleConnect,
     handleDeleteEdge,
+    copySelection,
+    pasteClipboard,
+    handleAutoLayout,
+    undo,
+    redo,
   } = useGraphState({
     token,
     activeWorkflowId,
@@ -156,6 +165,56 @@ export function App() {
     setNodeCreateDraft(null)
   }, [clearExecutions, clearGraphState, clearWorkflowState, deleteAccountAuth])
 
+  // App-wide graph-editor shortcuts. Skipped while focused in an editable
+  // field (Inspector inputs, workflow-name field, etc.) so typing a literal
+  // "z" or hitting Backspace to delete a character doesn't also mutate the
+  // graph.
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) {
+        return false
+      }
+      return (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      )
+    }
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (isEditableTarget(event.target)) {
+        return
+      }
+      const meta = event.ctrlKey || event.metaKey
+
+      if (!meta && (event.key === 'Delete' || event.key === 'Backspace')) {
+        event.preventDefault()
+        void handleDeleteSelected()
+        return
+      }
+      if (meta && event.key.toLowerCase() === 'z') {
+        event.preventDefault()
+        void (event.shiftKey ? redo() : undo())
+        return
+      }
+      if (meta && event.key.toLowerCase() === 'y') {
+        event.preventDefault()
+        void redo()
+        return
+      }
+      if (meta && event.key.toLowerCase() === 'c') {
+        copySelection()
+        return
+      }
+      if (meta && event.key.toLowerCase() === 'v') {
+        void pasteClipboard()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [copySelection, handleDeleteSelected, pasteClipboard, redo, undo])
+
   const requestCreateNode = useCallback(
     (type: NodeType, position: { x: number; y: number }) => {
       if (!activeWorkflowId) {
@@ -231,6 +290,11 @@ export function App() {
         workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
         executionStatus={lastExecution?.status ?? null}
         error={error}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={() => void undo()}
+        onRedo={() => void redo()}
+        onAutoLayout={() => void handleAutoLayout()}
         onOpenHistory={() => setShowHistory(true)}
         onDismissError={() => setError(null)}
         onLogout={handleLogout}
@@ -252,7 +316,8 @@ export function App() {
           edges={edges}
           nodeCatalog={nodeCatalog}
           runDisabledReason={activeWorkflowId ? runDisabledReason : null}
-          onSelectNode={setSelectedNodeId}
+          selectedCount={selectedNodeIds.length}
+          onSelectionChange={handleSelectionChange}
           onNodesChange={handleNodesChange}
           onMoveNode={handleMoveNode}
           onConnect={handleConnect}

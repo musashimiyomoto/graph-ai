@@ -8,6 +8,7 @@ import type {
   NodeChange,
   NodeMouseHandler,
   NodeTypes,
+  OnSelectionChangeFunc,
 } from 'reactflow'
 import ReactFlow, {
   Background,
@@ -15,6 +16,7 @@ import ReactFlow, {
   Controls,
   MarkerType,
   ReactFlowProvider,
+  SelectionMode,
   useReactFlow,
 } from 'reactflow'
 
@@ -27,7 +29,8 @@ interface GraphCanvasProps {
   edges: Edge[]
   nodeCatalog: NodeCatalogItem[]
   runDisabledReason: string | null
-  onSelectNode: (id: string | null) => void
+  selectedCount: number
+  onSelectionChange: (nodeIds: string[], edgeIds: string[]) => void
   onNodesChange: (changes: NodeChange[]) => void
   onMoveNode: (id: string, x: number, y: number) => void
   onConnect: (sourceId: string, targetId: string, sourceHandle: string | null) => void
@@ -49,7 +52,8 @@ function GraphCanvasInner({
   edges,
   nodeCatalog,
   runDisabledReason,
-  onSelectNode,
+  selectedCount,
+  onSelectionChange,
   onNodesChange,
   onMoveNode,
   onConnect,
@@ -188,6 +192,16 @@ function GraphCanvasInner({
     setContextMenu(null)
   }, [])
 
+  const handleSelectionChange = useCallback<OnSelectionChangeFunc>(
+    ({ nodes: selectedNodes, edges: selectedEdges }) => {
+      onSelectionChange(
+        selectedNodes.map((node) => node.id),
+        selectedEdges.map((edge) => edge.id),
+      )
+    },
+    [onSelectionChange],
+  )
+
   return (
     <section className="pixel-canvas relative h-full">
       <ReactFlow
@@ -195,14 +209,21 @@ function GraphCanvasInner({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
-        onNodeClick={(_, node) => {
-          onSelectNode(node.id)
-          setContextMenu(null)
-        }}
-        onPaneClick={() => {
-          onSelectNode(null)
-          setContextMenu(null)
-        }}
+        onSelectionChange={handleSelectionChange}
+        // Left-drag box-selects (rather than panning) once multi-select
+        // exists; pan moves to middle/right-mouse-drag instead. Delete/
+        // Backspace is handled by our own app-level shortcut (which calls
+        // the delete API + records an undo command) instead of React
+        // Flow's built-in `deleteKeyCode`, which would otherwise silently
+        // drop selected nodes from local state without deleting them
+        // server-side.
+        selectionMode={SelectionMode.Partial}
+        selectionOnDrag
+        panOnDrag={[1, 2]}
+        multiSelectionKeyCode="Shift"
+        deleteKeyCode={null}
+        onNodeClick={() => setContextMenu(null)}
+        onPaneClick={() => setContextMenu(null)}
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}
         onNodeDragStop={(_, node) =>
@@ -227,6 +248,11 @@ function GraphCanvasInner({
       {runDisabledReason ? (
         <div className="pixel-pill absolute left-3 top-3 z-10 max-w-[70%] text-[var(--muted)]">
           Can't run: {runDisabledReason}
+        </div>
+      ) : null}
+      {selectedCount > 1 ? (
+        <div className="pixel-pill absolute right-3 top-3 z-10 text-[var(--muted)]">
+          {selectedCount} selected
         </div>
       ) : null}
       {contextMenu ? (
