@@ -21,9 +21,17 @@ _SCROLL_PAGE_SIZE = 500
 
 
 def get_qdrant_client() -> AsyncQdrantClient:
-    """Build a fresh Qdrant client from global settings."""
+    """Build a fresh Qdrant client from global settings.
+
+    A generous explicit timeout replaces the client's ~5s default — first-time
+    collection creation can take longer than that under I/O contention, and a
+    client-side timeout there surfaces as a 500 even though the server-side
+    operation went on to succeed.
+    """
     return AsyncQdrantClient(
-        host=rag_settings.qdrant_host, port=rag_settings.qdrant_port
+        host=rag_settings.qdrant_host,
+        port=rag_settings.qdrant_port,
+        timeout=30,
     )
 
 
