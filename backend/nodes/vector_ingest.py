@@ -112,7 +112,9 @@ DEFINITION = NodeDefinition(
                 help="Qdrant collection to store chunks in. Pick an existing "
                 "one or type a new name to create it.",
             ),
-            datasource=NodeFieldDataSource(kind=NodeFieldDataSourceKind.VECTOR_COLLECTION),
+            datasource=NodeFieldDataSource(
+                kind=NodeFieldDataSourceKind.VECTOR_COLLECTION
+            ),
             default="",
         ),
         NodeFieldSpec(

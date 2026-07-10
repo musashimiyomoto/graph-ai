@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { ActivityLog } from './components/ActivityLog'
 import { AppShell } from './components/AppShell'
 import { AuthScreen } from './components/AuthScreen'
 import { ChatPanel } from './components/ChatPanel'
@@ -8,6 +9,7 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { HistoryOverlay } from './components/HistoryOverlay'
 import { InspectorPanel } from './components/InspectorPanel'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
+import { useActivityLog } from './hooks/useActivityLog'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useExecutions } from './hooks/useExecutions'
 import { useGraphState } from './hooks/useGraphState'
@@ -107,6 +109,15 @@ export function App() {
     activeWorkflowId,
     setLoading,
     setError,
+    handleError,
+  })
+
+  const {
+    executions: activityLogExecutions,
+    loading: activityLogLoading,
+  } = useActivityLog({
+    token,
+    activeWorkflowId,
     handleError,
   })
 
@@ -333,23 +344,48 @@ export function App() {
       </AppShell>
 
       {showHistory ? (
-        <HistoryOverlay onClose={() => setShowHistory(false)}>
-          <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
-            <ChatPanel
-              workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-              hasWorkflow={activeWorkflowId !== null}
-              activeWorkflowId={activeWorkflowId}
-              executions={executions}
-              liveTokens={liveTokens}
-              lastExecution={lastExecution}
-              runEnabled={runEnabled}
-              runDisabledReason={runDisabledReason}
-              loading={loading}
-              nodeMetaByNodeId={nodeMetaByNodeId}
-              onRun={handleRun}
-            />
-          </div>
-        </HistoryOverlay>
+        <HistoryOverlay
+          onClose={() => setShowHistory(false)}
+          defaultTabId="test-runs"
+          tabs={[
+            {
+              id: 'test-runs',
+              label: 'Test Runs',
+              content: (
+                <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
+                  <ChatPanel
+                    workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+                    hasWorkflow={activeWorkflowId !== null}
+                    activeWorkflowId={activeWorkflowId}
+                    executions={executions}
+                    liveTokens={liveTokens}
+                    lastExecution={lastExecution}
+                    runEnabled={runEnabled}
+                    runDisabledReason={runDisabledReason}
+                    loading={loading}
+                    nodeMetaByNodeId={nodeMetaByNodeId}
+                    onRun={handleRun}
+                  />
+                </div>
+              ),
+            },
+            {
+              id: 'activity-log',
+              label: 'Activity Log',
+              content: (
+                <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
+                  <ActivityLog
+                    workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+                    hasWorkflow={activeWorkflowId !== null}
+                    executions={activityLogExecutions}
+                    loading={activityLogLoading}
+                    nodeMetaByNodeId={nodeMetaByNodeId}
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
       ) : null}
 
       <CreateNodeDialog

@@ -11,3 +11,15 @@ class ExecutionStatus(StrEnum):
     SUCCESS = auto()
     FAILED = auto()
     SKIPPED = auto()
+
+
+class ExecutionSource(StrEnum):
+    """What triggered a workflow execution.
+
+    Separates a workflow owner's own test runs from real end-user traffic, so
+    the frontend can show them in distinct views (Test Runs vs Activity Log)
+    instead of one merged list.
+    """
+
+    MANUAL = auto()
+    TELEGRAM = auto()

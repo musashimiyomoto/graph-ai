@@ -725,14 +725,10 @@ class TestVectorIngestNode:
         handler = VectorIngestNodeHandler()
 
         await handler.execute(
-            _context(
-                {"collection": "docs", "source": "doc-a"}, parent_values=["hello"]
-            )
+            _context({"collection": "docs", "source": "doc-a"}, parent_values=["hello"])
         )
         await handler.execute(
-            _context(
-                {"collection": "docs", "source": "doc-b"}, parent_values=["world"]
-            )
+            _context({"collection": "docs", "source": "doc-b"}, parent_values=["world"])
         )
 
         sources = {payload["source"] for _, payload in client.collections["docs"]}
@@ -750,9 +746,7 @@ class TestVectorIngestNode:
         handler = VectorIngestNodeHandler()
 
         await handler.execute(
-            _context(
-                {"collection": "docs", "label": "My Doc"}, parent_values=["hello"]
-            )
+            _context({"collection": "docs", "label": "My Doc"}, parent_values=["hello"])
         )
 
         if client.collections["docs"][0][1]["source"] != "My Doc":

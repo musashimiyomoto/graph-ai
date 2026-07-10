@@ -4,6 +4,12 @@ export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
 
 export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 
+// What triggered an execution: the owner testing the flow, or real inbound
+// traffic (currently only Telegram). Lets the UI split "Test Runs" (a
+// sandbox for trying the flow before it's relied on) from "Activity Log"
+// (real usage) instead of merging them into one list.
+export type ExecutionSource = 'manual' | 'telegram'
+
 export interface RunInputPayload {
   value: string
 }
@@ -59,12 +65,19 @@ export interface Execution {
   workflow_id: number
   version_id: number | null
   status: ExecutionStatus
+  source: ExecutionSource
   input_data: RunInputPayload | null
   output_data: Record<string, unknown> | null
   error: string | null
   prefect_flow_run_id: string | null
   started_at: string
   finished_at: string | null
+}
+
+export interface NodeMeta {
+  type: string
+  label: string
+  portType: PortType | null
 }
 
 export interface WorkflowVersion {

@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from enums import ExecutionStatus, NodeType
+from enums import ExecutionSource, ExecutionStatus, NodeType
 
 
 class ExecutionInputPayload(BaseModel):
@@ -69,6 +69,7 @@ class ExecutionResponse(BaseModel):
         default=None, description="Pinned workflow version ID"
     )
     status: ExecutionStatus = Field(default=..., description="Execution status")
+    source: ExecutionSource = Field(default=..., description="What triggered this run")
     input_data: ExecutionInputPayload | None = Field(
         default=None,
         description="Execution input",

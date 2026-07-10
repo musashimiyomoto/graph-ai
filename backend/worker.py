@@ -13,7 +13,13 @@ from db.repositories import (
     TelegramBotRepository,
     WorkflowRepository,
 )
-from enums import ExecutionStatus, InputNodeFormat, NodeType, OutputNodeFormat
+from enums import (
+    ExecutionSource,
+    ExecutionStatus,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+)
 from exceptions import BaseError, TelegramAPIError
 from integrations.telegram import get_updates, send_message
 from llm.ollama import OllamaClient
@@ -23,7 +29,7 @@ from schemas import ExecutionCreate, ExecutionInputPayload
 from sessions import async_session
 from settings import redis_settings
 from streaming import publish_pull_progress, publish_token, publish_token_reset
-from usecases import ExecutionUsecase, VectorUsecase
+from usecases import ExecutionTrigger, ExecutionUsecase, VectorUsecase
 from utils.encryption import decrypt
 
 if TYPE_CHECKING:
@@ -396,7 +402,9 @@ async def _trigger_executions(
                     input_data=ExecutionInputPayload(value=text),
                 ),
                 enqueue=enqueue,
-                telegram_chat_id=chat_id,
+                trigger=ExecutionTrigger(
+                    source=ExecutionSource.TELEGRAM, telegram_chat_id=chat_id
+                ),
             )
         except BaseError:
             logger.exception(

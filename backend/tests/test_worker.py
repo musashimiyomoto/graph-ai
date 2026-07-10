@@ -17,7 +17,7 @@ from tests.factories import (
     WorkflowFactory,
 )
 from tests.test_api.base import BaseTestCase
-from usecases import ExecutionUsecase
+from usecases import ExecutionTrigger, ExecutionUsecase
 
 _FAKE_CHAT_ID = 999
 _FAKE_UPDATE_ID = 501
@@ -204,7 +204,7 @@ class TestTelegramReply(BaseTestCase):
                 input_data=ExecutionInputPayload(value="hello"),
             ),
             enqueue=_noop_enqueue,
-            telegram_chat_id=_FAKE_CHAT_ID,
+            trigger=ExecutionTrigger(telegram_chat_id=_FAKE_CHAT_ID),
         )
 
         await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)
@@ -346,7 +346,7 @@ class TestTelegramReply(BaseTestCase):
                 input_data=ExecutionInputPayload(value="hello"),
             ),
             enqueue=_noop_enqueue,
-            telegram_chat_id=_FAKE_CHAT_ID,
+            trigger=ExecutionTrigger(telegram_chat_id=_FAKE_CHAT_ID),
         )
 
         await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)

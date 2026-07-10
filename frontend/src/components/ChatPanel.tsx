@@ -1,29 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { getExecutionNodeResults, getWorkflowVersions } from '../lib/api'
+import { getWorkflowVersions } from '../lib/api'
 import type { LiveTokens } from '../hooks/useExecutions'
+import { formatTime, STATUS_COLORS } from '../lib/executionFormat'
 import type {
   Execution,
   ExecutionStatus,
-  NodeExecutionResult,
-  PortType,
+  NodeMeta,
   RunInputPayload,
 } from '../lib/types'
 import { ACTIVE_STATUSES } from '../lib/types'
-import { OutputRenderer } from './OutputRenderer'
-
-export interface NodeMeta {
-  type: string
-  label: string
-  portType: PortType | null
-}
-
-const STATUS_COLORS: Record<ExecutionStatus, string> = {
-  created: 'text-[var(--muted)]',
-  running: 'text-[var(--accent-2)]',
-  success: 'text-[var(--accent)]',
-  failed: 'text-[var(--danger)]',
-}
+import { ExecutionDetails } from './ExecutionDetails'
 
 interface ChatPanelProps {
   workflowName: string
@@ -47,35 +34,6 @@ interface ChatTurn {
   output: string
   error: string | null
   isActive: boolean
-}
-
-function formatTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) {
-    return '—'
-  }
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatDuration(startedAt: string, finishedAt: string | null): string | null {
-  if (!finishedAt) {
-    return null
-  }
-  const start = new Date(startedAt).getTime()
-  const finish = new Date(finishedAt).getTime()
-  if (Number.isNaN(start) || Number.isNaN(finish) || finish < start) {
-    return null
-  }
-  const ms = finish - start
-  if (ms < 1000) {
-    return `${ms}ms`
-  }
-  return `${(ms / 1000).toFixed(1)}s`
 }
 
 // The Output node is the only one whose stream is user-facing; the other
@@ -222,7 +180,7 @@ export function ChatPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="mb-3 flex items-center justify-between">
-        <div className="pixel-section-title">Chat · {workflowName}</div>
+        <div className="pixel-section-title">Test Runs · {workflowName}</div>
         {isRunning ? (
           <div className="flex items-center gap-2">
             <span className="live-dot" />
@@ -235,8 +193,8 @@ export function ChatPanel({
         {turns.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
             {hasWorkflow
-              ? 'No runs yet. Send a message to test this flow.'
-              : 'Select a workflow in Build mode to start chatting.'}
+              ? 'No test runs yet. Send a message to try this flow before it goes live.'
+              : 'Select a workflow in Build mode to start testing.'}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -293,22 +251,6 @@ function ChatTurnView({
   versionNumber: number | undefined
   nodeMetaByNodeId: Map<number, NodeMeta>
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [nodeResults, setNodeResults] = useState<NodeExecutionResult[] | null>(null)
-  const [nodeResultsLoading, setNodeResultsLoading] = useState(false)
-
-  function toggleDetails(): void {
-    const opening = !detailsOpen
-    setDetailsOpen(opening)
-    if (opening && nodeResults === null) {
-      setNodeResultsLoading(true)
-      getExecutionNodeResults(turn.id)
-        .then((results) => setNodeResults(results))
-        .catch(() => setNodeResults([]))
-        .finally(() => setNodeResultsLoading(false))
-    }
-  }
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex justify-end">
@@ -328,55 +270,8 @@ function ChatTurnView({
         {turn.execution.finished_at ? (
           <span>→ {formatTime(turn.execution.finished_at)}</span>
         ) : null}
-        <button
-          type="button"
-          className="pixel-link underline"
-          onClick={toggleDetails}
-        >
-          {detailsOpen ? 'Hide details' : 'Details'}
-        </button>
+        <ExecutionDetails executionId={turn.id} nodeMetaByNodeId={nodeMetaByNodeId} />
       </div>
-      {detailsOpen ? (
-        <div className="pixel-panel ml-1 flex flex-col gap-2 px-3 py-2 text-xs">
-          {nodeResultsLoading ? (
-            <div className="text-[var(--muted)]">Loading node results…</div>
-          ) : !nodeResults || nodeResults.length === 0 ? (
-            <div className="text-[var(--muted)]">No node results recorded.</div>
-          ) : (
-            nodeResults.map((nodeResult) => {
-              const meta = nodeMetaByNodeId.get(nodeResult.node_id)
-              const duration = formatDuration(
-                nodeResult.started_at,
-                nodeResult.finished_at,
-              )
-              return (
-                <div key={nodeResult.id} className="border-b border-white/10 pb-2 last:border-0 last:pb-0">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--muted)]">
-                    <span className="pixel-pill text-[10px] normal-case">
-                      {meta?.label ??
-                        nodeResult.node_label ??
-                        `Node #${nodeResult.node_id}`}
-                    </span>
-                    <span className={STATUS_COLORS[nodeResult.status]}>
-                      {nodeResult.status}
-                    </span>
-                    {duration ? <span>{duration}</span> : null}
-                  </div>
-                  {nodeResult.output !== null ? (
-                    <OutputRenderer
-                      value={nodeResult.output}
-                      portType={meta?.portType ?? null}
-                    />
-                  ) : null}
-                  {nodeResult.error ? (
-                    <div className="text-[var(--danger)]">{nodeResult.error}</div>
-                  ) : null}
-                </div>
-              )
-            })
-          )}
-        </div>
-      ) : null}
     </div>
   )
 }

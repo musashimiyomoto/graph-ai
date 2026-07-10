@@ -36,7 +36,7 @@ from db.repositories import (
     WorkflowRepository,
     WorkflowVersionRepository,
 )
-from enums import ExecutionStatus, NodeType
+from enums import ExecutionSource, ExecutionStatus, NodeType
 from exceptions import (
     BaseError,
     ExecutionGraphValidationError,
@@ -139,6 +139,27 @@ class _Adjacency:
     indegree: dict[int, int]
 
 
+@dataclass(frozen=True)
+class ExecutionTrigger:
+    """Internal-only metadata about what triggered an execution.
+
+    Never set by the public API (which always creates a manual test run via
+    the default); the Telegram poller passes ``source=ExecutionSource.
+    TELEGRAM`` with the chat to reply to once the run finishes.
+    """
+
+    source: ExecutionSource = ExecutionSource.MANUAL
+    telegram_chat_id: int | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionListFilter:
+    """Filter for listing a workflow's executions."""
+
+    workflow_id: int
+    source: ExecutionSource | None = None
+
+
 class ExecutionUsecase:
     """Execution business logic."""
 
@@ -164,7 +185,7 @@ class ExecutionUsecase:
         user_id: int,
         data: ExecutionCreate,
         enqueue: Callable[[int], Awaitable[None]],
-        telegram_chat_id: int | None = None,
+        trigger: ExecutionTrigger | None = None,
     ) -> ExecutionResponse:
         """Validate a workflow, persist a queued execution, and enqueue it.
 
@@ -177,9 +198,9 @@ class ExecutionUsecase:
             user_id: The owner user ID.
             data: The execution payload.
             enqueue: Callback that schedules the execution for background running.
-            telegram_chat_id: Internal-only. Set by the Telegram poller (never by
-                the public API) so the worker knows which chat to reply to once
-                the run finishes.
+            trigger: What triggered this run and, for Telegram, which chat to
+                reply to. Defaults to a manual test run; only internal callers
+                (the Telegram poller) pass a non-default value.
 
         Returns:
             The created execution in ``CREATED`` (queued) state.
@@ -189,6 +210,7 @@ class ExecutionUsecase:
             ExecutionGraphValidationError: If graph is invalid for execution.
 
         """
+        trigger = trigger or ExecutionTrigger()
         workflow = await self._workflow_repository.get_by(
             session=session,
             id=data.workflow_id,
@@ -220,7 +242,8 @@ class ExecutionUsecase:
                 "version_id": version.id,
                 "input_data": data.input_data.model_dump(),
                 "status": ExecutionStatus.CREATED,
-                "telegram_chat_id": telegram_chat_id,
+                "source": trigger.source,
+                "telegram_chat_id": trigger.telegram_chat_id,
             },
         )
         await session.commit()
@@ -571,7 +594,7 @@ class ExecutionUsecase:
         self,
         session: AsyncSession,
         user_id: int,
-        workflow_id: int,
+        list_filter: ExecutionListFilter,
         limit: int = DEFAULT_PAGE_SIZE,
         offset: int = 0,
     ) -> list[ExecutionResponse]:
@@ -580,7 +603,9 @@ class ExecutionUsecase:
         Args:
             session: The session.
             user_id: The owner user ID.
-            workflow_id: The workflow ID.
+            list_filter: The workflow to list, and optionally restrict to
+                executions triggered a specific way (e.g. only the owner's
+                manual test runs, or only real Telegram traffic).
             limit: Maximum executions to return.
             offset: Executions to skip (for paging).
 
@@ -592,10 +617,14 @@ class ExecutionUsecase:
 
         """
         workflow = await self._workflow_repository.get_by(
-            session=session, id=workflow_id, owner_id=user_id
+            session=session, id=list_filter.workflow_id, owner_id=user_id
         )
         if not workflow:
             raise WorkflowNotFoundError
+
+        filters: dict[str, object] = {"workflow_id": list_filter.workflow_id}
+        if list_filter.source is not None:
+            filters["source"] = list_filter.source
 
         return [
             ExecutionResponse.model_validate(execution)
@@ -604,7 +633,7 @@ class ExecutionUsecase:
                 limit=limit,
                 offset=offset,
                 descending=True,
-                workflow_id=workflow_id,
+                **filters,
             )
         ]
 

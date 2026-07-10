@@ -3,6 +3,7 @@ import type {
   EdgeCreatePayload,
   EdgeResponse,
   Execution,
+  ExecutionSource,
   ExecutionStreamEvent,
   LlmModel,
   LlmProvider,
@@ -189,8 +190,12 @@ export async function deleteEdge(edgeId: number): Promise<void> {
 
 export async function getExecutions(
   workflowId: number,
+  source?: ExecutionSource,
 ): Promise<Execution[]> {
-  return request<Execution[]>(`/executions?workflow_id=${workflowId}`)
+  const query = source
+    ? `workflow_id=${workflowId}&source=${source}`
+    : `workflow_id=${workflowId}`
+  return request<Execution[]>(`/executions?${query}`)
 }
 
 export async function getExecutionNodeResults(

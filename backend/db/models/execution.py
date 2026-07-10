@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models import BaseWithID
-from enums import ExecutionStatus
+from enums import ExecutionSource, ExecutionStatus
 
 
 class Execution(BaseWithID):
@@ -32,6 +32,13 @@ class Execution(BaseWithID):
         Enum(ExecutionStatus),
         default=ExecutionStatus.CREATED,
         comment="Execution status",
+    )
+    source: Mapped[ExecutionSource] = mapped_column(
+        Enum(ExecutionSource),
+        default=ExecutionSource.MANUAL,
+        server_default=ExecutionSource.MANUAL.name,
+        nullable=False,
+        comment="What triggered this execution (manual test run vs Telegram traffic)",
     )
     input_data: Mapped[dict | None] = mapped_column(
         JSONB, comment="Input data for execution"

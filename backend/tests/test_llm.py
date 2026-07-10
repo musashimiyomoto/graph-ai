@@ -284,9 +284,7 @@ class TestOllamaPullModel:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Each NDJSON line is parsed and yielded as a progress object."""
-        monkeypatch.setattr(
-            "llm.ollama.httpx.AsyncClient", _DummyPullStreamingClient
-        )
+        monkeypatch.setattr("llm.ollama.httpx.AsyncClient", _DummyPullStreamingClient)
 
         client = OllamaClient(base_url="http://ollama:11434", timeout=1.0)
         collected = [progress async for progress in client.pull_model("llama3.2:1b")]
@@ -327,7 +325,7 @@ class TestOllamaDeleteModel:
                 return False
 
             async def request(
-                self, method: str, *args: object, **kwargs: object
+                self, method: str, *_args: object, **kwargs: object
             ) -> DummyResponse:
                 """Record the request method/body and return a response."""
                 captured["method"] = method

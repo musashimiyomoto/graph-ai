@@ -46,7 +46,9 @@ export function useExecutions({
     async (workflowId: number): Promise<void> => {
       setExecutionsLoading(true)
       try {
-        const items = await getExecutions(workflowId)
+        // Scoped to the owner's own test runs — real inbound traffic (e.g.
+        // Telegram) is shown separately in the Activity Log.
+        const items = await getExecutions(workflowId, 'manual')
         setExecutions(items)
         const latest = [...items].sort((first, second) => second.id - first.id)[0] ?? null
         setLastExecution(latest)
@@ -97,7 +99,7 @@ export function useExecutions({
           return
         }
         try {
-          const items = await getExecutions(workflowId)
+          const items = await getExecutions(workflowId, 'manual')
           setExecutions(items)
           const current = items.find((item) => item.id === executionId)
           if (current) {

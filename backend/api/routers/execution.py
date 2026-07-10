@@ -4,7 +4,7 @@ from http import HTTPStatus
 from typing import Annotated
 
 from arq import ArqRedis
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,6 +16,7 @@ from schemas import (
     NodeExecutionResponse,
     UserResponse,
 )
+from usecases import ExecutionListFilter
 
 router = APIRouter(prefix="/executions", tags=["Executions"])
 
@@ -50,7 +51,6 @@ async def create_execution(
 
 @router.get(path="")
 async def list_executions(
-    workflow_id: Annotated[int, Query(gt=0)],
     session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
     usecase: Annotated[
         execution.ExecutionUsecase,
@@ -58,12 +58,15 @@ async def list_executions(
     ],
     current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
     pagination: Annotated[Pagination, Depends(dependency=get_pagination)],
+    list_filter: Annotated[
+        ExecutionListFilter, Depends(dependency=execution.get_execution_list_filter)
+    ],
 ) -> list[ExecutionResponse]:
     """List executions for a workflow, newest first."""
     return await usecase.get_executions(
         session=session,
         user_id=current_user.id,
-        workflow_id=workflow_id,
+        list_filter=list_filter,
         limit=pagination.limit,
         offset=pagination.offset,
     )
