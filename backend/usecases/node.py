@@ -31,6 +31,24 @@ from schemas import (
 )
 
 
+def _field_is_visible(field: NodeFieldSpec, data: dict[str, Any]) -> bool:
+    """Mirror the frontend's declarative `visible_when` check.
+
+    A field hidden by its `visible_when` rule (e.g. a Telegram bot picker
+    when `format != telegram`) may still carry a leftover/placeholder value
+    in `data` — it must not be reference-checked, or a value that only makes
+    sense while the field is visible (or a stale default) would wrongly fail
+    validation for a node where that field is irrelevant.
+    """
+    rule = field.visible_when
+    if rule is None:
+        return True
+    controlling_value = data.get(rule.field)
+    if rule.equals is not None:
+        return controlling_value == rule.equals
+    return controlling_value != rule.not_equals
+
+
 class NodeUsecase:
     """Node business logic."""
 
@@ -202,6 +220,7 @@ class NodeUsecase:
                 field.datasource is None
                 or field.name not in data
                 or data[field.name] is None
+                or not _field_is_visible(field, data)
             ):
                 continue
 
