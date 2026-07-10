@@ -59,6 +59,7 @@ export function ProviderSettings({ onError }: ProviderSettingsProps) {
   const apiKeyMissing = spec.requiresApiKey && !apiKey.trim()
   const {
     providers,
+    loading,
     creating,
     createProvider,
     removeProvider,
@@ -114,7 +115,9 @@ export function ProviderSettings({ onError }: ProviderSettingsProps) {
   return (
     <div>
       <div className="flex flex-col gap-3">
-        {providers.length === 0 ? (
+        {loading ? (
+          <div className="text-xs text-[var(--muted)]">Loading providers...</div>
+        ) : providers.length === 0 ? (
           <div className="text-xs text-[var(--muted)]">
             No providers yet.
           </div>

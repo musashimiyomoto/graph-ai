@@ -12,7 +12,7 @@ export function TelegramSettings({ onError }: TelegramSettingsProps) {
   const [botToken, setBotToken] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
-  const { bots, creating, createBot, removeBot } = useTelegramBots({ onError })
+  const { bots, loading, creating, createBot, removeBot } = useTelegramBots({ onError })
 
   async function handleCreate(): Promise<void> {
     try {
@@ -37,7 +37,9 @@ export function TelegramSettings({ onError }: TelegramSettingsProps) {
   return (
     <div>
       <div className="flex flex-col gap-3">
-        {bots.length === 0 ? (
+        {loading ? (
+          <div className="text-xs text-[var(--muted)]">Loading bots...</div>
+        ) : bots.length === 0 ? (
           <div className="text-xs text-[var(--muted)]">
             No bots yet.
           </div>

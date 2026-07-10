@@ -91,7 +91,12 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { collections, removeCollection, refreshCollections } = useVectorCollections({
+  const {
+    collections,
+    loading: collectionsLoading,
+    removeCollection,
+    refreshCollections,
+  } = useVectorCollections({
     onError,
   })
 
@@ -145,7 +150,9 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
   return (
     <div>
       <div className="flex flex-col gap-3">
-        {collections.length === 0 ? (
+        {collectionsLoading ? (
+          <div className="text-xs text-[var(--muted)]">Loading collections...</div>
+        ) : collections.length === 0 ? (
           <div className="text-xs text-[var(--muted)]">No collections yet.</div>
         ) : null}
         {collections.map((collection) => (

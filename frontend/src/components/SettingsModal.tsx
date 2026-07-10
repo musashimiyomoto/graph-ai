@@ -28,10 +28,6 @@ const SECTIONS: SettingsSection[] = [
 export function SettingsModal({ onClose, onError }: SettingsModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string>(SECTIONS[0].id)
 
-  const activeSection =
-    SECTIONS.find((section) => section.id === activeSectionId) ?? SECTIONS[0]
-  const ActiveComponent = activeSection.Component
-
   return (
     <Modal onClose={onClose} maxWidth="max-w-2xl">
       <div className="mb-4 flex items-center justify-between">
@@ -57,8 +53,19 @@ export function SettingsModal({ onClose, onError }: SettingsModalProps) {
           ))}
         </div>
 
-        <div className="min-w-0 flex-1 border-l border-white/10 pl-4">
-          <ActiveComponent onError={onError} />
+        <div className="min-h-[22rem] min-w-0 flex-1 border-l border-white/10 pl-4">
+          {/* All sections stay mounted for the lifetime of the modal instead of
+              swapping in/out — otherwise every tab click unmounts the previous
+              section (losing its state) and remounts the next one, which
+              re-fires its data fetch and makes the panel visibly pop from an
+              empty state to loaded content each time. Mounting once and just
+              toggling visibility keeps switches instant and jump-free after
+              the first load. */}
+          {SECTIONS.map((section) => (
+            <div key={section.id} className={section.id === activeSectionId ? '' : 'hidden'}>
+              <section.Component onError={onError} />
+            </div>
+          ))}
         </div>
       </div>
     </Modal>
