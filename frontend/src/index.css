@@ -282,6 +282,56 @@ body {
   animation: live-pulse 1.2s ease-in-out infinite;
 }
 
+/* Themed combobox used for the Collection field (node config + upload panel),
+   replacing the unstyleable native <datalist> popup. */
+.pixel-combobox {
+  position: relative;
+  width: 100%;
+}
+
+.pixel-combobox-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: #0b0d14;
+  border: 2px solid rgba(53, 255, 188, 0.4);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
+}
+
+.pixel-combobox-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.pixel-combobox-option:hover {
+  background: rgba(53, 255, 188, 0.12);
+  color: var(--accent);
+}
+
+.pixel-combobox-option.create {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
 .pixel-label {
   display: flex;
   flex-direction: column;
