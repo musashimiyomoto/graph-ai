@@ -86,6 +86,7 @@ DEFINITION = NodeDefinition(
                     "for manual (non-Telegram-triggered) runs. Leave blank to "
                     "reply to whichever chat triggered the run."
                 ),
+                step=1,
             ),
             visible_when=NodeFieldVisibility(
                 field="format", equals=OutputNodeFormat.TELEGRAM.value

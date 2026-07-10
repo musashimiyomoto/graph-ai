@@ -1,10 +1,11 @@
-const NUMBER_STEP = 0.1
+const DEFAULT_STEP = 0.1
 
 interface NumberInputProps {
   displayValue: number | ''
   placeholder?: string
   min?: number
   max?: number
+  step?: number
   onChangeRaw: (raw: string) => void
 }
 
@@ -13,8 +14,13 @@ export function NumberInput({
   placeholder,
   min,
   max,
+  step = DEFAULT_STEP,
   onChangeRaw,
 }: NumberInputProps) {
+  // Round to the step's own precision so an integer step (1) never yields a
+  // fractional value and a 0.1 step doesn't drift into float noise.
+  const decimals = Number.isInteger(step) ? 0 : String(step).split('.')[1].length
+
   function clamp(next: number): number {
     let result = next
     if (min !== undefined) {
@@ -28,7 +34,7 @@ export function NumberInput({
 
   function stepBy(direction: number): void {
     const base = displayValue === '' ? min ?? 0 : displayValue
-    const next = clamp(Number((base + direction * NUMBER_STEP).toFixed(4)))
+    const next = clamp(Number((base + direction * step).toFixed(decimals)))
     onChangeRaw(String(next))
   }
 
@@ -36,9 +42,14 @@ export function NumberInput({
     if (displayValue === '' || Number.isNaN(displayValue)) {
       return
     }
-    const clamped = clamp(displayValue)
-    if (clamped !== displayValue) {
-      onChangeRaw(String(clamped))
+    // Snap integer-stepped fields (top_k, max_tokens, …) to a whole number so a
+    // manually typed decimal can't slip through; leave float fields untouched.
+    let result = clamp(displayValue)
+    if (Number.isInteger(step)) {
+      result = Math.round(result)
+    }
+    if (result !== displayValue) {
+      onChangeRaw(String(result))
     }
   }
 
@@ -51,7 +62,7 @@ export function NumberInput({
         placeholder={placeholder ?? ''}
         min={min}
         max={max}
-        step={NUMBER_STEP}
+        step={step}
         onChange={(event) => onChangeRaw(event.target.value)}
         onBlur={handleBlur}
       />

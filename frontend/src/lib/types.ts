@@ -154,6 +154,7 @@ export interface NodeCatalogFieldUI {
   label: string
   placeholder: string | null
   help: string | null
+  step: number | null
 }
 
 export interface NodeCatalogFieldDataSource {

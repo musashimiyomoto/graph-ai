@@ -73,6 +73,7 @@ function NumberField({
       displayValue={displayValue}
       min={field.validators.ge}
       max={field.validators.le}
+      step={field.ui.step ?? undefined}
       onChangeRaw={(raw) => onChange(raw === '' ? '' : Number(raw))}
     />
   )
@@ -96,6 +97,7 @@ function OptionalNumberField({
       placeholder="default"
       min={field.validators.ge}
       max={field.validators.le}
+      step={field.ui.step ?? undefined}
       onChangeRaw={(raw) => onChange(raw === '' ? null : Number(raw))}
     />
   )

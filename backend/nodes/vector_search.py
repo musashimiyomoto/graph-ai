@@ -136,6 +136,7 @@ DEFINITION = NodeDefinition(
                 widget=NodeFieldWidget.NUMBER,
                 label="Top K",
                 help="How many matching chunks to return.",
+                step=1,
             ),
             default=4,
         ),

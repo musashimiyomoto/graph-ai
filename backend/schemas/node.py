@@ -40,6 +40,11 @@ class NodeFieldUI(BaseModel):
     label: str = Field(default=..., description="Display label")
     placeholder: str | None = Field(default=None, description="Input placeholder")
     help: str | None = Field(default=None, description="Help text")
+    step: float | None = Field(
+        default=None,
+        description="Numeric stepper increment; use 1 for integer fields "
+        "(the UI defaults to 0.1 when unset)",
+    )
 
 
 class NodeFieldDataSource(BaseModel):

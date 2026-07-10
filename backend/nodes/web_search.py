@@ -232,6 +232,7 @@ DEFINITION = NodeDefinition(
                 widget=NodeFieldWidget.NUMBER,
                 label="Max results",
                 help="How many search results to include in output.",
+                step=1,
             ),
             default=5,
         ),

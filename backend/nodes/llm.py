@@ -219,6 +219,7 @@ DEFINITION = NodeDefinition(
                 widget=NodeFieldWidget.OPTIONAL_NUMBER,
                 label="Max tokens",
                 help="Maximum tokens to generate. Leave blank for the default.",
+                step=1,
             ),
         ),
         NodeFieldSpec(
