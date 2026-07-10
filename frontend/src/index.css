@@ -397,6 +397,14 @@ body {
   border-color: rgba(53, 255, 188, 0.5);
 }
 
+/* Vertical tab lists (e.g. settings sidebar) shouldn't stretch to fill the
+   column's height — that's what makes buttons grow/shrink as sibling
+   content changes size. Fix each tab to its own content height instead. */
+.pixel-tab-vertical {
+  flex: none;
+  text-align: left;
+}
+
 .pixel-card {
   display: flex;
   align-items: center;

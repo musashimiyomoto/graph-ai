@@ -47,7 +47,7 @@ export function SettingsModal({ onClose, onError }: SettingsModalProps) {
             <button
               key={section.id}
               type="button"
-              className={`pixel-tab w-full ${
+              className={`pixel-tab pixel-tab-vertical w-full ${
                 section.id === activeSectionId ? 'is-active' : ''
               }`}
               onClick={() => setActiveSectionId(section.id)}
