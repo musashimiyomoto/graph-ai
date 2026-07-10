@@ -247,6 +247,41 @@ body {
   resize: vertical;
 }
 
+/* The native file picker button clashes with the pixel theme, so style the
+   ::file-selector-button pseudo-element to match .pixel-button.small. */
+.pixel-input[type='file'] {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.pixel-input[type='file']::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 10px;
+  border: 2px solid rgba(0, 0, 0, 0.6);
+  background: var(--accent);
+  color: #04110b;
+  font-family: "Press Start 2P", cursive;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.6);
+  transition: background 0.15s ease;
+}
+
+.pixel-input[type='file']::file-selector-button:hover {
+  background: #5dffd0;
+}
+
+.pixel-processing {
+  border: 2px solid rgba(53, 255, 188, 0.4);
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+
 .pixel-label {
   display: flex;
   flex-direction: column;

@@ -16,11 +16,12 @@ from enums import ExecutionStatus, InputNodeFormat, NodeType, OutputNodeFormat
 from exceptions import BaseError, TelegramAPIError
 from integrations.telegram import get_updates, send_message
 from logging_config import configure_logging
+from rag.qdrant import get_qdrant_client
 from schemas import ExecutionCreate, ExecutionInputPayload
 from sessions import async_session
 from settings import redis_settings
 from streaming import publish_token, publish_token_reset
-from usecases import ExecutionUsecase
+from usecases import ExecutionUsecase, VectorUsecase
 from utils.encryption import decrypt
 
 if TYPE_CHECKING:
@@ -68,6 +69,47 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
             token_reset_publisher=token_reset_publisher,
         )
         await _reply_via_telegram(session=session, execution_id=execution_id)
+
+
+async def ingest_document_task(
+    ctx: dict[Any, Any],
+    collection: str,
+    filename: str,
+    content: bytes,
+    source: str | None,
+) -> dict[str, Any]:
+    """Extract, chunk, embed, and store an uploaded document in the background.
+
+    Enqueued by the Vector Collections upload endpoint so the HTTP request can
+    return immediately. Reuses ``VectorUsecase.upload_document`` for all
+    validation (size, type, empty); any domain error it raises is recorded by
+    ARQ as a failed job and surfaced back through the job-status endpoint.
+
+    Args:
+        ctx: ARQ job context.
+        collection: Collection to store chunks in. Created if missing.
+        filename: The uploaded file's original name.
+        content: The file's raw bytes.
+        source: Document identifier to use instead of the filename, if given.
+
+    Returns:
+        The ingest result (``source`` and ``chunks_ingested``) as a dict, which
+        ARQ stores as the job result.
+
+    """
+    del ctx
+    logger.info("Ingesting %r into collection %r", filename, collection)
+    client = get_qdrant_client()
+    try:
+        result = await VectorUsecase(client).upload_document(
+            collection=collection,
+            filename=filename,
+            content=content,
+            source_override=source,
+        )
+    finally:
+        await client.close()
+    return result.model_dump()
 
 
 async def _reply_via_telegram(session: "AsyncSession", execution_id: int) -> None:
@@ -382,7 +424,7 @@ async def startup(ctx: dict[Any, Any]) -> None:
 class WorkerSettings:
     """ARQ worker configuration."""
 
-    functions: ClassVar[list] = [run_execution_task]
+    functions: ClassVar[list] = [run_execution_task, ingest_document_task]
     cron_jobs: ClassVar[list] = [
         cron(reap_stuck_executions, minute=_REAPER_MINUTES),
         cron(poll_telegram_updates, second=_TELEGRAM_POLL_SECONDS),

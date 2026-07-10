@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import {
-  deleteVectorDocument,
-  getVectorDocuments,
-  uploadVectorDocument,
-} from '../lib/api'
-import type { ApiError, VectorDocument, VectorUploadResult } from '../lib/types'
+import { deleteVectorDocument, getVectorDocuments } from '../lib/api'
+import type { ApiError, VectorDocument } from '../lib/types'
 
 interface UseVectorDocumentsParams {
   collection: string
@@ -16,13 +12,8 @@ interface UseVectorDocumentsParams {
 interface UseVectorDocumentsResult {
   documents: VectorDocument[]
   loading: boolean
-  uploading: boolean
   refreshDocuments: () => Promise<void>
   removeDocument: (source: string) => Promise<boolean>
-  uploadDocument: (
-    file: File,
-    source?: string,
-  ) => Promise<VectorUploadResult | null>
 }
 
 export function useVectorDocuments({
@@ -32,7 +23,6 @@ export function useVectorDocuments({
 }: UseVectorDocumentsParams): UseVectorDocumentsResult {
   const [documents, setDocuments] = useState<VectorDocument[]>([])
   const [loading, setLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
 
   const reportError = useCallback(
     (error: ApiError): void => {
@@ -79,29 +69,10 @@ export function useVectorDocuments({
     [collection, reportError],
   )
 
-  const uploadDocument = useCallback(
-    async (file: File, source?: string): Promise<VectorUploadResult | null> => {
-      setUploading(true)
-      try {
-        const result = await uploadVectorDocument(collection, file, source)
-        await refreshDocuments()
-        return result
-      } catch (error) {
-        reportError(error as ApiError)
-        return null
-      } finally {
-        setUploading(false)
-      }
-    },
-    [collection, refreshDocuments, reportError],
-  )
-
   return {
     documents,
     loading,
-    uploading,
     refreshDocuments,
     removeDocument,
-    uploadDocument,
   }
 }

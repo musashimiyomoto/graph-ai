@@ -1,5 +1,7 @@
 """Schemas for Vector Collections API responses."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -20,9 +22,30 @@ class VectorDocumentResponse(BaseModel):
 
 
 class VectorUploadResponse(BaseModel):
-    """Result of uploading and ingesting a document."""
+    """Result of ingesting a document (the background job's own result shape)."""
 
     source: str = Field(default=..., description="Document identifier used")
     chunks_ingested: int = Field(
         default=..., description="Number of chunks stored", ge=0
+    )
+
+
+class VectorUploadJobResponse(BaseModel):
+    """Acknowledgement that an upload was accepted for background ingestion."""
+
+    job_id: str = Field(default=..., description="Background ingest job identifier")
+    source: str = Field(default=..., description="Document identifier used")
+
+
+class VectorJobStatusResponse(BaseModel):
+    """Current state of a background ingest job."""
+
+    status: Literal["processing", "ready", "failed"] = Field(
+        default=..., description="Job lifecycle state"
+    )
+    chunks_ingested: int | None = Field(
+        default=None, description="Chunks stored, once the job is ready", ge=0
+    )
+    detail: str | None = Field(
+        default=None, description="Failure detail when the job failed"
     )

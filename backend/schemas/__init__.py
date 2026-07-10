@@ -48,6 +48,8 @@ from schemas.user import UserCreate, UserResponse
 from schemas.vector import (
     VectorCollectionResponse,
     VectorDocumentResponse,
+    VectorJobStatusResponse,
+    VectorUploadJobResponse,
     VectorUploadResponse,
 )
 from schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
@@ -99,6 +101,8 @@ __all__ = [
     "UserResponse",
     "VectorCollectionResponse",
     "VectorDocumentResponse",
+    "VectorJobStatusResponse",
+    "VectorUploadJobResponse",
     "VectorUploadResponse",
     "WorkflowCreate",
     "WorkflowResponse",

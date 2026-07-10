@@ -45,4 +45,6 @@ RUN chmod +x '/docker-entrypoint.sh' \
 
 ENTRYPOINT []
 
+RUN mkdir -p /tmp/fastembed_cache && chown web:web /tmp/fastembed_cache
+
 USER web

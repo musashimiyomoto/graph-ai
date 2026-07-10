@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react'
+import { useMemo } from 'react'
 
 import { useLlmProviders } from '../hooks/useLlmProviders'
 import { useProviderModels } from '../hooks/useProviderModels'
@@ -13,6 +13,7 @@ import type {
 } from '../lib/types'
 import { matchesVisibility } from '../lib/validation'
 import { NumberInput } from './NumberInput'
+import { VectorCollectionInput } from './VectorCollectionInput'
 
 function TextField({
   value,
@@ -210,28 +211,13 @@ function VectorCollectionField({
   placeholder: string | null
   onChange: (value: string) => void
 }) {
-  // A datalist-backed text input rather than a strict <select>: unlike
-  // providers/models/bots, a collection isn't a pre-existing entity you
-  // must pick — typing a name that doesn't exist yet is how a new
-  // collection gets created. This keeps that free-text path while still
-  // surfacing existing collections so the user isn't typing blind.
-  const datalistId = useId()
-
   return (
-    <>
-      <input
-        className="pixel-input"
-        list={datalistId}
-        value={String(value ?? '')}
-        placeholder={placeholder ?? ''}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <datalist id={datalistId}>
-        {collections.map((collection) => (
-          <option key={collection.name} value={collection.name} />
-        ))}
-      </datalist>
-    </>
+    <VectorCollectionInput
+      collections={collections}
+      value={String(value ?? '')}
+      placeholder={placeholder}
+      onChange={onChange}
+    />
   )
 }
 

@@ -1,6 +1,7 @@
 """Pytest fixtures for backend tests."""
 
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -22,9 +23,12 @@ from settings import postgres_settings
 class _NoopArqPool:
     """Stand-in ARQ pool that drops enqueued jobs during tests."""
 
-    async def enqueue_job(self, *args: object, **kwargs: object) -> None:
-        """Accept and ignore an enqueue call."""
+    async def enqueue_job(
+        self, *args: object, **kwargs: object
+    ) -> SimpleNamespace:
+        """Accept an enqueue call and return a job stub carrying a job_id."""
         del args, kwargs
+        return SimpleNamespace(job_id="test-job-id")
 
 
 class _NoopRedisClient:

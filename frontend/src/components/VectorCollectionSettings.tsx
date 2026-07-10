@@ -1,9 +1,11 @@
-import { useId, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { uploadVectorDocument } from '../lib/api'
 import type { ApiError } from '../lib/types'
 import { useVectorCollections } from '../hooks/useVectorCollections'
 import { useVectorDocuments } from '../hooks/useVectorDocuments'
+import { useVectorUploadJobs } from '../hooks/useVectorUploadJobs'
+import { VectorCollectionInput } from './VectorCollectionInput'
 
 interface VectorCollectionSettingsProps {
   onError: (err: ApiError) => void
@@ -80,16 +82,24 @@ function VectorDocumentList({
 }
 
 export function VectorCollectionSettings({ onError }: VectorCollectionSettingsProps) {
-  const uploadCollectionListId = useId()
   const [expandedCollection, setExpandedCollection] = useState<string | null>(null)
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null)
   const [uploadCollection, setUploadCollection] = useState('')
   const [uploadSource, setUploadSource] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { collections, removeCollection, refreshCollections } = useVectorCollections({
+    onError,
+  })
+
+  const { pending, track: trackUpload } = useVectorUploadJobs({
+    onReady: () => {
+      void refreshCollections()
+      setDocumentsRefreshKey((key) => key + 1)
+    },
     onError,
   })
 
@@ -109,21 +119,26 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
     if (!uploadFile || !uploadCollection.trim()) {
       return
     }
-    setUploading(true)
+    const collection = uploadCollection.trim()
+    setSubmitting(true)
     try {
-      await uploadVectorDocument(
-        uploadCollection.trim(),
+      const job = await uploadVectorDocument(
+        collection,
         uploadFile,
         uploadSource.trim() || undefined,
       )
+      // Ingestion continues on the worker; track the job and clear the form so
+      // the user can queue the next file without waiting.
+      trackUpload({ jobId: job.job_id, source: job.source, collection })
       setUploadFile(null)
       setUploadSource('')
-      setDocumentsRefreshKey((key) => key + 1)
-      await refreshCollections()
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     } catch (error) {
       onError(error as ApiError)
     } finally {
-      setUploading(false)
+      setSubmitting(false)
     }
   }
 
@@ -196,22 +211,17 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
         <div className="flex flex-col gap-3">
           <label className="pixel-label">
             Collection
-            <input
-              className="pixel-input"
-              list={uploadCollectionListId}
+            <VectorCollectionInput
+              collections={collections}
               value={uploadCollection}
-              onChange={(e) => setUploadCollection(e.target.value)}
+              onChange={setUploadCollection}
               placeholder="my-documents"
             />
-            <datalist id={uploadCollectionListId}>
-              {collections.map((collection) => (
-                <option key={collection.name} value={collection.name} />
-              ))}
-            </datalist>
           </label>
           <label className="pixel-label">
             File
             <input
+              ref={fileInputRef}
               className="pixel-input"
               type="file"
               accept=".pdf,.docx,.txt,.md"
@@ -230,11 +240,27 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
           <button
             type="button"
             className="pixel-button small"
-            disabled={uploading || !uploadFile || !uploadCollection.trim()}
+            disabled={submitting || !uploadFile || !uploadCollection.trim()}
             onClick={() => void handleUpload()}
           >
-            {uploading ? 'Uploading...' : 'Upload'}
+            {submitting ? 'Queuing...' : 'Upload'}
           </button>
+
+          {pending.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {pending.map((item) => (
+                <div key={item.jobId} className="pixel-card">
+                  <div className="flex-1">
+                    <div className="text-sm">{item.source}</div>
+                    <div className="text-xs text-[var(--muted)]">
+                      {item.collection}
+                    </div>
+                  </div>
+                  <span className="pixel-processing">processing…</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

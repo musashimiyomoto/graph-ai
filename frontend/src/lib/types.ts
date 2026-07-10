@@ -241,9 +241,15 @@ export interface VectorDocument {
   chunk_count: number
 }
 
-export interface VectorUploadResult {
+export interface VectorUploadJob {
+  job_id: string
   source: string
-  chunks_ingested: number
+}
+
+export interface VectorJobStatus {
+  status: 'processing' | 'ready' | 'failed'
+  chunks_ingested: number | null
+  detail: string | null
 }
 
 export interface ApiError {

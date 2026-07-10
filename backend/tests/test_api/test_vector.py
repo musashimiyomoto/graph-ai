@@ -8,13 +8,9 @@ from httpx import AsyncClient
 
 from api.dependencies import qdrant
 from main import app
+from schemas import VectorJobStatusResponse
 from tests.fakes import FakeQdrantClient
 from tests.test_api.base import BaseTestCase
-
-
-def _fake_embed_texts(texts: list[str]) -> list[list[float]]:
-    """Deterministic fake embedding: a single feature, the text length."""
-    return [[float(len(text))] for text in texts]
 
 
 class VectorTestCase(BaseTestCase):
@@ -98,14 +94,16 @@ class TestVectorDocumentsList(VectorTestCase):
 
 
 class TestVectorDocumentUpload(VectorTestCase):
-    """Tests for POST /vector-collections/{collection}/documents."""
+    """Tests for POST /vector-collections/{collection}/documents.
+
+    Ingestion now runs on the ARQ worker, so the endpoint only accepts the file
+    and returns a job id — it no longer ingests inline. The heavy pipeline is
+    exercised at the worker level in ``test_worker_ingest.py``.
+    """
 
     @pytest.mark.asyncio
-    async def test_upload_creates_collection_and_document(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Uploading a text file ingests it under its filename as source."""
-        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+    async def test_upload_enqueues_job(self) -> None:
+        """Uploading returns 202 with a job id and the filename as source."""
         _, headers = await self.create_user_and_get_token()
 
         response = await self.client.post(
@@ -114,40 +112,17 @@ class TestVectorDocumentUpload(VectorTestCase):
             files={"file": ("notes.txt", b"hello world", "text/plain")},
         )
 
+        if response.status_code != HTTPStatus.ACCEPTED:
+            pytest.fail("Expected a 202 Accepted for a queued upload")
         data = await self.assert_response_dict(response=response)
+        if not data["job_id"]:
+            pytest.fail("Expected a job id in the response")
         if data["source"] != "notes.txt":
             pytest.fail("Expected the filename to be used as the source")
-        if data["chunks_ingested"] != 1:
-            pytest.fail("Expected one chunk to be ingested")
 
     @pytest.mark.asyncio
-    async def test_reupload_same_source_replaces(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Re-uploading the same filename replaces its chunks."""
-        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
-        _, headers = await self.create_user_and_get_token()
-
-        await self.client.post(
-            url="/vector-collections/docs/documents",
-            headers=headers,
-            files={"file": ("notes.txt", b"hello world", "text/plain")},
-        )
-        await self.client.post(
-            url="/vector-collections/docs/documents",
-            headers=headers,
-            files={"file": ("notes.txt", b"a different body", "text/plain")},
-        )
-
-        if len(self.qdrant_client.collections["docs"]) != 1:
-            pytest.fail("Re-uploading the same source should replace, not append")
-
-    @pytest.mark.asyncio
-    async def test_custom_source_override(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A `source` form field overrides the filename."""
-        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+    async def test_custom_source_override(self) -> None:
+        """A `source` form field overrides the filename in the response."""
         _, headers = await self.create_user_and_get_token()
 
         response = await self.client.post(
@@ -162,33 +137,68 @@ class TestVectorDocumentUpload(VectorTestCase):
             pytest.fail("Expected the source override to take precedence")
 
     @pytest.mark.asyncio
-    async def test_unsupported_binary_file_rejected(self) -> None:
-        """A file that isn't valid UTF-8 text and isn't PDF/DOCX is rejected."""
+    async def test_oversize_file_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A file larger than the cap is rejected before it reaches the queue."""
+        monkeypatch.setattr("api.routers.vector.MAX_DOCUMENT_UPLOAD_BYTES", 4)
         _, headers = await self.create_user_and_get_token()
 
         response = await self.client.post(
             url="/vector-collections/docs/documents",
             headers=headers,
-            files={"file": ("image.png", b"\x89PNG\r\n\x1a\n\x00\x01", "image/png")},
+            files={"file": ("big.txt", b"way too many bytes", "text/plain")},
         )
 
         if response.status_code != HTTPStatus.BAD_REQUEST:
-            pytest.fail("Expected a 400 for an unsupported file type")
+            pytest.fail("Expected a 400 for an oversize document")
+
+
+class TestVectorJobStatus(VectorTestCase):
+    """Tests for GET /vector-collections/jobs/{job_id}."""
 
     @pytest.mark.asyncio
-    async def test_empty_file_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A file with no extractable text is rejected."""
-        monkeypatch.setattr("rag.ingest.embed_texts", _fake_embed_texts)
+    async def test_returns_mapped_status(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The endpoint returns whatever the job-status reader reports."""
+        expected_chunks = 3
+
+        async def _fake_status(pool: object, job_id: str) -> VectorJobStatusResponse:
+            del pool, job_id
+            return VectorJobStatusResponse(
+                status="ready", chunks_ingested=expected_chunks
+            )
+
+        monkeypatch.setattr("api.routers.vector.read_ingest_job_status", _fake_status)
         _, headers = await self.create_user_and_get_token()
 
-        response = await self.client.post(
-            url="/vector-collections/docs/documents",
-            headers=headers,
-            files={"file": ("empty.txt", b"   ", "text/plain")},
+        response = await self.client.get(
+            url="/vector-collections/jobs/some-job", headers=headers
         )
 
-        if response.status_code != HTTPStatus.BAD_REQUEST:
-            pytest.fail("Expected a 400 for a document with no extractable text")
+        data = await self.assert_response_dict(response=response)
+        if data["status"] != "ready" or data["chunks_ingested"] != expected_chunks:
+            pytest.fail("Expected the mapped job status to be returned")
+
+    @pytest.mark.asyncio
+    async def test_reports_failure_detail(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed job surfaces its detail message."""
+
+        async def _fake_status(pool: object, job_id: str) -> VectorJobStatusResponse:
+            del pool, job_id
+            return VectorJobStatusResponse(status="failed", detail="boom")
+
+        monkeypatch.setattr("api.routers.vector.read_ingest_job_status", _fake_status)
+        _, headers = await self.create_user_and_get_token()
+
+        response = await self.client.get(
+            url="/vector-collections/jobs/some-job", headers=headers
+        )
+
+        data = await self.assert_response_dict(response=response)
+        if data["status"] != "failed" or data["detail"] != "boom":
+            pytest.fail("Expected the failure detail to be returned")
 
 
 class TestVectorDocumentDelete(VectorTestCase):

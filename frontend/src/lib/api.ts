@@ -19,7 +19,8 @@ import type {
   UserProfile,
   VectorCollection,
   VectorDocument,
-  VectorUploadResult,
+  VectorJobStatus,
+  VectorUploadJob,
   Workflow,
   WorkflowVersion,
 } from './types'
@@ -331,14 +332,22 @@ export async function uploadVectorDocument(
   collection: string,
   file: File,
   source?: string,
-): Promise<VectorUploadResult> {
+): Promise<VectorUploadJob> {
   const formData = new FormData()
   formData.append('file', file)
   if (source) {
     formData.append('source', source)
   }
-  return request<VectorUploadResult>(
+  return request<VectorUploadJob>(
     `/vector-collections/${encodeURIComponent(collection)}/documents`,
     { method: 'POST', body: formData },
+  )
+}
+
+export async function getVectorJobStatus(
+  jobId: string,
+): Promise<VectorJobStatus> {
+  return request<VectorJobStatus>(
+    `/vector-collections/jobs/${encodeURIComponent(jobId)}`,
   )
 }
