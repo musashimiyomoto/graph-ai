@@ -19,6 +19,10 @@ from schemas.llm_provider import (
     LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
+    OllamaCatalogEntry,
+    OllamaCatalogTag,
+    OllamaModelPullRequest,
+    OllamaModelPullResponse,
 )
 from schemas.node import (
     NodeCatalogDataSourceResponse,
@@ -93,6 +97,10 @@ __all__ = [
     "NodeGraphSpec",
     "NodeResponse",
     "NodeUpdate",
+    "OllamaCatalogEntry",
+    "OllamaCatalogTag",
+    "OllamaModelPullRequest",
+    "OllamaModelPullResponse",
     "ServiceHealthResponse",
     "TelegramBotCreate",
     "TelegramBotResponse",

@@ -197,3 +197,192 @@ class TestLLMProviderDelete(BaseTestCase):
         ids = {item.get("id") for item in data}
         if provider.id in ids:
             pytest.fail("Expected deleted provider to not appear in list")
+
+
+class TestLLMProviderModelCatalog(BaseTestCase):
+    """Tests for GET /llm-providers/model-catalog."""
+
+    url = "/llm-providers/model-catalog"
+
+    @pytest.mark.asyncio
+    async def test_returns_curated_entries(self) -> None:
+        """The catalog returns a non-empty list of model families and tags."""
+        _, headers = await self.create_user_and_get_token()
+
+        response = await self.client.get(url=self.url, headers=headers)
+
+        data = await self.assert_response_list(response=response)
+        if not data:
+            pytest.fail("Expected a non-empty catalog")
+        first = data[0]
+        self.assert_has_keys(first, {"name", "description", "tags"})
+        if not first["tags"]:
+            pytest.fail("Expected each catalog entry to have at least one tag")
+        self.assert_has_keys(first["tags"][0], {"tag", "size_gb", "params"})
+
+
+class TestLLMProviderModelPull(BaseTestCase):
+    """Tests for POST /llm-providers/{provider_id}/models."""
+
+    @pytest.mark.asyncio
+    async def test_enqueues_pull_job(self) -> None:
+        """Pulling a model on an Ollama provider returns 202 with a job id."""
+        user, headers = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session, user_id=user["id"], type=LLMProviderType.OLLAMA
+        )
+
+        response = await self.client.post(
+            url=f"/llm-providers/{provider.id}/models",
+            json={"model": "llama3.2:1b"},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.ACCEPTED:
+            pytest.fail("Expected a 202 Accepted for a queued pull")
+        data = await self.assert_response_dict(response=response)
+        if not data["job_id"] or data["model"] != "llama3.2:1b":
+            pytest.fail("Expected a job id and the pulled model in the response")
+
+    @pytest.mark.asyncio
+    async def test_non_ollama_provider_rejected(self) -> None:
+        """Pulling on a non-Ollama provider is rejected."""
+        user, headers = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session,
+            user_id=user["id"],
+            type=LLMProviderType.OPENAI,
+            api_key="encrypted-placeholder",
+        )
+
+        response = await self.client.post(
+            url=f"/llm-providers/{provider.id}/models",
+            json={"model": "gpt-4o-mini"},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.NOT_IMPLEMENTED:
+            pytest.fail("Expected pulling on a non-Ollama provider to be rejected")
+
+    @pytest.mark.asyncio
+    async def test_unknown_provider_404s(self) -> None:
+        """Pulling on a provider that doesn't exist returns 404."""
+        _, headers = await self.create_user_and_get_token()
+
+        response = await self.client.post(
+            url="/llm-providers/999999/models",
+            json={"model": "llama3.2:1b"},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail("Expected a 404 for an unknown provider")
+
+
+class TestLLMProviderModelPullStream(BaseTestCase):
+    """Tests for GET /llm-providers/{provider_id}/models/pull/{job_id}/stream."""
+
+    @pytest.mark.asyncio
+    async def test_streams_terminal_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pre-existing terminal snapshot is streamed and the frame closes."""
+
+        async def _fake_snapshot(pool: object, job_id: str) -> dict:
+            del pool, job_id
+            return {"status": "success", "percent": 100, "done": True}
+
+        monkeypatch.setattr(
+            "api.routers.llm_provider.read_pull_snapshot", _fake_snapshot
+        )
+        user, headers = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session, user_id=user["id"], type=LLMProviderType.OLLAMA
+        )
+
+        response = await self.client.get(
+            url=f"/llm-providers/{provider.id}/models/pull/some-job/stream",
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.OK:
+            pytest.fail("Stream request should return OK")
+        if not response.headers["content-type"].startswith("text/event-stream"):
+            pytest.fail("Stream should use the SSE content type")
+        if "data:" not in response.text or "success" not in response.text:
+            pytest.fail("Stream should emit the terminal success frame")
+
+    @pytest.mark.asyncio
+    async def test_other_user_cannot_stream(self) -> None:
+        """A stream for another user's provider is rejected before streaming."""
+        owner, _ = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session, user_id=owner["id"], type=LLMProviderType.OLLAMA
+        )
+        _, other_headers = await self.create_user_and_get_token()
+
+        response = await self.client.get(
+            url=f"/llm-providers/{provider.id}/models/pull/some-job/stream",
+            headers=other_headers,
+        )
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail("Expected NOT_FOUND streaming another user's provider")
+
+
+class TestLLMProviderModelDelete(BaseTestCase):
+    """Tests for DELETE /llm-providers/{provider_id}/models."""
+
+    @pytest.mark.asyncio
+    async def test_deletes_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Deleting a model calls the Ollama client and returns 202."""
+        captured: list[str] = []
+
+        class _StubOllamaClient:
+            """Ollama client stub recording the deleted model name."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Accept any constructor args."""
+                del args, kwargs
+
+            async def delete_model(self, model: str) -> None:
+                """Record the deleted model name."""
+                captured.append(model)
+
+        monkeypatch.setattr("usecases.llm_provider.OllamaClient", _StubOllamaClient)
+        user, headers = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session, user_id=user["id"], type=LLMProviderType.OLLAMA
+        )
+
+        response = await self.client.request(
+            method="DELETE",
+            url=f"/llm-providers/{provider.id}/models",
+            params={"model": "llama3.2:1b"},
+            headers=headers,
+        )
+
+        await self.assert_response_ok(response=response)
+        if captured != ["llama3.2:1b"]:
+            pytest.fail("Expected the Ollama client to delete the given model")
+
+    @pytest.mark.asyncio
+    async def test_non_ollama_provider_rejected(self) -> None:
+        """Deleting a model on a non-Ollama provider is rejected."""
+        user, headers = await self.create_user_and_get_token()
+        provider = await LLMProviderFactory.create_async(
+            session=self.session,
+            user_id=user["id"],
+            type=LLMProviderType.OPENAI,
+            api_key="encrypted-placeholder",
+        )
+
+        response = await self.client.request(
+            method="DELETE",
+            url=f"/llm-providers/{provider.id}/models",
+            params={"model": "gpt-4o-mini"},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.NOT_IMPLEMENTED:
+            pytest.fail("Expected deleting on a non-Ollama provider to be rejected")

@@ -131,3 +131,38 @@ class LLMProviderModelResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     name: str = Field(default=..., description="Model name")
+
+
+class OllamaCatalogTag(BaseModel):
+    """One pullable tag of a curated Ollama model."""
+
+    model_config = ConfigDict(frozen=True)
+
+    tag: str = Field(default=..., description="Full pullable name, e.g. llama3.2:1b")
+    size_gb: float = Field(default=..., description="Approximate download size in GB")
+    params: str = Field(default=..., description="Parameter count, e.g. 3B")
+
+
+class OllamaCatalogEntry(BaseModel):
+    """A curated Ollama model family and its pullable tags."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(default=..., description="Model family name")
+    description: str = Field(default=..., description="Short description")
+    tags: list[OllamaCatalogTag] = Field(default=..., description="Pullable tags")
+
+
+class OllamaModelPullRequest(BaseModel):
+    """Payload to start pulling an Ollama model."""
+
+    model: str = Field(
+        default=..., description="Model name/tag to pull", min_length=1, max_length=200
+    )
+
+
+class OllamaModelPullResponse(BaseModel):
+    """Acknowledgement that a model pull has been queued."""
+
+    job_id: str = Field(default=..., description="Background pull job identifier")
+    model: str = Field(default=..., description="Model name/tag being pulled")

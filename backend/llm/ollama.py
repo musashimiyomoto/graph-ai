@@ -208,3 +208,54 @@ class OllamaClient(BaseLLMClient):
                     delta = (payload.get("message") or {}).get("content")
                     if delta:
                         yield delta
+
+    async def pull_model(self, model: str) -> AsyncIterator[dict[str, object]]:
+        """Pull a model into the server, streaming download progress.
+
+        Args:
+            model: Model name/tag to pull (e.g. ``llama3.2:1b``).
+
+        Yields:
+            Each raw progress object from Ollama's ``/api/pull`` NDJSON stream:
+            a ``status`` string and, for download layers, ``completed``/``total``
+            byte counts.
+
+        Raises:
+            LLMProviderConnectionError: If the provider is unreachable.
+
+        """
+        # A model download can take minutes; disable the read timeout so a slow
+        # layer doesn't abort the pull mid-stream (connect timeout is kept).
+        timeout = httpx.Timeout(self._timeout, read=None)
+        with _wrap_httpx_errors():
+            async with (
+                httpx.AsyncClient(base_url=self._base_url, timeout=timeout) as client,
+                client.stream("POST", "/api/pull", json={"model": model}) as response,
+            ):
+                if response.status_code >= HTTPStatus.BAD_REQUEST:
+                    await response.aread()
+                    response.raise_for_status()
+
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    yield json.loads(line)
+
+    async def delete_model(self, model: str) -> None:
+        """Delete a model from the server.
+
+        Args:
+            model: Model name/tag to delete.
+
+        Raises:
+            LLMProviderConnectionError: If the provider is unreachable.
+
+        """
+        with _wrap_httpx_errors():
+            async with httpx.AsyncClient(
+                base_url=self._base_url, timeout=self._timeout
+            ) as client:
+                response = await client.request(
+                    "DELETE", "/api/delete", json={"model": model}
+                )
+                response.raise_for_status()

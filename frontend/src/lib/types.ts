@@ -207,6 +207,30 @@ export interface LlmModel {
   name: string
 }
 
+export interface OllamaCatalogTag {
+  tag: string
+  size_gb: number
+  params: string
+}
+
+export interface OllamaCatalogEntry {
+  name: string
+  description: string
+  tags: OllamaCatalogTag[]
+}
+
+export interface OllamaPullJob {
+  job_id: string
+  model: string
+}
+
+export interface OllamaPullEvent {
+  status: string
+  percent?: number
+  done?: boolean
+  error?: string
+}
+
 export interface TelegramBot {
   id: number
   user_id: number

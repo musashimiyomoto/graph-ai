@@ -1,5 +1,6 @@
 """LLM client, factory, and generation-parameter tests."""
 
+import json
 from collections.abc import AsyncIterator
 from typing import Self, cast
 
@@ -216,6 +217,132 @@ class TestOllamaStreamChat:
 
         if collected != ["Hel", "lo"]:
             pytest.fail("Stream did not yield the expected content deltas")
+
+
+_PULL_LINES = [
+    '{"status": "pulling manifest"}',
+    '{"status": "downloading", "completed": 50, "total": 100}',
+    '{"status": "success"}',
+]
+
+
+class _DummyPullStreamResponse:
+    """Streamed Ollama pull response yielding fixed NDJSON progress lines."""
+
+    status_code = 200
+
+    async def aread(self) -> bytes:
+        """Return an empty body (unused on success)."""
+        return b""
+
+    def raise_for_status(self) -> None:
+        """Keep the successful status."""
+
+    async def aiter_lines(self) -> AsyncIterator[str]:
+        """Yield the fixed NDJSON progress lines."""
+        for line in _PULL_LINES:
+            yield line
+
+
+class _DummyPullStreamCtx:
+    """Async context manager returning the streamed pull response."""
+
+    async def __aenter__(self) -> _DummyPullStreamResponse:
+        """Enter and return the response."""
+        return _DummyPullStreamResponse()
+
+    async def __aexit__(self, *args: object) -> bool:
+        """Exit the context manager."""
+        return False
+
+
+class _DummyPullStreamingClient:
+    """Async client whose stream() returns fixed pull progress lines."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        """Accept any httpx kwargs."""
+
+    async def __aenter__(self) -> Self:
+        """Enter the client context manager."""
+        return self
+
+    async def __aexit__(self, *args: object) -> bool:
+        """Exit the client context manager."""
+        return False
+
+    def stream(self, *args: object, **kwargs: object) -> _DummyPullStreamCtx:
+        """Return the streaming response context manager."""
+        del args, kwargs
+        return _DummyPullStreamCtx()
+
+
+class TestOllamaPullModel:
+    """Tests for streaming an Ollama model pull."""
+
+    @pytest.mark.asyncio
+    async def test_yields_progress_objects(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Each NDJSON line is parsed and yielded as a progress object."""
+        monkeypatch.setattr(
+            "llm.ollama.httpx.AsyncClient", _DummyPullStreamingClient
+        )
+
+        client = OllamaClient(base_url="http://ollama:11434", timeout=1.0)
+        collected = [progress async for progress in client.pull_model("llama3.2:1b")]
+
+        if collected != [json.loads(line) for line in _PULL_LINES]:
+            pytest.fail("Pull progress lines were not parsed correctly")
+
+
+class TestOllamaDeleteModel:
+    """Tests for deleting an Ollama model."""
+
+    @pytest.mark.asyncio
+    async def test_sends_delete_request(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The model name is sent as a DELETE /api/delete request body."""
+        captured: dict[str, object] = {}
+
+        class DummyResponse:
+            """Fixed successful delete response."""
+
+            status_code = 200
+            text = ""
+
+            def raise_for_status(self) -> None:
+                """Keep the successful status."""
+
+        class DummyAsyncClient:
+            """Async client capturing the delete request."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Accept any httpx kwargs."""
+
+            async def __aenter__(self) -> Self:
+                """Enter the context manager."""
+                return self
+
+            async def __aexit__(self, *args: object) -> bool:
+                """Exit the context manager."""
+                return False
+
+            async def request(
+                self, method: str, *args: object, **kwargs: object
+            ) -> DummyResponse:
+                """Record the request method/body and return a response."""
+                captured["method"] = method
+                captured.update(kwargs)
+                return DummyResponse()
+
+        monkeypatch.setattr("llm.ollama.httpx.AsyncClient", DummyAsyncClient)
+
+        client = OllamaClient(base_url="http://ollama:11434", timeout=1.0)
+        await client.delete_model("llama3.2:1b")
+
+        if captured.get("method") != "DELETE":
+            pytest.fail("Expected a DELETE request")
+        if captured.get("json") != {"model": "llama3.2:1b"}:
+            pytest.fail("Expected the model name in the delete request body")
 
 
 class TestAnthropicSplitSystem:

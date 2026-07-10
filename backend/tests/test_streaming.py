@@ -13,7 +13,15 @@ from testcontainers.redis import RedisContainer
 from enums import LLMProviderType
 from nodes import llm as llm_module
 from nodes.base import NodeExecutionContext
-from streaming import publish_token, subscribe_tokens, token_channel
+from streaming import (
+    publish_pull_progress,
+    publish_token,
+    pull_channel,
+    read_pull_snapshot,
+    subscribe_pull_progress,
+    subscribe_tokens,
+    token_channel,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -148,3 +156,77 @@ class TestTokenPubSub:
 
         if received != [(_NODE_ID, delta) for delta in deltas]:
             pytest.fail("Subscriber did not receive published deltas in order")
+
+
+_PULL_JOB_ID = "ollama-pull:1:llama3.2:1b"
+
+
+class TestOllamaPullPubSub:
+    """Tests for the Redis model-pull progress pub/sub round trip."""
+
+    @pytest_asyncio.fixture
+    async def redis(self) -> AsyncGenerator[Redis, None]:
+        """Spin up a throwaway Redis and yield an async client."""
+        with RedisContainer() as container:
+            client: Redis = Redis(
+                host=container.get_container_host_ip(),
+                port=int(container.get_exposed_port(6379)),
+            )
+            try:
+                yield client
+            finally:
+                await client.aclose()
+
+    def test_channel_name(self) -> None:
+        """The channel name is namespaced by pull job ID."""
+        if pull_channel(_PULL_JOB_ID) != f"ollama:pull:{_PULL_JOB_ID}:progress":
+            pytest.fail("Unexpected channel name")
+
+    @pytest.mark.asyncio
+    async def test_publish_then_subscribe_round_trip(self, redis: Redis) -> None:
+        """Published progress frames are received in order by a subscriber."""
+        frames = [
+            {"status": "pulling manifest", "done": False},
+            {"status": "downloading", "percent": 50, "done": False},
+            {"status": "success", "percent": 100, "done": True},
+        ]
+        received: list[dict] = []
+        ready = asyncio.Event()
+
+        async def consume() -> None:
+            """Collect published frames until all arrive."""
+            async for frame in subscribe_pull_progress(redis, _PULL_JOB_ID):
+                received.append(frame)
+                if len(received) == len(frames):
+                    return
+
+        async def produce() -> None:
+            """Publish frames once the subscription is active."""
+            await ready.wait()
+            for frame in frames:
+                await publish_pull_progress(redis, _PULL_JOB_ID, frame)
+
+        consumer = asyncio.create_task(consume())
+        # Give the subscriber a moment to subscribe before publishing.
+        await asyncio.sleep(0.2)
+        ready.set()
+        await produce()
+        await asyncio.wait_for(consumer, timeout=5)
+
+        if received != frames:
+            pytest.fail("Subscriber did not receive published frames in order")
+
+    @pytest.mark.asyncio
+    async def test_snapshot_holds_last_frame(self, redis: Redis) -> None:
+        """The snapshot key reflects the most recently published frame."""
+        if await read_pull_snapshot(redis, _PULL_JOB_ID) is not None:
+            pytest.fail("Expected no snapshot before any publish")
+
+        await publish_pull_progress(redis, _PULL_JOB_ID, {"status": "start"})
+        await publish_pull_progress(
+            redis, _PULL_JOB_ID, {"status": "success", "done": True}
+        )
+
+        snapshot = await read_pull_snapshot(redis, _PULL_JOB_ID)
+        if snapshot != {"status": "success", "done": True}:
+            pytest.fail("Snapshot did not reflect the last published frame")

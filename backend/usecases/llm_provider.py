@@ -1,20 +1,26 @@
 """LLM provider use case implementation."""
 
+from arq import ArqRedis
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from constants import DEFAULT_TIMEOUT
 from db.repositories import LLMProviderRepository
+from enums import LLMProviderType
 from exceptions import (
     BlockedURLError,
     LLMProviderAlreadyExistsError,
     LLMProviderNotFoundError,
+    UnsupportedLLMProviderError,
 )
 from llm import create_llm_client
+from llm.ollama import OllamaClient
 from schemas import (
     LLMProviderCreate,
     LLMProviderModelResponse,
     LLMProviderResponse,
     LLMProviderUpdate,
+    OllamaModelPullResponse,
 )
 from utils.encryption import decrypt, encrypt
 from utils.network import blocked_url_reason
@@ -235,3 +241,97 @@ class LLMProviderUsecase:
             llm_provider=LLMProviderResponse.model_validate(llm_provider),
             api_key=api_key,
         ).list_models()
+
+    async def _require_ollama_base_url(
+        self, session: AsyncSession, provider_id: int, user_id: int
+    ) -> str:
+        """Return an owned Ollama provider's validated base URL.
+
+        Args:
+            session: The session.
+            provider_id: The provider ID.
+            user_id: The owner user ID.
+
+        Returns:
+            The provider's base URL.
+
+        Raises:
+            LLMProviderNotFoundError: If the provider is not found.
+            UnsupportedLLMProviderError: If the provider is not an Ollama one
+                (only Ollama supports pulling/deleting models).
+            BlockedURLError: If the base URL resolves to a disallowed host.
+
+        """
+        provider = await self._llm_provider_repository.get_by(
+            session=session, id=provider_id, user_id=user_id
+        )
+        if not provider:
+            raise LLMProviderNotFoundError
+        if provider.type is not LLMProviderType.OLLAMA:
+            raise UnsupportedLLMProviderError(
+                message="Only Ollama providers support managing models"
+            )
+        await _ensure_allowed_base_url(provider.base_url)
+        return provider.base_url
+
+    async def start_model_pull(
+        self,
+        session: AsyncSession,
+        provider_id: int,
+        user_id: int,
+        model: str,
+        pool: ArqRedis,
+    ) -> OllamaModelPullResponse:
+        """Queue a background pull of an Ollama model.
+
+        Args:
+            session: The session.
+            provider_id: The provider ID.
+            user_id: The owner user ID.
+            model: The model name/tag to pull.
+            pool: The ARQ pool to enqueue the job on.
+
+        Returns:
+            The deterministic job id (dedup key) and the model being pulled.
+
+        Raises:
+            LLMProviderNotFoundError: If the provider is not found.
+            UnsupportedLLMProviderError: If the provider is not an Ollama one.
+            BlockedURLError: If the base URL resolves to a disallowed host.
+
+        """
+        base_url = await self._require_ollama_base_url(
+            session=session, provider_id=provider_id, user_id=user_id
+        )
+        # Deterministic id both dedups concurrent identical pulls and lets the
+        # client subscribe to the progress channel it already knows.
+        job_id = f"ollama-pull:{provider_id}:{model}"
+        await pool.enqueue_job(
+            "pull_ollama_model_task", base_url, model, _job_id=job_id
+        )
+        return OllamaModelPullResponse(job_id=job_id, model=model)
+
+    async def delete_model(
+        self, session: AsyncSession, provider_id: int, user_id: int, model: str
+    ) -> None:
+        """Delete a model from an Ollama provider.
+
+        Args:
+            session: The session.
+            provider_id: The provider ID.
+            user_id: The owner user ID.
+            model: The model name/tag to delete.
+
+        Raises:
+            LLMProviderNotFoundError: If the provider is not found.
+            UnsupportedLLMProviderError: If the provider is not an Ollama one.
+            BlockedURLError: If the base URL resolves to a disallowed host.
+            LLMProviderConnectionError: If the provider is unreachable.
+
+        """
+        base_url = await self._require_ollama_base_url(
+            session=session, provider_id=provider_id, user_id=user_id
+        )
+        await OllamaClient(base_url=base_url, timeout=DEFAULT_TIMEOUT).delete_model(
+            model
+        )

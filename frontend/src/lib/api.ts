@@ -12,6 +12,9 @@ import type {
   NodeExecutionResult,
   NodeResponse,
   NodeUpdatePayload,
+  OllamaCatalogEntry,
+  OllamaPullEvent,
+  OllamaPullJob,
   RunInputPayload,
   TelegramBot,
   TelegramBotCreatePayload,
@@ -281,6 +284,82 @@ export async function getLlmProviderModels(
   providerId: number,
 ): Promise<LlmModel[]> {
   return request<LlmModel[]>(`/llm-providers/${providerId}/models`)
+}
+
+export async function getOllamaCatalog(): Promise<OllamaCatalogEntry[]> {
+  return request<OllamaCatalogEntry[]>('/llm-providers/model-catalog')
+}
+
+export async function pullOllamaModel(
+  providerId: number,
+  model: string,
+): Promise<OllamaPullJob> {
+  return request<OllamaPullJob>(`/llm-providers/${providerId}/models`, {
+    method: 'POST',
+    body: JSON.stringify({ model }),
+  })
+}
+
+export async function deleteProviderModel(
+  providerId: number,
+  model: string,
+): Promise<void> {
+  await request(
+    `/llm-providers/${providerId}/models?model=${encodeURIComponent(model)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function streamOllamaPull(
+  providerId: number,
+  jobId: string,
+  onEvent: (event: OllamaPullEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  if (currentToken) {
+    headers['Authorization'] = `Bearer ${currentToken}`
+  }
+
+  const response = await fetch(
+    `${BASE}/llm-providers/${providerId}/models/pull/${encodeURIComponent(jobId)}/stream`,
+    { headers, signal },
+  )
+
+  if (!response.ok || !response.body) {
+    throw { message: 'Pull stream failed', status: response.status } as ApiError
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+    const frames = buffer.split('\n\n')
+    buffer = frames.pop() ?? ''
+
+    for (const frame of frames) {
+      const dataLine = frame.split('\n').find((line) => line.startsWith('data:'))
+      if (!dataLine) {
+        continue
+      }
+      const payload = dataLine.slice('data:'.length).trim()
+      if (!payload) {
+        continue
+      }
+      try {
+        onEvent(JSON.parse(payload) as OllamaPullEvent)
+      } catch {
+        // Skip a malformed frame rather than killing the whole stream.
+      }
+    }
+  }
 }
 
 export async function getTelegramBots(): Promise<TelegramBot[]> {
