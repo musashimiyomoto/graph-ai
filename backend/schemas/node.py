@@ -212,6 +212,7 @@ class NodeCatalogFieldUIResponse(BaseModel):
     label: str = Field(default=..., description="UI label")
     placeholder: str | None = Field(default=None, description="Input placeholder")
     help: str | None = Field(default=None, description="Field help text")
+    step: float | None = Field(default=None, description="Numeric stepper increment")
 
 
 class NodeCatalogFieldResponse(BaseModel):
