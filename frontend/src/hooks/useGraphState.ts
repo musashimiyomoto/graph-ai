@@ -591,7 +591,10 @@ export function useGraphState({
         setNodes((previous) =>
           previous.map((node) =>
             node.id === nodeId
-              ? toFlowNode(updated, nodeCatalogByType)
+              ? // Preserve React Flow's selection flag: the rebuilt node would
+                // otherwise come back unselected, deselecting it mid-edit and
+                // closing the Inspector right after the first valid save.
+                { ...toFlowNode(updated, nodeCatalogByType), selected: node.selected }
               : node,
           ),
         )
