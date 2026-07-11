@@ -1,6 +1,6 @@
 """Workflow dependency providers."""
 
-from usecases import WorkflowUsecase
+from usecases import WorkflowTransferUsecase, WorkflowUsecase
 
 
 def get_workflow_usecase() -> WorkflowUsecase:
@@ -11,3 +11,13 @@ def get_workflow_usecase() -> WorkflowUsecase:
 
     """
     return WorkflowUsecase()
+
+
+def get_workflow_transfer_usecase() -> WorkflowTransferUsecase:
+    """Get the workflow transfer usecase.
+
+    Returns:
+        The workflow transfer usecase.
+
+    """
+    return WorkflowTransferUsecase()

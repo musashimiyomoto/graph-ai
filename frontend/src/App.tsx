@@ -16,6 +16,7 @@ import { useExecutions } from './hooks/useExecutions'
 import { useGraphState } from './hooks/useGraphState'
 import { useNodeCatalog } from './hooks/useNodeCatalog'
 import { useWorkflowState } from './hooks/useWorkflowState'
+import { useWorkflowTransfer } from './hooks/useWorkflowTransfer'
 import type { ApiError, NodeType, PortType } from './lib/types'
 
 interface NodeCreateDraft {
@@ -59,6 +60,14 @@ export function App() {
     setError,
     handleError,
   })
+
+  const { handleDuplicateWorkflow, handleExportWorkflow, handleImportWorkflow } =
+    useWorkflowTransfer({
+      setLoading,
+      setError,
+      handleError,
+      onWorkflowCreated: (created) => setActiveWorkflowId(created.id),
+    })
 
   const {
     nodeCatalog,
@@ -322,6 +331,9 @@ export function App() {
           onCreateWorkflow={handleCreateWorkflow}
           onRenameWorkflow={handleRenameWorkflow}
           onDeleteWorkflow={handleDeleteWorkflow}
+          onDuplicateWorkflow={(id) => void handleDuplicateWorkflow(id)}
+          onExportWorkflow={(id) => void handleExportWorkflow(id)}
+          onImportWorkflow={(file) => void handleImportWorkflow(file)}
           onAddNode={handleAddNode}
         />
         <GraphCanvas

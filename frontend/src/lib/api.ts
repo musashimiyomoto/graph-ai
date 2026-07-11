@@ -26,6 +26,8 @@ import type {
   VectorJobStatus,
   VectorUploadJob,
   Workflow,
+  WorkflowExport,
+  WorkflowGraphTransfer,
   WorkflowVersion,
 } from './types'
 
@@ -134,6 +136,26 @@ export async function getWorkflowVersions(
   workflowId: number,
 ): Promise<WorkflowVersion[]> {
   return request<WorkflowVersion[]>(`/workflows/${workflowId}/versions`)
+}
+
+export async function exportWorkflow(workflowId: number): Promise<WorkflowExport> {
+  return request<WorkflowExport>(`/workflows/${workflowId}/export`)
+}
+
+export async function importWorkflow(
+  name: string,
+  graph: WorkflowGraphTransfer,
+): Promise<Workflow> {
+  return request<Workflow>('/workflows/import', {
+    method: 'POST',
+    body: JSON.stringify({ name, graph }),
+  })
+}
+
+export async function duplicateWorkflow(workflowId: number): Promise<Workflow> {
+  return request<Workflow>(`/workflows/${workflowId}/duplicate`, {
+    method: 'POST',
+  })
 }
 
 export async function getNodes(

@@ -87,6 +87,33 @@ export interface WorkflowVersion {
   created_at: string
 }
 
+// Portable graph shape shared by export/import/duplicate/templates. Nodes
+// carry no ID — a transfer always creates fresh nodes; edges reference nodes
+// by their (0-based) position in `nodes` since node IDs don't exist yet at
+// import time and an export's IDs are meaningless to a different workflow.
+export interface WorkflowGraphNode {
+  type: NodeType
+  data: Record<string, unknown>
+  position_x: number
+  position_y: number
+}
+
+export interface WorkflowGraphEdge {
+  source_index: number
+  target_index: number
+  source_handle: string | null
+}
+
+export interface WorkflowGraphTransfer {
+  nodes: WorkflowGraphNode[]
+  edges: WorkflowGraphEdge[]
+}
+
+export interface WorkflowExport {
+  name: string
+  graph: WorkflowGraphTransfer
+}
+
 export interface TokenStreamEvent {
   type: 'token'
   node_id: number

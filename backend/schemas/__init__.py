@@ -56,7 +56,16 @@ from schemas.vector import (
     VectorUploadJobResponse,
     VectorUploadResponse,
 )
-from schemas.workflow import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from schemas.workflow import (
+    WorkflowCreate,
+    WorkflowExportResponse,
+    WorkflowGraphEdge,
+    WorkflowGraphNode,
+    WorkflowGraphTransfer,
+    WorkflowImportRequest,
+    WorkflowResponse,
+    WorkflowUpdate,
+)
 from schemas.workflow_version import WorkflowVersionResponse
 
 __all__ = [
@@ -113,6 +122,11 @@ __all__ = [
     "VectorUploadJobResponse",
     "VectorUploadResponse",
     "WorkflowCreate",
+    "WorkflowExportResponse",
+    "WorkflowGraphEdge",
+    "WorkflowGraphNode",
+    "WorkflowGraphTransfer",
+    "WorkflowImportRequest",
     "WorkflowResponse",
     "WorkflowUpdate",
     "WorkflowVersionResponse",

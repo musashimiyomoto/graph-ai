@@ -10,6 +10,8 @@ from api.dependencies import auth, db, execution, workflow
 from schemas import (
     UserResponse,
     WorkflowCreate,
+    WorkflowExportResponse,
+    WorkflowImportRequest,
     WorkflowResponse,
     WorkflowUpdate,
     WorkflowVersionResponse,
@@ -47,6 +49,31 @@ async def list_workflows(
     return await usecase.get_workflows(session=session, user_id=current_user.id)
 
 
+@router.post(path="/import")
+async def import_workflow(
+    data: Annotated[
+        WorkflowImportRequest, Body(description="Portable graph to import")
+    ],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        workflow.WorkflowTransferUsecase,
+        Depends(dependency=workflow.get_workflow_transfer_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> WorkflowResponse:
+    """Create a new workflow from an exported (or template) graph.
+
+    Registered ahead of `/{workflow_id}/...` routes so `import` isn't
+    matched as a workflow ID path parameter.
+    """
+    return await usecase.import_workflow(
+        session=session,
+        user_id=current_user.id,
+        name=data.name,
+        graph=data.graph,
+    )
+
+
 @router.get(path="/{workflow_id}/versions")
 async def list_workflow_versions(
     workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],
@@ -59,6 +86,38 @@ async def list_workflow_versions(
 ) -> list[WorkflowVersionResponse]:
     """List a workflow's version snapshots, newest first."""
     return await usecase.get_workflow_versions(
+        session=session, workflow_id=workflow_id, user_id=current_user.id
+    )
+
+
+@router.get(path="/{workflow_id}/export")
+async def export_workflow(
+    workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        workflow.WorkflowTransferUsecase,
+        Depends(dependency=workflow.get_workflow_transfer_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> WorkflowExportResponse:
+    """Export a workflow as a portable, account-scrubbed graph."""
+    return await usecase.export_workflow(
+        session=session, workflow_id=workflow_id, user_id=current_user.id
+    )
+
+
+@router.post(path="/{workflow_id}/duplicate")
+async def duplicate_workflow(
+    workflow_id: Annotated[int, Path(description="Workflow ID", gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        workflow.WorkflowTransferUsecase,
+        Depends(dependency=workflow.get_workflow_transfer_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> WorkflowResponse:
+    """Copy a workflow within the same account, keeping its references."""
+    return await usecase.duplicate_workflow(
         session=session, workflow_id=workflow_id, user_id=current_user.id
     )
 

@@ -45,6 +45,9 @@ interface WorkflowSidebarProps {
   onCreateWorkflow: (name: string) => void
   onRenameWorkflow: (id: number, name: string) => void
   onDeleteWorkflow: (id: number) => void
+  onDuplicateWorkflow: (id: number) => void
+  onExportWorkflow: (id: number) => void
+  onImportWorkflow: (file: File) => void
   onAddNode: (type: NodeType) => void
 }
 
@@ -57,6 +60,9 @@ export function WorkflowSidebar({
   onCreateWorkflow,
   onRenameWorkflow,
   onDeleteWorkflow,
+  onDuplicateWorkflow,
+  onExportWorkflow,
+  onImportWorkflow,
   onAddNode,
 }: WorkflowSidebarProps) {
   const [draftName, setDraftName] = useState('')
@@ -64,6 +70,7 @@ export function WorkflowSidebar({
   const [editingName, setEditingName] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (editingId !== null) {
@@ -117,6 +124,27 @@ export function WorkflowSidebar({
           >
             Add
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) {
+                onImportWorkflow(file)
+              }
+              event.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            className="pixel-button small"
+            title="Import a workflow from an exported JSON file"
+            onClick={() => importInputRef.current?.click()}
+          >
+            Import
+          </button>
         </div>
         <div className="mt-4 flex flex-col gap-2">
           {workflows.length === 0 ? (
@@ -166,6 +194,22 @@ export function WorkflowSidebar({
                     onClick={() => startEditing(workflow)}
                   >
                     Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-icon"
+                    title="Duplicate this workflow"
+                    onClick={() => onDuplicateWorkflow(workflow.id)}
+                  >
+                    Dup
+                  </button>
+                  <button
+                    type="button"
+                    className="pixel-icon"
+                    title="Export this workflow as a JSON file"
+                    onClick={() => onExportWorkflow(workflow.id)}
+                  >
+                    Export
                   </button>
                 </>
               )}

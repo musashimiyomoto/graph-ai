@@ -78,6 +78,7 @@ class NodeUsecase:
         field: NodeFieldSpec,
         value: object,
         errors: list[str],
+        allow_unset_references: bool = False,
     ) -> None:
         """Validate one node field.
 
@@ -85,9 +86,28 @@ class NodeUsecase:
             field: Field schema.
             value: Field value.
             errors: Error collector.
+            allow_unset_references: When True, a required datasource field
+                (provider/bot) that references another user's private
+                resource is allowed to be `None` even though it's normally
+                required. Used only when rebuilding a node from a transferred
+                graph (import/duplicate/template) whose reference IDs were
+                scrubbed or don't apply to the target account — the user
+                fills them back in via the node inspector, same as an
+                existing node whose provider/bot was since deleted.
 
         """
-        if value is None and not field.required:
+        if value is None and (
+            not field.required
+            or (
+                allow_unset_references
+                and field.datasource is not None
+                and field.datasource.kind
+                in {
+                    NodeFieldDataSourceKind.LLM_PROVIDER,
+                    NodeFieldDataSourceKind.TELEGRAM_BOT,
+                }
+            )
+        ):
             return
 
         validators = field.validators
@@ -139,12 +159,18 @@ class NodeUsecase:
         self,
         node_type: NodeType,
         data: dict[str, Any],
+        *,
+        allow_unset_references: bool = False,
     ) -> dict[str, Any]:
         """Validate node payload against catalog schema.
 
         Args:
             node_type: Node type.
             data: Incoming node data.
+            allow_unset_references: See `_validate_node_field`. A field this
+                loosens must still be *present* (as `None`) in `data` — a
+                genuinely missing required field is still rejected, same as
+                always.
 
         Returns:
             Validated node data.
@@ -173,6 +199,7 @@ class NodeUsecase:
                 field=field,
                 value=data[field.name],
                 errors=errors,
+                allow_unset_references=allow_unset_references,
             )
 
         if errors:
@@ -264,6 +291,8 @@ class NodeUsecase:
         session: AsyncSession,
         user_id: int,
         data: NodeCreate,
+        *,
+        allow_unset_references: bool = False,
     ) -> NodeResponse:
         """Create a node within a workflow.
 
@@ -271,6 +300,12 @@ class NodeUsecase:
             session: The session.
             user_id: The owner user ID.
             data: The node creation fields.
+            allow_unset_references: See `_validate_node_field`. Internal-only
+                — never set by the public API (`NodeCreate` always requires a
+                real reference); the workflow-transfer usecase passes True
+                when rebuilding a node from an imported/duplicated/
+                templated graph whose provider/bot fields were scrubbed or
+                belong to a different account.
 
         Returns:
             The created node.
@@ -289,7 +324,11 @@ class NodeUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
-        validated_data = self._validate_node_data(node_type=data.type, data=data.data)
+        validated_data = self._validate_node_data(
+            node_type=data.type,
+            data=data.data,
+            allow_unset_references=allow_unset_references,
+        )
         await self._validate_external_references(
             session=session,
             user_id=user_id,
