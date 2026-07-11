@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { NodeCatalogItem, NodeType, Workflow } from '../lib/types'
+import { STATUS_DOT_COLORS } from '../lib/executionFormat'
+import type { ExecutionStatus, NodeCatalogItem, NodeType, Workflow } from '../lib/types'
 import { NodeIcon } from './NodeIcons'
 
 // Purely a display grouping for the node palette below — the backend catalog
@@ -38,6 +39,7 @@ function groupNodeCatalog(
 interface WorkflowSidebarProps {
   workflows: Workflow[]
   activeWorkflowId: number | null
+  activeWorkflowStatus: ExecutionStatus | null
   nodeCatalog: NodeCatalogItem[]
   onSelectWorkflow: (id: number) => void
   onCreateWorkflow: (name: string) => void
@@ -49,6 +51,7 @@ interface WorkflowSidebarProps {
 export function WorkflowSidebar({
   workflows,
   activeWorkflowId,
+  activeWorkflowStatus,
   nodeCatalog,
   onSelectWorkflow,
   onCreateWorkflow,
@@ -146,10 +149,16 @@ export function WorkflowSidebar({
                 <>
                   <button
                     type="button"
-                    className="flex-1 text-left"
+                    className="flex flex-1 items-center gap-2 text-left"
                     onClick={() => onSelectWorkflow(workflow.id)}
                   >
-                    {workflow.name}
+                    {workflow.id === activeWorkflowId && activeWorkflowStatus ? (
+                      <span
+                        className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_COLORS[activeWorkflowStatus]} ${activeWorkflowStatus === 'running' ? 'animate-pulse' : ''}`}
+                        title={`Status: ${activeWorkflowStatus}`}
+                      />
+                    ) : null}
+                    <span className="truncate">{workflow.name}</span>
                   </button>
                   <button
                     type="button"

@@ -7,6 +7,7 @@ import { ChatPanel } from './components/ChatPanel'
 import { CreateNodeDialog } from './components/CreateNodeDialog'
 import { GraphCanvas } from './components/GraphCanvas'
 import { HistoryOverlay } from './components/HistoryOverlay'
+import type { HistoryTabId } from './components/HistoryOverlay'
 import { InspectorPanel } from './components/InspectorPanel'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
 import { useActivityLog } from './hooks/useActivityLog'
@@ -28,7 +29,7 @@ interface NodeCreateDraft {
 export function App() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
-  const [showHistory, setShowHistory] = useState<boolean>(false)
+  const [historyTab, setHistoryTab] = useState<HistoryTabId | null>(null)
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
 
   const {
@@ -299,14 +300,14 @@ export function App() {
       <AppShell
         email={email}
         workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-        executionStatus={lastExecution?.status ?? null}
         error={error}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => void undo()}
         onRedo={() => void redo()}
         onAutoLayout={() => void handleAutoLayout()}
-        onOpenHistory={() => setShowHistory(true)}
+        onOpenTestRuns={() => setHistoryTab('test-runs')}
+        onOpenActivityLog={() => setHistoryTab('activity-log')}
         onDismissError={() => setError(null)}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
@@ -315,6 +316,7 @@ export function App() {
         <WorkflowSidebar
           workflows={workflows}
           activeWorkflowId={activeWorkflowId}
+          activeWorkflowStatus={lastExecution?.status ?? null}
           nodeCatalog={nodeCatalog}
           onSelectWorkflow={setActiveWorkflowId}
           onCreateWorkflow={handleCreateWorkflow}
@@ -343,49 +345,34 @@ export function App() {
         />
       </AppShell>
 
-      {showHistory ? (
-        <HistoryOverlay
-          onClose={() => setShowHistory(false)}
-          defaultTabId="test-runs"
-          tabs={[
-            {
-              id: 'test-runs',
-              label: 'Test Runs',
-              content: (
-                <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
-                  <ChatPanel
-                    workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-                    hasWorkflow={activeWorkflowId !== null}
-                    activeWorkflowId={activeWorkflowId}
-                    executions={executions}
-                    liveTokens={liveTokens}
-                    lastExecution={lastExecution}
-                    runEnabled={runEnabled}
-                    runDisabledReason={runDisabledReason}
-                    loading={loading}
-                    nodeMetaByNodeId={nodeMetaByNodeId}
-                    onRun={handleRun}
-                  />
-                </div>
-              ),
-            },
-            {
-              id: 'activity-log',
-              label: 'Activity Log',
-              content: (
-                <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
-                  <ActivityLog
-                    workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-                    hasWorkflow={activeWorkflowId !== null}
-                    executions={activityLogExecutions}
-                    loading={activityLogLoading}
-                    nodeMetaByNodeId={nodeMetaByNodeId}
-                  />
-                </div>
-              ),
-            },
-          ]}
-        />
+      {historyTab ? (
+        <HistoryOverlay onClose={() => setHistoryTab(null)}>
+          <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
+            {historyTab === 'test-runs' ? (
+              <ChatPanel
+                workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+                hasWorkflow={activeWorkflowId !== null}
+                activeWorkflowId={activeWorkflowId}
+                executions={executions}
+                liveTokens={liveTokens}
+                lastExecution={lastExecution}
+                runEnabled={runEnabled}
+                runDisabledReason={runDisabledReason}
+                loading={loading}
+                nodeMetaByNodeId={nodeMetaByNodeId}
+                onRun={handleRun}
+              />
+            ) : (
+              <ActivityLog
+                workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+                hasWorkflow={activeWorkflowId !== null}
+                executions={activityLogExecutions}
+                loading={activityLogLoading}
+                nodeMetaByNodeId={nodeMetaByNodeId}
+              />
+            )}
+          </div>
+        </HistoryOverlay>
       ) : null}
 
       <CreateNodeDialog

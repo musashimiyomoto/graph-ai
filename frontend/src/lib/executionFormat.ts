@@ -7,6 +7,14 @@ export const STATUS_COLORS: Record<ExecutionStatus, string> = {
   failed: 'text-[var(--danger)]',
 }
 
+// Background-color variant of STATUS_COLORS for dot/badge indicators.
+export const STATUS_DOT_COLORS: Record<ExecutionStatus, string> = {
+  created: 'bg-[var(--muted)]',
+  running: 'bg-[var(--accent-2)]',
+  success: 'bg-[var(--accent)]',
+  failed: 'bg-[var(--danger)]',
+}
+
 export function formatTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) {

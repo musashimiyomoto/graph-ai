@@ -11,14 +11,14 @@ const ERROR_BANNER_TIMEOUT_MS = 8000
 interface AppShellProps {
   email: string
   workflowName: string
-  executionStatus: string | null
   error: string | null
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
   onAutoLayout: () => void
-  onOpenHistory: () => void
+  onOpenTestRuns: () => void
+  onOpenActivityLog: () => void
   onDismissError: () => void
   onLogout: () => void
   onDeleteAccount: () => void
@@ -29,14 +29,14 @@ interface AppShellProps {
 export function AppShell({
   email,
   workflowName,
-  executionStatus,
   error,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
   onAutoLayout,
-  onOpenHistory,
+  onOpenTestRuns,
+  onOpenActivityLog,
   onDismissError,
   onLogout,
   onDeleteAccount,
@@ -63,9 +63,6 @@ export function AppShell({
           <div className="truncate text-xs text-[var(--muted)]">/ {workflowName}</div>
         </div>
         <div className="flex items-center gap-3">
-          {executionStatus ? (
-            <div className="pixel-pill">Status: {executionStatus}</div>
-          ) : null}
           <button
             type="button"
             className="pixel-icon"
@@ -92,8 +89,11 @@ export function AppShell({
           >
             Auto-layout
           </button>
-          <button type="button" className="pixel-icon" onClick={onOpenHistory}>
-            History
+          <button type="button" className="pixel-icon" onClick={onOpenTestRuns}>
+            Test Runs
+          </button>
+          <button type="button" className="pixel-icon" onClick={onOpenActivityLog}>
+            Activity Log
           </button>
           <button
             type="button"
