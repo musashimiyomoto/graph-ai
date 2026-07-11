@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { STATUS_DOT_COLORS } from '../lib/executionFormat'
 import type { ExecutionStatus, NodeCatalogItem, NodeType, Workflow } from '../lib/types'
 import { NodeIcon } from './NodeIcons'
+import { WorkflowActionsMenu } from './WorkflowActionsMenu'
 
 // Purely a display grouping for the node palette below — the backend catalog
 // stays the source of truth for what a node type is and does. A type not
@@ -70,7 +71,6 @@ export function WorkflowSidebar({
   const [draftName, setDraftName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingName, setEditingName] = useState('')
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const editRef = useRef<HTMLInputElement>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
 
@@ -103,7 +103,7 @@ export function WorkflowSidebar({
         <div className="pixel-section-title">Workflows</div>
         <div className="mt-3 flex gap-2">
           <input
-            className="pixel-input"
+            className="pixel-input flex-1"
             placeholder="New workflow"
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
@@ -126,35 +126,35 @@ export function WorkflowSidebar({
           >
             Add
           </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) {
-                onImportWorkflow(file)
-              }
-              event.target.value = ''
-            }}
-          />
+        </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) {
+              onImportWorkflow(file)
+            }
+            event.target.value = ''
+          }}
+        />
+        <div className="mt-2 flex gap-2">
           <button
             type="button"
-            className="pixel-button small"
+            className="pixel-button ghost small flex-1"
             title="Import a workflow from an exported JSON file"
             onClick={() => importInputRef.current?.click()}
           >
             Import
           </button>
-        </div>
-        <div className="mt-2">
           <button
             type="button"
-            className="pixel-button ghost small w-full"
+            className="pixel-button ghost small flex-1"
             onClick={onOpenNewFromTemplate}
           >
-            New From Template
+            From Template
           </button>
         </div>
         <div className="mt-4 flex flex-col gap-2">
@@ -199,61 +199,13 @@ export function WorkflowSidebar({
                     ) : null}
                     <span className="truncate">{workflow.name}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="pixel-icon"
-                    onClick={() => startEditing(workflow)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="pixel-icon"
-                    title="Duplicate this workflow"
-                    onClick={() => onDuplicateWorkflow(workflow.id)}
-                  >
-                    Dup
-                  </button>
-                  <button
-                    type="button"
-                    className="pixel-icon"
-                    title="Export this workflow as a JSON file"
-                    onClick={() => onExportWorkflow(workflow.id)}
-                  >
-                    Export
-                  </button>
+                  <WorkflowActionsMenu
+                    onEdit={() => startEditing(workflow)}
+                    onDuplicate={() => onDuplicateWorkflow(workflow.id)}
+                    onExport={() => onExportWorkflow(workflow.id)}
+                    onDelete={() => onDeleteWorkflow(workflow.id)}
+                  />
                 </>
-              )}
-              {confirmDeleteId === workflow.id ? (
-                <>
-                  <button
-                    type="button"
-                    className="pixel-icon danger"
-                    title="Confirm delete"
-                    onClick={() => {
-                      onDeleteWorkflow(workflow.id)
-                      setConfirmDeleteId(null)
-                    }}
-                  >
-                    ✓
-                  </button>
-                  <button
-                    type="button"
-                    className="pixel-icon"
-                    title="Cancel"
-                    onClick={() => setConfirmDeleteId(null)}
-                  >
-                    ✕
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="pixel-icon danger"
-                  onClick={() => setConfirmDeleteId(workflow.id)}
-                >
-                  Del
-                </button>
               )}
             </div>
           ))}
