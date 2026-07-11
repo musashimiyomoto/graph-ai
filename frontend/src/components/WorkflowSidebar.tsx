@@ -188,7 +188,7 @@ export function WorkflowSidebar({
                 <>
                   <button
                     type="button"
-                    className="flex flex-1 items-center gap-2 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     onClick={() => onSelectWorkflow(workflow.id)}
                   >
                     {workflow.id === activeWorkflowId && activeWorkflowStatus ? (
@@ -199,12 +199,14 @@ export function WorkflowSidebar({
                     ) : null}
                     <span className="truncate">{workflow.name}</span>
                   </button>
-                  <WorkflowActionsMenu
-                    onEdit={() => startEditing(workflow)}
-                    onDuplicate={() => onDuplicateWorkflow(workflow.id)}
-                    onExport={() => onExportWorkflow(workflow.id)}
-                    onDelete={() => onDeleteWorkflow(workflow.id)}
-                  />
+                  <div className="shrink-0">
+                    <WorkflowActionsMenu
+                      onEdit={() => startEditing(workflow)}
+                      onDuplicate={() => onDuplicateWorkflow(workflow.id)}
+                      onExport={() => onExportWorkflow(workflow.id)}
+                      onDelete={() => onDeleteWorkflow(workflow.id)}
+                    />
+                  </div>
                 </>
               )}
             </div>
