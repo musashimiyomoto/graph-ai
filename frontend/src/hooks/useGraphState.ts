@@ -139,13 +139,17 @@ function buildDefaultData(catalogNode: NodeCatalogItem): Record<string, unknown>
       continue
     }
 
-    // A `ge` validator on a datasource field (provider/model/bot/collection
-    // ID) is a sanity bound on a real reference, not a sensible default —
-    // defaulting to it would silently point a new node at "ID 1" before the
-    // user has picked anything, and can even reference a resource that
-    // doesn't exist. Leave those unset so `required` validation prompts an
-    // explicit choice instead.
-    if (field.validators.ge !== undefined && !field.datasource) {
+    // A datasource field (provider/model/bot/collection ID) with no explicit
+    // `default` has nothing sensible to default to — the backend only
+    // treats `null` as "unset" (an empty string still fails a `ge`
+    // validator's numeric check), and `required` validation already prompts
+    // an explicit choice for required ones.
+    if (field.datasource) {
+      data[field.name] = null
+      continue
+    }
+
+    if (field.validators.ge !== undefined) {
       data[field.name] = field.validators.ge
       continue
     }
