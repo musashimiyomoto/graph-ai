@@ -63,50 +63,56 @@ export function AppShell({
           <div className="truncate text-xs text-[var(--muted)]">/ {workflowName}</div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="pixel-icon"
-            disabled={!canUndo}
-            title="Undo (Ctrl+Z)"
-            onClick={onUndo}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            className="pixel-icon"
-            disabled={!canRedo}
-            title="Redo (Ctrl+Shift+Z)"
-            onClick={onRedo}
-          >
-            Redo
-          </button>
-          <button
-            type="button"
-            className="pixel-icon"
-            title="Auto-layout"
-            onClick={onAutoLayout}
-          >
-            Auto-layout
-          </button>
-          <button type="button" className="pixel-icon" onClick={onOpenTestRuns}>
-            Test Runs
-          </button>
-          <button type="button" className="pixel-icon" onClick={onOpenActivityLog}>
-            Activity Log
-          </button>
-          <button
-            type="button"
-            className="pixel-icon"
-            onClick={() => setShowSettings(true)}
-          >
-            Settings
-          </button>
-          <UserMenu
-            email={email}
-            onLogout={onLogout}
-            onDeleteAccount={onDeleteAccount}
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="pixel-icon"
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              onClick={onUndo}
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              className="pixel-icon"
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+              onClick={onRedo}
+            >
+              Redo
+            </button>
+            <button
+              type="button"
+              className="pixel-icon"
+              title="Auto-layout"
+              onClick={onAutoLayout}
+            >
+              Auto-layout
+            </button>
+          </div>
+          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
+            <button type="button" className="pixel-icon" onClick={onOpenTestRuns}>
+              Test Runs
+            </button>
+            <button type="button" className="pixel-icon" onClick={onOpenActivityLog}>
+              Activity Log
+            </button>
+          </div>
+          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
+            <button
+              type="button"
+              className="pixel-icon"
+              onClick={() => setShowSettings(true)}
+            >
+              Settings
+            </button>
+            <UserMenu
+              email={email}
+              onLogout={onLogout}
+              onDeleteAccount={onDeleteAccount}
+            />
+          </div>
         </div>
       </header>
       {showSettings ? (
