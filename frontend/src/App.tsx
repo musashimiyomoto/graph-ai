@@ -344,6 +344,7 @@ export function App() {
           onAddNode={handleAddNode}
         />
         <GraphCanvas
+          activeWorkflowId={activeWorkflowId}
           nodes={nodes}
           edges={edges}
           nodeCatalog={nodeCatalog}

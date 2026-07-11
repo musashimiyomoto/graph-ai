@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   DefaultEdgeOptions,
   Connection,
@@ -25,6 +25,11 @@ import { GenericNode } from './CustomNodes'
 import { ContextMenu } from './NodeContextMenu'
 
 interface GraphCanvasProps {
+  // Included only to trigger the fitView-on-workflow-switch effect below —
+  // GraphCanvas never unmounts between workflows (only its nodes/edges
+  // props change), so React Flow's own `fitView` prop (mount-only) never
+  // re-centers on switch; watching this id is the trigger that does.
+  activeWorkflowId: number | null
   nodes: FlowNode[]
   edges: Edge[]
   nodeCatalog: NodeCatalogItem[]
@@ -48,6 +53,7 @@ interface ContextMenuState {
 }
 
 function GraphCanvasInner({
+  activeWorkflowId,
   nodes,
   edges,
   nodeCatalog,
@@ -61,8 +67,30 @@ function GraphCanvasInner({
   onDropNode,
   onDeleteNode,
 }: GraphCanvasProps) {
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+
+  // React Flow's own `fitView` prop only centers on mount; GraphCanvas stays
+  // mounted across workflow switches (only nodes/edges change), so without
+  // this the camera stays wherever it was left on the previous workflow —
+  // including right after creating one from a template, where it visibly
+  // doesn't center on the new graph at all. `activeWorkflowId` flips before
+  // its nodes have finished loading (the fetch in useGraphState is async),
+  // so we arm on the id change but wait for that workflow's first non-empty
+  // `nodes` update before actually re-centering — fitting an empty/stale
+  // graph would just leave the camera wherever it already was.
+  const pendingFitWorkflowId = useRef<number | null>(null)
+  useEffect(() => {
+    pendingFitWorkflowId.current = activeWorkflowId
+  }, [activeWorkflowId])
+  useEffect(() => {
+    if (pendingFitWorkflowId.current === null || nodes.length === 0) {
+      return
+    }
+    pendingFitWorkflowId.current = null
+    const raf = requestAnimationFrame(() => fitView({ duration: 200 }))
+    return () => cancelAnimationFrame(raf)
+  }, [nodes, fitView])
 
   const catalogByType = useMemo(
     () => Object.fromEntries(nodeCatalog.map((item) => [item.type, item])),
