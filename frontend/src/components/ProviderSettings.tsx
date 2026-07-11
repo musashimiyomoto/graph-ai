@@ -8,7 +8,7 @@ interface ProviderSettingsProps {
   onError: (err: ApiError) => void
 }
 
-type ProviderType = 'ollama' | 'openai' | 'anthropic' | 'openai_compatible'
+type ProviderType = 'ollama' | 'openai' | 'anthropic'
 
 interface ProviderTypeSpec {
   label: string
@@ -16,6 +16,10 @@ interface ProviderTypeSpec {
   requiresApiKey: boolean
 }
 
+// The OpenAI entry's base URL is just a prefill, not a hardcoded target —
+// pointing it at any other OpenAI-API-compatible endpoint (a local server,
+// a third-party host, ...) works the same way, so there's no separate
+// "OpenAI-compatible" provider type.
 const PROVIDER_TYPES: Record<ProviderType, ProviderTypeSpec> = {
   ollama: {
     label: 'Ollama',
@@ -32,19 +36,9 @@ const PROVIDER_TYPES: Record<ProviderType, ProviderTypeSpec> = {
     defaultBaseUrl: 'https://api.anthropic.com',
     requiresApiKey: true,
   },
-  openai_compatible: {
-    label: 'OpenAI-compatible',
-    defaultBaseUrl: '',
-    requiresApiKey: true,
-  },
 }
 
-const PROVIDER_TYPE_ORDER: ProviderType[] = [
-  'ollama',
-  'openai',
-  'anthropic',
-  'openai_compatible',
-]
+const PROVIDER_TYPE_ORDER: ProviderType[] = ['ollama', 'openai', 'anthropic']
 
 export function ProviderSettings({ onError }: ProviderSettingsProps) {
   const [name, setName] = useState('')

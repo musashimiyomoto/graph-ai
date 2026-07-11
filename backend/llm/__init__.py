@@ -11,7 +11,6 @@ from schemas import LLMProviderResponse
 
 _API_KEY_PROVIDERS = {
     LLMProviderType.OPENAI,
-    LLMProviderType.OPENAI_COMPATIBLE,
     LLMProviderType.ANTHROPIC,
 }
 

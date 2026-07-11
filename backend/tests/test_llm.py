@@ -399,14 +399,6 @@ class TestCreateLLMClient:
         if not isinstance(client, OpenAIClient):
             pytest.fail("Expected an OpenAI client")
 
-    def test_openai_compatible_with_key(self) -> None:
-        """The OpenAI-compatible provider builds an OpenAI client."""
-        client = create_llm_client(
-            _make_provider(LLMProviderType.OPENAI_COMPATIBLE), api_key="sk-test"
-        )
-        if not isinstance(client, OpenAIClient):
-            pytest.fail("Expected an OpenAI client")
-
     def test_anthropic_with_key(self) -> None:
         """The Anthropic provider builds an Anthropic client with a key."""
         client = create_llm_client(

@@ -9,4 +9,3 @@ class LLMProviderType(StrEnum):
     OLLAMA = auto()
     OPENAI = auto()
     ANTHROPIC = auto()
-    OPENAI_COMPATIBLE = auto()

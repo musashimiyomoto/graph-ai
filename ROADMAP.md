@@ -22,7 +22,8 @@ against the actual code as of this writing (not carried forward from stale notes
   retries/backoff/reaper, wave-parallel scheduling, per-node result persistence
   (`node_executions`), SSE streaming with a polling fallback, workflow versioning
   with pinned reruns.
-- **Integrations** — multi-provider LLM (Ollama/OpenAI/Anthropic/OpenAI-compatible)
+- **Integrations** — multi-provider LLM (Ollama/OpenAI/Anthropic, with the OpenAI
+  entry's base URL freely overridable for any OpenAI-API-compatible endpoint)
   with token streaming; Telegram bots (per-user, encrypted token) that can trigger a
   workflow from an incoming message and receive the reply, including a manually
   pinned chat ID for non-Telegram-triggered runs.
@@ -62,7 +63,9 @@ against the actual code as of this writing (not carried forward from stale notes
 ## Phase 2 — Multi-provider LLM + secrets ✅ done
 
 - [x] Fernet-encrypted, write-only `LLMProvider.api_key`; never returned in responses.
-- [x] OpenAI / Anthropic / OpenAI-compatible clients alongside Ollama.
+- [x] OpenAI / Anthropic clients alongside Ollama. The OpenAI client also
+      serves any OpenAI-API-compatible endpoint — no separate provider type,
+      just override the OpenAI entry's base URL.
 - [x] Per-node generation params (`temperature`, `max_tokens`, `top_p`), opt-in via
       the `optional_number` widget.
 - [x] Token streaming provider → worker (Redis pub/sub) → SSE → frontend
