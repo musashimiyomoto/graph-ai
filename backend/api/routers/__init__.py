@@ -11,6 +11,7 @@ from api.routers import (
     user,
     vector,
     workflow,
+    workflow_template,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "user",
     "vector",
     "workflow",
+    "workflow_template",
 ]

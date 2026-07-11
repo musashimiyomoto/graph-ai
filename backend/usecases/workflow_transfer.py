@@ -27,7 +27,9 @@ from schemas import (
     WorkflowGraphNode,
     WorkflowGraphTransfer,
     WorkflowResponse,
+    WorkflowTemplateResponse,
 )
+from templates import TEMPLATE_DEFINITIONS, get_template_definition
 from usecases.edge import EdgeUsecase
 from usecases.node import NodeUsecase
 from usecases.workflow import WorkflowUsecase
@@ -316,4 +318,51 @@ class WorkflowTransferUsecase:
             name=f"{source.name} (copy)",
             graph=graph,
             allow_unset_references=False,
+        )
+
+    def list_templates(self) -> list[WorkflowTemplateResponse]:
+        """List the global workflow template catalog.
+
+        Returns:
+            Template metadata (no graph — kept out of the list response).
+
+        """
+        return [
+            WorkflowTemplateResponse(
+                key=definition.key,
+                name=definition.name,
+                description=definition.description,
+            )
+            for definition in TEMPLATE_DEFINITIONS
+        ]
+
+    async def instantiate_template(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        key: str,
+        name: str | None,
+    ) -> WorkflowResponse:
+        """Create a new workflow from a global template's graph.
+
+        Args:
+            session: The session.
+            user_id: The owner user ID.
+            key: The template's stable identifier.
+            name: Name for the new workflow; defaults to the template's name.
+
+        Returns:
+            The newly created workflow.
+
+        Raises:
+            WorkflowTemplateNotFoundError: If the template key is unregistered.
+
+        """
+        definition = get_template_definition(key)
+        return await self._create_workflow_from_graph(
+            session=session,
+            user_id=user_id,
+            name=name or definition.name,
+            graph=definition.graph,
+            allow_unset_references=True,
         )

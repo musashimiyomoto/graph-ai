@@ -75,6 +75,27 @@ class WorkflowImportRequest(BaseModel):
     graph: WorkflowGraphTransfer = Field(default=..., description="Portable graph")
 
 
+class WorkflowTemplateResponse(BaseModel):
+    """Catalog metadata for a global workflow template (list view — no graph)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str = Field(default=..., description="Stable template identifier")
+    name: str = Field(default=..., description="Display name")
+    description: str = Field(default=..., description="What this template does")
+
+
+class WorkflowTemplateInstantiateRequest(BaseModel):
+    """Payload for creating a workflow from a template."""
+
+    name: str | None = Field(
+        default=None,
+        description="Name for the new workflow; defaults to the template's name",
+        min_length=1,
+        max_length=200,
+    )
+
+
 class WorkflowUpdate(BaseModel):
     """Payload for updating a workflow."""
 

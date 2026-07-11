@@ -48,6 +48,7 @@ interface WorkflowSidebarProps {
   onDuplicateWorkflow: (id: number) => void
   onExportWorkflow: (id: number) => void
   onImportWorkflow: (file: File) => void
+  onOpenNewFromTemplate: () => void
   onAddNode: (type: NodeType) => void
 }
 
@@ -63,6 +64,7 @@ export function WorkflowSidebar({
   onDuplicateWorkflow,
   onExportWorkflow,
   onImportWorkflow,
+  onOpenNewFromTemplate,
   onAddNode,
 }: WorkflowSidebarProps) {
   const [draftName, setDraftName] = useState('')
@@ -144,6 +146,15 @@ export function WorkflowSidebar({
             onClick={() => importInputRef.current?.click()}
           >
             Import
+          </button>
+        </div>
+        <div className="mt-2">
+          <button
+            type="button"
+            className="pixel-button ghost small w-full"
+            onClick={onOpenNewFromTemplate}
+          >
+            New From Template
           </button>
         </div>
         <div className="mt-4 flex flex-col gap-2">

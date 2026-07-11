@@ -20,6 +20,7 @@ from api.routers import (
     user,
     vector,
     workflow,
+    workflow_template,
 )
 from exceptions import BaseError
 from logging_config import configure_logging
@@ -82,6 +83,7 @@ app.include_router(router=health.router)
 app.include_router(router=auth.router)
 app.include_router(router=user.router)
 app.include_router(router=workflow.router)
+app.include_router(router=workflow_template.router)
 app.include_router(router=node.router)
 app.include_router(router=edge.router)
 app.include_router(router=execution.router)

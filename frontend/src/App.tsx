@@ -9,6 +9,7 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { HistoryOverlay } from './components/HistoryOverlay'
 import type { HistoryTabId } from './components/HistoryOverlay'
 import { InspectorPanel } from './components/InspectorPanel'
+import { NewFromTemplateDialog } from './components/NewFromTemplateDialog'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
 import { useActivityLog } from './hooks/useActivityLog'
 import { useAuthSession } from './hooks/useAuthSession'
@@ -32,6 +33,7 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(false)
   const [historyTab, setHistoryTab] = useState<HistoryTabId | null>(null)
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
+  const [showNewFromTemplate, setShowNewFromTemplate] = useState<boolean>(false)
 
   const {
     token,
@@ -61,13 +63,17 @@ export function App() {
     handleError,
   })
 
-  const { handleDuplicateWorkflow, handleExportWorkflow, handleImportWorkflow } =
-    useWorkflowTransfer({
-      setLoading,
-      setError,
-      handleError,
-      onWorkflowCreated: (created) => setActiveWorkflowId(created.id),
-    })
+  const {
+    handleDuplicateWorkflow,
+    handleExportWorkflow,
+    handleImportWorkflow,
+    handleInstantiateTemplate,
+  } = useWorkflowTransfer({
+    setLoading,
+    setError,
+    handleError,
+    onWorkflowCreated: (created) => setActiveWorkflowId(created.id),
+  })
 
   const {
     nodeCatalog,
@@ -334,6 +340,7 @@ export function App() {
           onDuplicateWorkflow={(id) => void handleDuplicateWorkflow(id)}
           onExportWorkflow={(id) => void handleExportWorkflow(id)}
           onImportWorkflow={(file) => void handleImportWorkflow(file)}
+          onOpenNewFromTemplate={() => setShowNewFromTemplate(true)}
           onAddNode={handleAddNode}
         />
         <GraphCanvas
@@ -399,6 +406,16 @@ export function App() {
         onCancel={() => setNodeCreateDraft(null)}
         onConfirm={confirmCreateNode}
       />
+
+      {showNewFromTemplate ? (
+        <NewFromTemplateDialog
+          onCancel={() => setShowNewFromTemplate(false)}
+          onConfirm={async (templateKey) => {
+            await handleInstantiateTemplate(templateKey)
+            setShowNewFromTemplate(false)
+          }}
+        />
+      ) : null}
     </>
   )
 }

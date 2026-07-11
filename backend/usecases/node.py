@@ -87,13 +87,15 @@ class NodeUsecase:
             value: Field value.
             errors: Error collector.
             allow_unset_references: When True, a required datasource field
-                (provider/bot) that references another user's private
-                resource is allowed to be `None` even though it's normally
-                required. Used only when rebuilding a node from a transferred
-                graph (import/duplicate/template) whose reference IDs were
-                scrubbed or don't apply to the target account — the user
-                fills them back in via the node inspector, same as an
-                existing node whose provider/bot was since deleted.
+                that references another user's private resource (provider,
+                bot) — or is only meaningful once one of those is chosen
+                (LLM_MODEL, which depends on a provider) — is allowed to be
+                `None` even though it's normally required. Used only when
+                rebuilding a node from a transferred graph (import/
+                duplicate/template) whose reference IDs were scrubbed or
+                don't apply to the target account — the user fills them back
+                in via the node inspector, same as an existing node whose
+                provider/bot was since deleted.
 
         """
         if value is None and (
@@ -105,6 +107,7 @@ class NodeUsecase:
                 in {
                     NodeFieldDataSourceKind.LLM_PROVIDER,
                     NodeFieldDataSourceKind.TELEGRAM_BOT,
+                    NodeFieldDataSourceKind.LLM_MODEL,
                 }
             )
         ):

@@ -114,6 +114,12 @@ export interface WorkflowExport {
   graph: WorkflowGraphTransfer
 }
 
+export interface WorkflowTemplate {
+  key: string
+  name: string
+  description: string
+}
+
 export interface TokenStreamEvent {
   type: 'token'
   node_id: number

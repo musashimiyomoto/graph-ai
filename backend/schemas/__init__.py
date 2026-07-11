@@ -64,6 +64,8 @@ from schemas.workflow import (
     WorkflowGraphTransfer,
     WorkflowImportRequest,
     WorkflowResponse,
+    WorkflowTemplateInstantiateRequest,
+    WorkflowTemplateResponse,
     WorkflowUpdate,
 )
 from schemas.workflow_version import WorkflowVersionResponse
@@ -128,6 +130,8 @@ __all__ = [
     "WorkflowGraphTransfer",
     "WorkflowImportRequest",
     "WorkflowResponse",
+    "WorkflowTemplateInstantiateRequest",
+    "WorkflowTemplateResponse",
     "WorkflowUpdate",
     "WorkflowVersionResponse",
 ]

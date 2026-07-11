@@ -28,6 +28,7 @@ import type {
   Workflow,
   WorkflowExport,
   WorkflowGraphTransfer,
+  WorkflowTemplate,
   WorkflowVersion,
 } from './types'
 
@@ -155,6 +156,20 @@ export async function importWorkflow(
 export async function duplicateWorkflow(workflowId: number): Promise<Workflow> {
   return request<Workflow>(`/workflows/${workflowId}/duplicate`, {
     method: 'POST',
+  })
+}
+
+export async function getWorkflowTemplates(): Promise<WorkflowTemplate[]> {
+  return request<WorkflowTemplate[]>('/workflow-templates')
+}
+
+export async function instantiateWorkflowTemplate(
+  templateKey: string,
+  name?: string,
+): Promise<Workflow> {
+  return request<Workflow>(`/workflow-templates/${templateKey}/instantiate`, {
+    method: 'POST',
+    body: JSON.stringify(name ? { name } : {}),
   })
 }
 

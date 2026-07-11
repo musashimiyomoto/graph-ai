@@ -39,7 +39,11 @@ from exceptions.rag import (
 from exceptions.rate_limit import RateLimitExceededError
 from exceptions.telegram import TelegramAPIError, TelegramBotNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
-from exceptions.workflow import WorkflowNotFoundError, WorkflowVersionNotFoundError
+from exceptions.workflow import (
+    WorkflowNotFoundError,
+    WorkflowTemplateNotFoundError,
+    WorkflowVersionNotFoundError,
+)
 
 __all__ = [
     "AuthCredentialsError",
@@ -74,5 +78,6 @@ __all__ = [
     "VectorDocumentNotFoundError",
     "WebSearchConnectionError",
     "WorkflowNotFoundError",
+    "WorkflowTemplateNotFoundError",
     "WorkflowVersionNotFoundError",
 ]

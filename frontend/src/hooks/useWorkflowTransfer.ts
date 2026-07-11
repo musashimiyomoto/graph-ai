@@ -1,7 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
-import { duplicateWorkflow, exportWorkflow, importWorkflow } from '../lib/api'
+import {
+  duplicateWorkflow,
+  exportWorkflow,
+  importWorkflow,
+  instantiateWorkflowTemplate,
+} from '../lib/api'
 import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, Workflow, WorkflowExport } from '../lib/types'
 
@@ -16,6 +21,7 @@ interface UseWorkflowTransferResult {
   handleDuplicateWorkflow: (workflowId: number) => Promise<void>
   handleExportWorkflow: (workflowId: number) => Promise<void>
   handleImportWorkflow: (file: File) => Promise<void>
+  handleInstantiateTemplate: (templateKey: string) => Promise<void>
 }
 
 function downloadJson(filename: string, data: unknown): void {
@@ -113,5 +119,26 @@ export function useWorkflowTransfer({
     [addWorkflowToCache, handleError, setError, setLoading],
   )
 
-  return { handleDuplicateWorkflow, handleExportWorkflow, handleImportWorkflow }
+  const handleInstantiateTemplate = useCallback(
+    async (templateKey: string): Promise<void> => {
+      setLoading(true)
+      try {
+        const created = await instantiateWorkflowTemplate(templateKey)
+        addWorkflowToCache(created)
+        setError(null)
+      } catch (error) {
+        handleError(error as ApiError)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [addWorkflowToCache, handleError, setError, setLoading],
+  )
+
+  return {
+    handleDuplicateWorkflow,
+    handleExportWorkflow,
+    handleImportWorkflow,
+    handleInstantiateTemplate,
+  }
 }
