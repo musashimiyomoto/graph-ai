@@ -1,32 +1,29 @@
-import { useEffect } from 'react'
 import type { ReactNode } from 'react'
+
+import { Modal } from './Modal'
 
 export type HistoryTabId = 'test-runs' | 'activity-log'
 
 interface HistoryOverlayProps {
+  title: string
   onClose: () => void
   children: ReactNode
 }
 
-export function HistoryOverlay({ onClose, children }: HistoryOverlayProps) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
+export function HistoryOverlay({ title, onClose, children }: HistoryOverlayProps) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg)] text-[var(--text)]">
-      <div className="flex items-center justify-end border-b border-white/10 px-4 py-3">
+    <Modal onClose={onClose} maxWidth="max-w-3xl">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="pixel-section-title">{title}</div>
         <button type="button" className="pixel-icon" onClick={onClose}>
           ✕
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-    </div>
+      {/* Fixed height (rather than growing to content) so the panel's own
+          flex layout can bound the scrollable turn/entry list — matching
+          max-h-[80vh] on Modal's outer panel avoids a second, redundant
+          scrollbar. */}
+      <div className="flex h-[70vh] flex-col">{children}</div>
+    </Modal>
   )
 }

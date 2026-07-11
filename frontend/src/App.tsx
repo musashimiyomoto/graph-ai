@@ -346,32 +346,33 @@ export function App() {
       </AppShell>
 
       {historyTab ? (
-        <HistoryOverlay onClose={() => setHistoryTab(null)}>
-          <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 pt-4 pb-4">
-            {historyTab === 'test-runs' ? (
-              <ChatPanel
-                workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-                hasWorkflow={activeWorkflowId !== null}
-                activeWorkflowId={activeWorkflowId}
-                executions={executions}
-                liveTokens={liveTokens}
-                lastExecution={lastExecution}
-                runEnabled={runEnabled}
-                runDisabledReason={runDisabledReason}
-                loading={loading}
-                nodeMetaByNodeId={nodeMetaByNodeId}
-                onRun={handleRun}
-              />
-            ) : (
-              <ActivityLog
-                workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
-                hasWorkflow={activeWorkflowId !== null}
-                executions={activityLogExecutions}
-                loading={activityLogLoading}
-                nodeMetaByNodeId={nodeMetaByNodeId}
-              />
-            )}
-          </div>
+        <HistoryOverlay
+          title={historyTab === 'test-runs' ? 'Test Runs' : 'Activity Log'}
+          onClose={() => setHistoryTab(null)}
+        >
+          {historyTab === 'test-runs' ? (
+            <ChatPanel
+              workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+              hasWorkflow={activeWorkflowId !== null}
+              activeWorkflowId={activeWorkflowId}
+              executions={executions}
+              liveTokens={liveTokens}
+              lastExecution={lastExecution}
+              runEnabled={runEnabled}
+              runDisabledReason={runDisabledReason}
+              loading={loading}
+              nodeMetaByNodeId={nodeMetaByNodeId}
+              onRun={handleRun}
+            />
+          ) : (
+            <ActivityLog
+              workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+              hasWorkflow={activeWorkflowId !== null}
+              executions={activityLogExecutions}
+              loading={activityLogLoading}
+              nodeMetaByNodeId={nodeMetaByNodeId}
+            />
+          )}
         </HistoryOverlay>
       ) : null}
 

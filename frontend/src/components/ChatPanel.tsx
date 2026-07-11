@@ -180,7 +180,7 @@ export function ChatPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="mb-3 flex items-center justify-between">
-        <div className="pixel-section-title">Test Runs · {workflowName}</div>
+        <div className="text-xs text-[var(--muted)]">{workflowName}</div>
         {isRunning ? (
           <div className="flex items-center gap-2">
             <span className="live-dot" />

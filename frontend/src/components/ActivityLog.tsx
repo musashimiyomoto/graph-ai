@@ -24,9 +24,7 @@ export function ActivityLog({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="pixel-section-title">Activity Log · {workflowName}</div>
-      </div>
+      <div className="mb-3 text-xs text-[var(--muted)]">{workflowName}</div>
 
       <div className="pixel-scroll flex-1 overflow-y-auto pr-1">
         {!hasWorkflow ? (
