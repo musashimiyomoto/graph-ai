@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
-import {
-  deleteVectorCollection,
-  getVectorCollections,
-} from '../lib/api'
+import { deleteVectorCollection, getVectorCollections } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, VectorCollection } from '../lib/types'
 
 interface UseVectorCollectionsParams {
@@ -22,58 +21,47 @@ export function useVectorCollections({
   enabled = true,
   onError,
 }: UseVectorCollectionsParams): UseVectorCollectionsResult {
-  const [collections, setCollections] = useState<VectorCollection[]>([])
-  const [loading, setLoading] = useState(false)
+  const queryClient = useQueryClient()
 
-  const reportError = useCallback(
-    (error: ApiError): void => {
-      if (onError) {
-        onError(error)
-      }
+  const query = useQuery({
+    queryKey: queryKeys.vectorCollections(),
+    queryFn: getVectorCollections,
+    enabled,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteVectorCollection,
+    onSuccess: (_data, name) => {
+      queryClient.setQueryData(
+        queryKeys.vectorCollections(),
+        (previous: VectorCollection[] | undefined) =>
+          previous?.filter((item) => item.name !== name) ?? [],
+      )
     },
-    [onError],
-  )
+  })
 
-  const refreshCollections = useCallback(async (): Promise<void> => {
-    if (!enabled) {
-      setCollections([])
-      return
-    }
-
-    setLoading(true)
+  async function removeCollection(name: string): Promise<boolean> {
     try {
-      const items = await getVectorCollections()
-      setCollections(items)
+      await deleteMutation.mutateAsync(name)
+      return true
     } catch (error) {
-      reportError(error as ApiError)
-      setCollections([])
-    } finally {
-      setLoading(false)
+      onError?.(error as ApiError)
+      return false
     }
-  }, [enabled, reportError])
+  }
 
   useEffect(() => {
-    void refreshCollections()
-  }, [refreshCollections])
-
-  const removeCollection = useCallback(
-    async (name: string): Promise<boolean> => {
-      try {
-        await deleteVectorCollection(name)
-        setCollections((previous) => previous.filter((item) => item.name !== name))
-        return true
-      } catch (error) {
-        reportError(error as ApiError)
-        return false
-      }
-    },
-    [reportError],
-  )
+    if (query.error) {
+      onError?.(query.error)
+    }
+  }, [query.error, onError])
 
   return {
-    collections,
-    loading,
-    refreshCollections,
+    collections: enabled ? (query.data ?? []) : [],
+    loading: enabled && query.isLoading,
+    refreshCollections: async () => {
+      await query.refetch()
+    },
     removeCollection,
   }
 }

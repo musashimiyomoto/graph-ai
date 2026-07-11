@@ -491,7 +491,32 @@ Second pass (closed out everything remaining):
       positions, box-select vs. right-drag-pan, toolbar buttons, and a
       page reload after each step confirming state actually persisted
       server-side rather than being a client-side illusion.
-- [ ] React Query in place of hand-rolled `useState`/`useEffect` data fetching.
+- [x] **React Query for simple list+CRUD data fetching** — `@tanstack/react-query`
+      (`lib/queryClient.ts`, `QueryClientProvider` wired in `main.tsx`;
+      `lib/queryKeys.ts` centralizes query keys). Migrated the 8 hooks that
+      were plain list+CRUD (`useNodeCatalog`, `useLlmProviders`,
+      `useProviderModels`, `useTelegramBots`, `useVectorCollections`,
+      `useVectorDocuments`, and the list-half of `useWorkflowState`/
+      `useActivityLog`) onto `useQuery`/`useMutation`, each mutation updating
+      the shared cache via `setQueryData` instead of each hook instance
+      holding its own local array. Real payoff: `NodeFieldsForm`'s provider/
+      bot/collection pickers and the corresponding Settings tabs now read
+      the *same* cached list — creating/deleting in Settings is instantly
+      visible in the node inspector instead of each hook fetching
+      independently. `useWorkflowState` split cleanly: the workflow list
+      moved to `useQuery`, `activeWorkflowId` (pure UI selection, not server
+      state) stayed a plain `useState`. `VectorCollectionSettings`'s
+      remount-via-`key` trick for refreshing a collection's document list
+      after upload was replaced with a targeted
+      `queryClient.invalidateQueries` (the remount hack silently stopped
+      refetching once RQ's `staleTime` made the remounted query resolve from
+      cache instead of the network). **Deliberately left untouched**:
+      `useExecutions.ts` (SSE token streaming + polling fallback merged into
+      one `useState`), `useOllamaPull.ts` (SSE), `useVectorUploadJobs.ts`
+      (hand-rolled job-status polling), and `useGraphState.ts`/
+      `useUndoRedo.ts` (a replay-based undo/redo command stack, not a cache)
+      — none of these are simple server-cache reads, so React Query would
+      add risk without a real caching win.
 - [ ] Workflow template library, JSON export/import, duplication.
 - [ ] Frontend tests (Vitest + Testing Library) — currently zero.
 - [ ] Multi-tenant quotas, audit log, cost observability (tokens/latency per run).

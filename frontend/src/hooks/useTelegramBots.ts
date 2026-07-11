@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 import {
   createTelegramBot,
   deleteTelegramBot,
   getTelegramBots,
 } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type {
   ApiError,
   TelegramBot,
@@ -27,81 +29,77 @@ interface UseTelegramBotsResult {
   removeBot: (botId: number) => Promise<boolean>
 }
 
+// Shares one cached list across every consumer (Settings' bot list and
+// NodeFieldsForm's bot picker both read/invalidate the same query key), so
+// creating/deleting a bot in one place is immediately reflected in the
+// other instead of each hook instance holding its own stale copy.
 export function useTelegramBots({
   enabled = true,
   onError,
 }: UseTelegramBotsParams): UseTelegramBotsResult {
-  const [bots, setBots] = useState<TelegramBot[]>([])
-  const [loading, setLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const queryClient = useQueryClient()
 
-  const reportError = useCallback(
-    (error: ApiError): void => {
-      if (onError) {
-        onError(error)
-      }
+  const query = useQuery({
+    queryKey: queryKeys.telegramBots(),
+    queryFn: getTelegramBots,
+    enabled,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: createTelegramBot,
+    onSuccess: (created) => {
+      queryClient.setQueryData(
+        queryKeys.telegramBots(),
+        (previous: TelegramBot[] | undefined) => [...(previous ?? []), created],
+      )
     },
-    [onError],
-  )
+  })
 
-  const refreshBots = useCallback(async (): Promise<void> => {
-    if (!enabled) {
-      setBots([])
-      return
-    }
+  const deleteMutation = useMutation({
+    mutationFn: deleteTelegramBot,
+    onSuccess: (_data, botId) => {
+      queryClient.setQueryData(
+        queryKeys.telegramBots(),
+        (previous: TelegramBot[] | undefined) =>
+          previous?.filter((item) => item.id !== botId) ?? [],
+      )
+    },
+  })
 
-    setLoading(true)
+  async function createBot(
+    payload: TelegramBotCreatePayload,
+  ): Promise<TelegramBot | null> {
     try {
-      const items = await getTelegramBots()
-      setBots(items)
+      return await createMutation.mutateAsync(payload)
     } catch (error) {
-      reportError(error as ApiError)
-      setBots([])
-    } finally {
-      setLoading(false)
+      onError?.(error as ApiError)
+      return null
     }
-  }, [enabled, reportError])
+  }
+
+  async function removeBot(botId: number): Promise<boolean> {
+    try {
+      await deleteMutation.mutateAsync(botId)
+      return true
+    } catch (error) {
+      onError?.(error as ApiError)
+      return false
+    }
+  }
 
   useEffect(() => {
-    void refreshBots()
-  }, [refreshBots])
-
-  const createBot = useCallback(
-    async (payload: TelegramBotCreatePayload): Promise<TelegramBot | null> => {
-      setCreating(true)
-      try {
-        const created = await createTelegramBot(payload)
-        setBots((previous) => [...previous, created])
-        return created
-      } catch (error) {
-        reportError(error as ApiError)
-        return null
-      } finally {
-        setCreating(false)
-      }
-    },
-    [reportError],
-  )
-
-  const removeBot = useCallback(
-    async (botId: number): Promise<boolean> => {
-      try {
-        await deleteTelegramBot(botId)
-        setBots((previous) => previous.filter((item) => item.id !== botId))
-        return true
-      } catch (error) {
-        reportError(error as ApiError)
-        return false
-      }
-    },
-    [reportError],
-  )
+    if (query.error) {
+      onError?.(query.error)
+    }
+  }, [query.error, onError])
 
   return {
-    bots,
-    loading,
-    creating,
-    refreshBots,
+    bots: enabled ? (query.data ?? []) : [],
+    loading: enabled && query.isLoading,
+    creating: createMutation.isPending,
+    refreshBots: async () => {
+      await query.refetch()
+    },
     createBot,
     removeBot,
   }

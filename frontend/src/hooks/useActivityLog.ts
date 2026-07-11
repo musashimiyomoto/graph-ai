@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 import { getExecutions } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, Execution } from '../lib/types'
 
 interface UseActivityLogParams {
@@ -23,28 +25,26 @@ export function useActivityLog({
   activeWorkflowId,
   handleError,
 }: UseActivityLogParams): UseActivityLogResult {
-  const [executions, setExecutions] = useState<Execution[]>([])
-  const [loading, setLoading] = useState<boolean>(false)
+  const active = token !== null && activeWorkflowId !== null
+  const resolvedWorkflowId = activeWorkflowId ?? 0
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!token || !activeWorkflowId) {
-      setExecutions([])
-      return
-    }
-    setLoading(true)
-    try {
-      const items = await getExecutions(activeWorkflowId, 'telegram')
-      setExecutions(items)
-    } catch (error) {
-      handleError(error as ApiError)
-    } finally {
-      setLoading(false)
-    }
-  }, [activeWorkflowId, handleError, token])
+  const query = useQuery({
+    queryKey: queryKeys.activityLog(resolvedWorkflowId),
+    queryFn: () => getExecutions(resolvedWorkflowId, 'telegram'),
+    enabled: active,
+  })
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (query.error) {
+      handleError(query.error)
+    }
+  }, [query.error, handleError])
 
-  return { executions, loading, refresh }
+  return {
+    executions: active ? (query.data ?? []) : [],
+    loading: active && query.isLoading,
+    refresh: async () => {
+      await query.refetch()
+    },
+  }
 }

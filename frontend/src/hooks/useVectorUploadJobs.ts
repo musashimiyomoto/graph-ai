@@ -10,9 +10,9 @@ export interface PendingUpload {
 }
 
 interface UseVectorUploadJobsParams {
-  // Called once when any tracked upload finishes ingesting, so the caller can
-  // refresh the collection/document lists.
-  onReady: () => void
+  // Called once when a tracked upload finishes ingesting, so the caller can
+  // refresh that upload's collection/document lists specifically.
+  onReady: (upload: PendingUpload) => void
   onError: (error: ApiError) => void
 }
 
@@ -64,7 +64,7 @@ export function useVectorUploadJobs({
         }
         setPending((previous) => previous.filter((p) => p.jobId !== item.jobId))
         if (status.status === 'ready') {
-          onReadyRef.current()
+          onReadyRef.current(item)
         } else {
           onErrorRef.current({
             message: status.detail ?? `Ingesting "${item.source}" failed.`,

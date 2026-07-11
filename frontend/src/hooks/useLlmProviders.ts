@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 import {
   createLlmProvider,
   deleteLlmProvider,
   getLlmProviders,
 } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type {
   ApiError,
   LlmProvider,
@@ -27,81 +29,77 @@ interface UseLlmProvidersResult {
   removeProvider: (providerId: number) => Promise<boolean>
 }
 
+// Shares one cached list across every consumer (Settings' provider list and
+// NodeFieldsForm's provider picker both read/invalidate the same query key),
+// so creating/deleting a provider in one place is immediately reflected in
+// the other instead of each hook instance holding its own stale copy.
 export function useLlmProviders({
   enabled = true,
   onError,
 }: UseLlmProvidersParams): UseLlmProvidersResult {
-  const [providers, setProviders] = useState<LlmProvider[]>([])
-  const [loading, setLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const queryClient = useQueryClient()
 
-  const reportError = useCallback(
-    (error: ApiError): void => {
-      if (onError) {
-        onError(error)
-      }
+  const query = useQuery({
+    queryKey: queryKeys.llmProviders(),
+    queryFn: getLlmProviders,
+    enabled,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: createLlmProvider,
+    onSuccess: (created) => {
+      queryClient.setQueryData(
+        queryKeys.llmProviders(),
+        (previous: LlmProvider[] | undefined) => [...(previous ?? []), created],
+      )
     },
-    [onError],
-  )
+  })
 
-  const refreshProviders = useCallback(async (): Promise<void> => {
-    if (!enabled) {
-      setProviders([])
-      return
-    }
+  const deleteMutation = useMutation({
+    mutationFn: deleteLlmProvider,
+    onSuccess: (_data, providerId) => {
+      queryClient.setQueryData(
+        queryKeys.llmProviders(),
+        (previous: LlmProvider[] | undefined) =>
+          previous?.filter((item) => item.id !== providerId) ?? [],
+      )
+    },
+  })
 
-    setLoading(true)
+  async function createProvider(
+    payload: LlmProviderCreatePayload,
+  ): Promise<LlmProvider | null> {
     try {
-      const items = await getLlmProviders()
-      setProviders(items)
+      return await createMutation.mutateAsync(payload)
     } catch (error) {
-      reportError(error as ApiError)
-      setProviders([])
-    } finally {
-      setLoading(false)
+      onError?.(error as ApiError)
+      return null
     }
-  }, [enabled, reportError])
+  }
+
+  async function removeProvider(providerId: number): Promise<boolean> {
+    try {
+      await deleteMutation.mutateAsync(providerId)
+      return true
+    } catch (error) {
+      onError?.(error as ApiError)
+      return false
+    }
+  }
 
   useEffect(() => {
-    void refreshProviders()
-  }, [refreshProviders])
-
-  const createProvider = useCallback(
-    async (payload: LlmProviderCreatePayload): Promise<LlmProvider | null> => {
-      setCreating(true)
-      try {
-        const created = await createLlmProvider(payload)
-        setProviders((previous) => [...previous, created])
-        return created
-      } catch (error) {
-        reportError(error as ApiError)
-        return null
-      } finally {
-        setCreating(false)
-      }
-    },
-    [reportError],
-  )
-
-  const removeProvider = useCallback(
-    async (providerId: number): Promise<boolean> => {
-      try {
-        await deleteLlmProvider(providerId)
-        setProviders((previous) => previous.filter((item) => item.id !== providerId))
-        return true
-      } catch (error) {
-        reportError(error as ApiError)
-        return false
-      }
-    },
-    [reportError],
-  )
+    if (query.error) {
+      onError?.(query.error)
+    }
+  }, [query.error, onError])
 
   return {
-    providers,
-    loading,
-    creating,
-    refreshProviders,
+    providers: enabled ? (query.data ?? []) : [],
+    loading: enabled && query.isLoading,
+    creating: createMutation.isPending,
+    refreshProviders: async () => {
+      await query.refetch()
+    },
     createProvider,
     removeProvider,
   }

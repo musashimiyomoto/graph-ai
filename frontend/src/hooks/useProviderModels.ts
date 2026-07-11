@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 import { getLlmProviderModels } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, LlmModel } from '../lib/types'
 
 interface UseProviderModelsParams {
@@ -19,44 +21,23 @@ export function useProviderModels({
   enabled = true,
   onError,
 }: UseProviderModelsParams): UseProviderModelsResult {
-  const [models, setModels] = useState<LlmModel[]>([])
-  const [loadedProviderId, setLoadedProviderId] = useState<number | null>(null)
+  const active = enabled && providerId !== null
+  const resolvedProviderId = providerId ?? 0
+
+  const query = useQuery({
+    queryKey: queryKeys.llmProviderModels(resolvedProviderId),
+    queryFn: () => getLlmProviderModels(resolvedProviderId),
+    enabled: active,
+  })
 
   useEffect(() => {
-    let cancelled = false
-
-    if (!enabled || !providerId) {
-      return () => {
-        cancelled = true
-      }
+    if (query.error) {
+      onError?.(query.error)
     }
-
-    void getLlmProviderModels(providerId)
-      .then((items) => {
-        if (!cancelled) {
-          setModels(items)
-          setLoadedProviderId(providerId)
-        }
-      })
-      .catch((error: ApiError) => {
-        if (!cancelled) {
-          if (onError) {
-            onError(error)
-          }
-          setModels([])
-          setLoadedProviderId(providerId)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, onError, providerId])
-
-  const settled = enabled && providerId !== null && loadedProviderId === providerId
+  }, [query.error, onError])
 
   return {
-    models: settled ? models : [],
-    loading: enabled && providerId !== null && !settled,
+    models: active ? (query.data ?? []) : [],
+    loading: active && query.isLoading,
   }
 }

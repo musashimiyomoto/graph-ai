@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo } from 'react'
 
 import { getNodeCatalog } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, NodeCatalogItem } from '../lib/types'
 
 interface UseNodeCatalogParams {
@@ -15,28 +17,18 @@ interface UseNodeCatalogResult {
 export function useNodeCatalog({
   handleError,
 }: UseNodeCatalogParams): UseNodeCatalogResult {
-  const [nodeCatalog, setNodeCatalog] = useState<NodeCatalogItem[]>([])
+  const { data, error } = useQuery({
+    queryKey: queryKeys.nodeCatalog(),
+    queryFn: getNodeCatalog,
+  })
 
   useEffect(() => {
-    let cancelled = false
-
-    void getNodeCatalog()
-      .then((catalog) => {
-        if (!cancelled) {
-          setNodeCatalog(catalog)
-        }
-      })
-      .catch((error: ApiError) => {
-        if (!cancelled) {
-          handleError(error)
-          setNodeCatalog([])
-        }
-      })
-
-    return () => {
-      cancelled = true
+    if (error) {
+      handleError(error)
     }
-  }, [handleError])
+  }, [error, handleError])
+
+  const nodeCatalog = useMemo(() => data ?? [], [data])
 
   const nodeCatalogByType = useMemo(
     () =>

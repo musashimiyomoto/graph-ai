@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   createWorkflow,
@@ -6,6 +7,7 @@ import {
   getWorkflows,
   updateWorkflow,
 } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError, Workflow } from '../lib/types'
 
 interface UseWorkflowStateParams {
@@ -31,25 +33,79 @@ export function useWorkflowState({
   setError,
   handleError,
 }: UseWorkflowStateParams): UseWorkflowStateResult {
-  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const queryClient = useQueryClient()
   const [activeWorkflowId, setActiveWorkflowId] = useState<number | null>(null)
 
+  const query = useQuery({
+    queryKey: queryKeys.workflows(),
+    queryFn: getWorkflows,
+    enabled: token !== null,
+  })
+  const workflows = useMemo(
+    () => (token !== null ? (query.data ?? []) : []),
+    [token, query.data],
+  )
+
+  useEffect(() => {
+    setLoading(query.isLoading)
+  }, [query.isLoading, setLoading])
+
+  useEffect(() => {
+    if (query.error) {
+      handleError(query.error)
+    }
+  }, [query.error, handleError])
+
+  // Default to the first workflow once the list loads, but never override a
+  // selection the user already made (including deliberately clearing it).
   useEffect(() => {
     if (!token) {
-      setWorkflows([])
       setActiveWorkflowId(null)
       return
     }
+    setActiveWorkflowId((previous) => previous ?? workflows[0]?.id ?? null)
+  }, [token, workflows])
 
-    setLoading(true)
-    void getWorkflows()
-      .then((items) => {
-        setWorkflows(items)
-        setActiveWorkflowId((previous) => previous ?? items[0]?.id ?? null)
-      })
-      .catch((error: ApiError) => handleError(error))
-      .finally(() => setLoading(false))
-  }, [handleError, setLoading, token])
+  const createMutation = useMutation({
+    mutationFn: createWorkflow,
+    onSuccess: (created) => {
+      queryClient.setQueryData(
+        queryKeys.workflows(),
+        (previous: Workflow[] | undefined) => [created, ...(previous ?? [])],
+      )
+      setActiveWorkflowId(created.id)
+    },
+  })
+
+  const renameMutation = useMutation({
+    mutationFn: ({ workflowId, name }: { workflowId: number; name: string }) =>
+      updateWorkflow(workflowId, name),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(
+        queryKeys.workflows(),
+        (previous: Workflow[] | undefined) =>
+          previous?.map((workflow) =>
+            workflow.id === updated.id ? updated : workflow,
+          ) ?? [],
+      )
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteWorkflow,
+    onSuccess: (_data, workflowId) => {
+      queryClient.setQueryData(
+        queryKeys.workflows(),
+        (previous: Workflow[] | undefined) => {
+          const next = previous?.filter((workflow) => workflow.id !== workflowId) ?? []
+          setActiveWorkflowId((current) =>
+            current === workflowId ? (next[0]?.id ?? null) : current,
+          )
+          return next
+        },
+      )
+    },
+  })
 
   const handleCreateWorkflow = useCallback(
     async (name: string): Promise<void> => {
@@ -58,9 +114,7 @@ export function useWorkflowState({
       }
       setLoading(true)
       try {
-        const created = await createWorkflow(name.trim())
-        setWorkflows((previous) => [created, ...previous])
-        setActiveWorkflowId(created.id)
+        await createMutation.mutateAsync(name.trim())
         setError(null)
       } catch (error) {
         handleError(error as ApiError)
@@ -68,19 +122,14 @@ export function useWorkflowState({
         setLoading(false)
       }
     },
-    [handleError, setError, setLoading],
+    [createMutation, handleError, setError, setLoading],
   )
 
   const handleRenameWorkflow = useCallback(
     async (workflowId: number, name: string): Promise<void> => {
       setLoading(true)
       try {
-        const updated = await updateWorkflow(workflowId, name)
-        setWorkflows((previous) =>
-          previous.map((workflow) =>
-            workflow.id === workflowId ? updated : workflow,
-          ),
-        )
+        await renameMutation.mutateAsync({ workflowId, name })
         setError(null)
       } catch (error) {
         handleError(error as ApiError)
@@ -88,21 +137,14 @@ export function useWorkflowState({
         setLoading(false)
       }
     },
-    [handleError, setError, setLoading],
+    [handleError, renameMutation, setError, setLoading],
   )
 
   const handleDeleteWorkflow = useCallback(
     async (workflowId: number): Promise<void> => {
       setLoading(true)
       try {
-        await deleteWorkflow(workflowId)
-        setWorkflows((previous) => {
-          const next = previous.filter((workflow) => workflow.id !== workflowId)
-          if (activeWorkflowId === workflowId) {
-            setActiveWorkflowId(next[0]?.id ?? null)
-          }
-          return next
-        })
+        await deleteMutation.mutateAsync(workflowId)
         setError(null)
       } catch (error) {
         handleError(error as ApiError)
@@ -110,13 +152,13 @@ export function useWorkflowState({
         setLoading(false)
       }
     },
-    [activeWorkflowId, handleError, setError, setLoading],
+    [deleteMutation, handleError, setError, setLoading],
   )
 
   const clearWorkflowState = useCallback(() => {
-    setWorkflows([])
     setActiveWorkflowId(null)
-  }, [])
+    queryClient.removeQueries({ queryKey: queryKeys.workflows() })
+  }, [queryClient])
 
   return {
     workflows,

@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 
 import { uploadVectorDocument } from '../lib/api'
+import { queryKeys } from '../lib/queryKeys'
 import type { ApiError } from '../lib/types'
 import { useVectorCollections } from '../hooks/useVectorCollections'
 import { useVectorDocuments } from '../hooks/useVectorDocuments'
@@ -82,13 +84,13 @@ function VectorDocumentList({
 }
 
 export function VectorCollectionSettings({ onError }: VectorCollectionSettingsProps) {
+  const queryClient = useQueryClient()
   const [expandedCollection, setExpandedCollection] = useState<string | null>(null)
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null)
   const [uploadCollection, setUploadCollection] = useState('')
   const [uploadSource, setUploadSource] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [documentsRefreshKey, setDocumentsRefreshKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -101,9 +103,11 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
   })
 
   const { pending, track: trackUpload } = useVectorUploadJobs({
-    onReady: () => {
+    onReady: (upload) => {
       void refreshCollections()
-      setDocumentsRefreshKey((key) => key + 1)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.vectorDocuments(upload.collection),
+      })
     },
     onError,
   })
@@ -201,7 +205,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
             {expandedCollection === collection.name ? (
               <div className="ml-4 border-l border-white/10 pl-4">
                 <VectorDocumentList
-                  key={`${collection.name}-${documentsRefreshKey}`}
+                  key={collection.name}
                   collection={collection.name}
                   onError={onError}
                 />
