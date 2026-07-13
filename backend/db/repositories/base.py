@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import BaseWithID
@@ -14,6 +14,32 @@ class BaseRepository[Model: BaseWithID]:
     def __init__(self, model: type[Model]) -> None:
         """Initialize the repository with a model class."""
         self.model = model
+
+    def _filter_conditions(
+        self, filters: dict[str, object]
+    ) -> list[ColumnElement[bool]]:
+        """Build per-column conditions, treating a list value as membership.
+
+        A plain (non-list) value stays an equality filter, same as the
+        `filter_by` this replaces; a `list`/`tuple`/`set` value becomes an
+        `IN` filter instead — e.g. filtering executions by several trigger
+        sources at once rather than being restricted to exactly one.
+
+        Args:
+            filters: Column name to filter value.
+
+        Returns:
+            One condition per filter, ANDed together by the caller.
+
+        """
+        conditions: list[ColumnElement[bool]] = []
+        for key, value in filters.items():
+            column = getattr(self.model, key)
+            if isinstance(value, list | tuple | set):
+                conditions.append(column.in_(value))
+            else:
+                conditions.append(column == value)
+        return conditions
 
     async def create(self, session: AsyncSession, data: dict[str, Any]) -> Model:
         """Stage a new model instance (flushed, not committed).
@@ -77,14 +103,17 @@ class BaseRepository[Model: BaseWithID]:
             limit: Maximum rows to return (None = no limit).
             offset: Rows to skip before returning results.
             descending: Order by id descending instead of ascending.
-            **filters: The equality filters to apply to the query.
+            **filters: Equality filters; a `list`/`tuple`/`set` value filters
+                by membership (`IN`) instead of exact match.
 
         Returns:
             The list of model instances.
 
         """
         order = self.model.id.desc() if descending else self.model.id.asc()
-        statement = select(self.model).filter_by(**filters).order_by(order)
+        statement = (
+            select(self.model).where(*self._filter_conditions(filters)).order_by(order)
+        )
         if offset is not None:
             statement = statement.offset(offset)
         if limit is not None:

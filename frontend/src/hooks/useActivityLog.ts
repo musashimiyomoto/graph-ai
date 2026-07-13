@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 
 import { getExecutions } from '../lib/api'
 import { queryKeys } from '../lib/queryKeys'
-import type { ApiError, Execution } from '../lib/types'
+import type { ApiError, Execution, ExecutionSource } from '../lib/types'
 
 interface UseActivityLogParams {
   token: string | null
@@ -17,9 +17,11 @@ interface UseActivityLogResult {
   refresh: () => Promise<void>
 }
 
-// Read-only log of real inbound traffic (currently only Telegram), kept
-// separate from useExecutions' manual test runs so a workflow's actual
-// usage never gets mixed into the owner's test sandbox.
+// Read-only log of real inbound traffic (Telegram messages and scheduled
+// runs), kept separate from useExecutions' manual test runs so a workflow's
+// actual usage never gets mixed into the owner's test sandbox.
+const ACTIVITY_LOG_SOURCES: ExecutionSource[] = ['telegram', 'schedule']
+
 export function useActivityLog({
   token,
   activeWorkflowId,
@@ -30,7 +32,7 @@ export function useActivityLog({
 
   const query = useQuery({
     queryKey: queryKeys.activityLog(resolvedWorkflowId),
-    queryFn: () => getExecutions(resolvedWorkflowId, 'telegram'),
+    queryFn: () => getExecutions(resolvedWorkflowId, ACTIVITY_LOG_SOURCES),
     enabled: active,
   })
 

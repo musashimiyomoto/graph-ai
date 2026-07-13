@@ -11,3 +11,4 @@ class ValidatorType(StrEnum):
     GE = auto()
     LE = auto()
     JSON = auto()
+    CRON = auto()

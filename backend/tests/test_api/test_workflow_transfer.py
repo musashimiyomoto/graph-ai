@@ -80,6 +80,168 @@ async def _build_input_llm_output_graph(
     return [input_node, llm_node, output_node], [first_edge, second_edge]
 
 
+async def _build_graph_with_loop(
+    session: AsyncSession, workflow_id: int
+) -> dict[str, object]:
+    """Create an Input -> Loop(list) -> Output graph with a one-node body.
+
+    Returns:
+        A dict of node ids/positions useful for asserting the rebuilt graph.
+
+    """
+    input_node = await NodeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        type=NodeType.INPUT,
+        data={"label": "in", "format": InputNodeFormat.TXT},
+    )
+    loop_node = await NodeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        type=NodeType.LOOP,
+        data={"label": "loop", "mode": "list"},
+    )
+    output_node = await NodeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        type=NodeType.OUTPUT,
+        data={"label": "out", "format": OutputNodeFormat.TXT},
+    )
+    loop_input = await NodeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        type=NodeType.LOOP_INPUT,
+        data={"label": "loop in"},
+        parent_node_id=loop_node.id,
+    )
+    loop_output = await NodeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        type=NodeType.LOOP_OUTPUT,
+        data={"label": "loop out"},
+        parent_node_id=loop_node.id,
+    )
+    await EdgeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        source_node_id=input_node.id,
+        target_node_id=loop_node.id,
+    )
+    await EdgeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        source_node_id=loop_node.id,
+        target_node_id=output_node.id,
+    )
+    await EdgeFactory.create_async(
+        session=session,
+        workflow_id=workflow_id,
+        source_node_id=loop_input.id,
+        target_node_id=loop_output.id,
+    )
+    return {
+        "loop_node_id": loop_node.id,
+        "loop_input_id": loop_input.id,
+        "loop_output_id": loop_output.id,
+    }
+
+
+class TestWorkflowTransferPreservesLoopStructure(BaseTestCase):
+    """Tests that export/import/duplicate preserve a Loop node's body scope."""
+
+    url = "/workflows"
+
+    @pytest.mark.asyncio
+    async def test_export_carries_parent_index_for_body_nodes(self) -> None:
+        """Body nodes export with parent_index pointing at the Loop node."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await _build_graph_with_loop(self.session, workflow.id)
+
+        response = await self.client.get(
+            url=f"{self.url}/{workflow.id}/export", headers=headers
+        )
+
+        data = await self.assert_response_dict(response=response)
+        nodes = data["graph"]["nodes"]
+        by_type: dict[str, list[dict]] = {}
+        for index, node in enumerate(nodes):
+            by_type.setdefault(node["type"], []).append({**node, "_index": index})
+
+        loop_index = by_type[NodeType.LOOP.value][0]["_index"]
+        for body_type in (NodeType.LOOP_INPUT.value, NodeType.LOOP_OUTPUT.value):
+            if by_type[body_type][0]["parent_index"] != loop_index:
+                pytest.fail(f"{body_type} should export with parent_index=loop index")
+        for top_level_type in (NodeType.INPUT.value, NodeType.OUTPUT.value):
+            if by_type[top_level_type][0]["parent_index"] is not None:
+                pytest.fail(f"{top_level_type} should export with parent_index=None")
+
+    @pytest.mark.asyncio
+    async def test_import_rebuilds_loop_body_scope(self) -> None:
+        """Importing an exported Loop graph re-parents body nodes to the new Loop id."""
+        user, headers = await self.create_user_and_get_token()
+        source_workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await _build_graph_with_loop(self.session, source_workflow.id)
+        export_response = await self.client.get(
+            url=f"{self.url}/{source_workflow.id}/export", headers=headers
+        )
+        export_data = await self.assert_response_dict(response=export_response)
+
+        import_response = await self.client.post(
+            url="/workflows/import",
+            json={"name": "imported loop", "graph": export_data["graph"]},
+            headers=headers,
+        )
+        imported = await self.assert_response_dict(response=import_response)
+
+        nodes_response = await self.client.get(
+            url=f"/nodes?workflow_id={imported['id']}", headers=headers
+        )
+        nodes = await self.assert_response_list(response=nodes_response)
+        by_type = {node["type"]: node for node in nodes}
+        new_loop_id = by_type[NodeType.LOOP.value]["id"]
+
+        for body_type in (NodeType.LOOP_INPUT.value, NodeType.LOOP_OUTPUT.value):
+            if by_type[body_type]["parent_node_id"] != new_loop_id:
+                pytest.fail(
+                    f"Imported {body_type} should be re-parented to the new Loop id"
+                )
+        for top_level_type in (NodeType.INPUT.value, NodeType.OUTPUT.value):
+            if by_type[top_level_type]["parent_node_id"] is not None:
+                pytest.fail(f"Imported {top_level_type} should stay top-level")
+
+    @pytest.mark.asyncio
+    async def test_duplicate_rebuilds_loop_body_scope(self) -> None:
+        """Duplicating a workflow with a Loop node re-parents body nodes too."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await _build_graph_with_loop(self.session, workflow.id)
+
+        response = await self.client.post(
+            url=f"{self.url}/{workflow.id}/duplicate", headers=headers
+        )
+        duplicated = await self.assert_response_dict(response=response)
+
+        nodes_response = await self.client.get(
+            url=f"/nodes?workflow_id={duplicated['id']}", headers=headers
+        )
+        nodes = await self.assert_response_list(response=nodes_response)
+        by_type = {node["type"]: node for node in nodes}
+        new_loop_id = by_type[NodeType.LOOP.value]["id"]
+
+        for body_type in (NodeType.LOOP_INPUT.value, NodeType.LOOP_OUTPUT.value):
+            if by_type[body_type]["parent_node_id"] != new_loop_id:
+                pytest.fail(
+                    f"Duplicated {body_type} should be re-parented to the new Loop id"
+                )
+
+
 class TestWorkflowExport(BaseTestCase):
     """Tests for GET /workflows/{workflow_id}/export."""
 

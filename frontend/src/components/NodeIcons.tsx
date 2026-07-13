@@ -147,7 +147,29 @@ export function VectorSearchIcon(props: IconProps) {
   )
 }
 
+export function LoopIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="4" y="2" width="8" height="2" fill="var(--accent)" />
+      <rect x="12" y="4" width="2" height="2" fill="var(--accent)" />
+      <rect x="12" y="10" width="2" height="2" fill="var(--accent)" />
+      <rect x="4" y="12" width="8" height="2" fill="var(--accent)" />
+      <rect x="2" y="4" width="2" height="2" fill="var(--accent)" />
+      <rect x="2" y="10" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="1" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="4" width="2" height="2" fill="var(--accent)" />
+      <rect x="5" y="10" width="2" height="2" fill="var(--accent)" />
+      <rect x="5" y="13" width="2" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function NodeIcon({ iconKey }: { iconKey: string }) {
+  if (iconKey === 'loop') {
+    return <LoopIcon />
+  }
+
+
   if (iconKey === 'llm') {
     return <LlmIcon />
   }

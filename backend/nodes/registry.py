@@ -14,6 +14,9 @@ from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
 from nodes.http_request import DEFINITION as HTTP_REQUEST_DEFINITION
 from nodes.input import DEFINITION as INPUT_DEFINITION
 from nodes.llm import DEFINITION as LLM_DEFINITION
+from nodes.loop import DEFINITION as LOOP_DEFINITION
+from nodes.loop_input import DEFINITION as LOOP_INPUT_DEFINITION
+from nodes.loop_output import DEFINITION as LOOP_OUTPUT_DEFINITION
 from nodes.output import DEFINITION as OUTPUT_DEFINITION
 from nodes.template import DEFINITION as TEMPLATE_DEFINITION
 from nodes.vector_ingest import DEFINITION as VECTOR_INGEST_DEFINITION
@@ -31,6 +34,9 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     CODE_TRANSFORM_DEFINITION,
     VECTOR_INGEST_DEFINITION,
     VECTOR_SEARCH_DEFINITION,
+    LOOP_DEFINITION,
+    LOOP_INPUT_DEFINITION,
+    LOOP_OUTPUT_DEFINITION,
     OUTPUT_DEFINITION,
 )
 

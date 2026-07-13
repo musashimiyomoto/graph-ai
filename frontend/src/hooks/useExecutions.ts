@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { createExecution, getExecutions, streamExecution } from '../lib/api'
-import type { ApiError, Execution, RunInputPayload } from '../lib/types'
+import type { ApiError, Execution, ExecutionSource, RunInputPayload } from '../lib/types'
 import { ACTIVE_STATUSES } from '../lib/types'
 
 // Interval for the polling fallback when the SSE stream ends before settling.
 const STREAM_POLL_FALLBACK_MS = 3000
+// Scoped to the owner's own test runs — real inbound traffic (Telegram,
+// schedule) is shown separately in the Activity Log.
+const TEST_RUN_SOURCES: ExecutionSource[] = ['manual']
 
 interface UseExecutionsParams {
   token: string | null
@@ -46,9 +49,7 @@ export function useExecutions({
     async (workflowId: number): Promise<void> => {
       setExecutionsLoading(true)
       try {
-        // Scoped to the owner's own test runs — real inbound traffic (e.g.
-        // Telegram) is shown separately in the Activity Log.
-        const items = await getExecutions(workflowId, 'manual')
+        const items = await getExecutions(workflowId, TEST_RUN_SOURCES)
         setExecutions(items)
         const latest = [...items].sort((first, second) => second.id - first.id)[0] ?? null
         setLastExecution(latest)
@@ -99,7 +100,7 @@ export function useExecutions({
           return
         }
         try {
-          const items = await getExecutions(workflowId, 'manual')
+          const items = await getExecutions(workflowId, TEST_RUN_SOURCES)
           setExecutions(items)
           const current = items.find((item) => item.id === executionId)
           if (current) {

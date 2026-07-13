@@ -14,5 +14,5 @@ export const queryKeys = {
   vectorDocuments: (collection: string) =>
     ['vector-collections', collection, 'documents'] as const,
   activityLog: (workflowId: number) =>
-    ['executions', workflowId, 'telegram'] as const,
+    ['executions', workflowId, 'activity-log'] as const,
 }

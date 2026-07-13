@@ -2,11 +2,14 @@
 
 from nodes.base import NodeExecutionContext, NodeExecutionResult, NodeHandler, OnToken
 from nodes.code_transform import CodeTransformNodeHandler
-from nodes.condition import ConditionNodeHandler
+from nodes.condition import ConditionNodeHandler, evaluate_condition
 from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
 from nodes.http_request import HTTPRequestNodeHandler
 from nodes.input import InputNodeHandler
 from nodes.llm import LLMNodeHandler
+from nodes.loop import LoopNodeHandler
+from nodes.loop_input import LoopInputNodeHandler
+from nodes.loop_output import LoopOutputNodeHandler
 from nodes.output import OutputNodeHandler
 from nodes.registry import (
     NODE_DEFINITIONS,
@@ -27,6 +30,9 @@ __all__ = [
     "HTTPRequestNodeHandler",
     "InputNodeHandler",
     "LLMNodeHandler",
+    "LoopInputNodeHandler",
+    "LoopNodeHandler",
+    "LoopOutputNodeHandler",
     "NodeDefinition",
     "NodeExecutionContext",
     "NodeExecutionResult",
@@ -41,6 +47,7 @@ __all__ = [
     "WebSearchNodeHandler",
     "build_node_catalog",
     "check_edge_ports",
+    "evaluate_condition",
     "get_node_definition",
     "ports_compatible",
 ]

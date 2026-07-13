@@ -25,6 +25,11 @@ import { type UndoableCommand, useUndoRedo } from './useUndoRedo'
 interface UseGraphStateParams {
   token: string | null
   activeWorkflowId: number | null
+  // Which Loop node's body is being edited, or null for the top-level
+  // graph — new nodes are created in this scope, and auto-layout only
+  // rearranges nodes within it (the canvas only ever shows one scope at
+  // a time).
+  activeParentNodeId: number | null
   nodeCatalogByType: Record<string, NodeCatalogItem>
   setLoading: (value: boolean) => void
   setError: (value: string | null) => void
@@ -116,6 +121,7 @@ function toFlowNode(
       nodeType: node.type,
       iconKey: catalogNode?.icon_key ?? 'input',
       graph: catalogNode?.graph ?? { has_input: true, has_output: true },
+      parentNodeId: node.parent_node_id,
     },
   }
 }
@@ -169,11 +175,39 @@ function buildDefaultData(catalogNode: NodeCatalogItem): Record<string, unknown>
 // catalog) alongside the real, persisted config fields — strip them before
 // sending `data` back to the API.
 function stripSyntheticFields(data: Record<string, unknown>): Record<string, unknown> {
-  const { nodeType: _nodeType, iconKey: _iconKey, graph: _graph, ...cleanData } = data
+  const {
+    nodeType: _nodeType,
+    iconKey: _iconKey,
+    graph: _graph,
+    parentNodeId: _parentNodeId,
+    ...cleanData
+  } = data
   void _nodeType
   void _iconKey
   void _graph
+  void _parentNodeId
   return cleanData
+}
+
+function parentNodeIdOf(node: FlowNode): number | null {
+  const value = node.data?.parentNodeId
+  return typeof value === 'number' ? value : null
+}
+
+// Deleting a Loop node cascades server-side to its body nodes (FK
+// ondelete=CASCADE). Mirror that locally so undo can recreate the whole
+// subtree and the in-memory node list doesn't end up with orphaned body
+// nodes pointing at a parent that no longer exists. One level is enough —
+// loops can't nest.
+function withLoopBodyDescendants(nodeIds: Set<string>, allNodes: FlowNode[]): Set<string> {
+  const expanded = new Set(nodeIds)
+  for (const node of allNodes) {
+    const parentId = parentNodeIdOf(node)
+    if (parentId !== null && nodeIds.has(String(parentId))) {
+      expanded.add(node.id)
+    }
+  }
+  return expanded
 }
 
 // --- Command factories -----------------------------------------------
@@ -263,7 +297,16 @@ function makeDeleteNodesCommand(
     type: String(node.data?.nodeType ?? node.type),
     data: stripSyntheticFields((node.data as Record<string, unknown>) ?? {}),
     position: { x: node.position.x, y: node.position.y },
+    parentNodeId: parentNodeIdOf(node),
   }))
+  // A body node whose Loop is also in this batch is deleted server-side by
+  // the FK cascade once the Loop itself is deleted — calling DELETE on it
+  // too would 404. Only nodes whose parent isn't in the batch need their
+  // own API call; every snapshot still gets recreated on undo either way.
+  const batchIds = new Set(nodeSnapshots.map((snapshot) => snapshot.originalId))
+  const apiDeletableIds = nodeSnapshots
+    .filter((snapshot) => !batchIds.has(String(snapshot.parentNodeId)))
+    .map((snapshot) => snapshot.originalId)
   const edgeSnapshots = touchingEdges.map((edge) => ({
     originalSource: edge.source,
     originalTarget: edge.target,
@@ -285,10 +328,14 @@ function makeDeleteNodesCommand(
       const idsToDelete = nodeSnapshots
         .map((snapshot) => currentIdByOriginal.get(snapshot.originalId))
         .filter((id): id is string => id !== undefined)
-      for (const id of idsToDelete) {
+      const apiIds = apiDeletableIds
+        .map((originalId) => currentIdByOriginal.get(originalId))
+        .filter((id): id is string => id !== undefined)
+      for (const id of apiIds) {
         await deleteNode(Number(id))
       }
-      // The DB cascade-deletes connected edges; mirror that locally.
+      // The DB cascade-deletes connected edges and Loop body nodes; mirror
+      // both locally.
       const deletedSet = new Set(idsToDelete)
       mutators.setNodes((previous) => previous.filter((node) => !deletedSet.has(node.id)))
       mutators.setEdges((previous) =>
@@ -304,6 +351,7 @@ function makeDeleteNodesCommand(
           data: snapshot.data,
           position_x: snapshot.position.x,
           position_y: snapshot.position.y,
+          parent_node_id: snapshot.parentNodeId,
         })
         freshIdByOriginal.set(snapshot.originalId, String(created.id))
         mutators.setNodes((previous) => [...previous, toFlowNode(created, nodeCatalogByType)])
@@ -398,6 +446,7 @@ function makeCompositeCommand(label: string, commands: UndoableCommand[]): Undoa
 export function useGraphState({
   token,
   activeWorkflowId,
+  activeParentNodeId,
   nodeCatalogByType,
   setLoading,
   setError,
@@ -476,6 +525,7 @@ export function useGraphState({
         data,
         position_x: position.x,
         position_y: position.y,
+        parent_node_id: activeParentNodeId,
       }
 
       let createdId: string | null = null
@@ -495,7 +545,7 @@ export function useGraphState({
       setError(null)
       pushCommand(command)
     },
-    [activeWorkflowId, handleError, nodeCatalogByType, pushCommand, setError],
+    [activeParentNodeId, activeWorkflowId, handleError, nodeCatalogByType, pushCommand, setError],
   )
 
   const handleDeleteNode = useCallback(
@@ -504,11 +554,13 @@ export function useGraphState({
       if (!node || !activeWorkflowId) {
         return
       }
+      const idsToDelete = withLoopBodyDescendants(new Set([nodeId]), nodes)
+      const nodesToDelete = nodes.filter((n) => idsToDelete.has(n.id))
       const connectedEdges = edges.filter(
-        (edge) => edge.source === nodeId || edge.target === nodeId,
+        (edge) => idsToDelete.has(edge.source) || idsToDelete.has(edge.target),
       )
       const command = makeDeleteNodesCommand(
-        [node],
+        nodesToDelete,
         connectedEdges,
         activeWorkflowId,
         nodeCatalogByType,
@@ -516,7 +568,7 @@ export function useGraphState({
       )
       try {
         await command.execute()
-        setSelectedNodeIds((previous) => previous.filter((id) => id !== nodeId))
+        setSelectedNodeIds((previous) => previous.filter((id) => !idsToDelete.has(id)))
         pushCommand(command)
       } catch (error) {
         handleError(error as ApiError)
@@ -529,7 +581,7 @@ export function useGraphState({
     if (!activeWorkflowId) {
       return
     }
-    const nodeIdsToDelete = new Set(selectedNodeIds)
+    const nodeIdsToDelete = withLoopBodyDescendants(new Set(selectedNodeIds), nodes)
     // Edges touching a selected node are already captured by that node's
     // own delete command (and cascade-deleted server-side) — only handle
     // edges selected independently of any selected node here.
@@ -540,9 +592,7 @@ export function useGraphState({
         !nodeIdsToDelete.has(edge.target),
     )
 
-    const nodesToDelete = [...nodeIdsToDelete]
-      .map((nodeId) => nodes.find((n) => n.id === nodeId))
-      .filter((node): node is FlowNode => node !== undefined)
+    const nodesToDelete = nodes.filter((node) => nodeIdsToDelete.has(node.id))
     // Every edge touching any of the deleted nodes — both edges internal to
     // the deleted set and edges crossing to a surviving node — so the batch
     // command can remap/restore them correctly on undo (see
@@ -736,6 +786,7 @@ export function useGraphState({
             data: stripSyntheticFields((node.data as Record<string, unknown>) ?? {}),
             position_x: node.position.x + PASTE_OFFSET,
             position_y: node.position.y + PASTE_OFFSET,
+            parent_node_id: activeParentNodeId,
           },
           nodeCatalogByType,
           { setNodes, setEdges },
@@ -774,14 +825,22 @@ export function useGraphState({
     } catch (error) {
       handleError(error as ApiError)
     }
-  }, [activeWorkflowId, handleError, nodeCatalogByType, pushCommand, setError])
+  }, [activeParentNodeId, activeWorkflowId, handleError, nodeCatalogByType, pushCommand, setError])
 
   const handleAutoLayout = useCallback(async (): Promise<void> => {
-    if (nodes.length === 0) {
+    // Scoped to the currently viewed subgraph — the canvas only ever shows
+    // one Loop body (or the top level) at a time, so laying out nodes from
+    // other scopes together would shuffle positions the user can't even see.
+    const scopedNodes = nodes.filter((node) => parentNodeIdOf(node) === activeParentNodeId)
+    if (scopedNodes.length === 0) {
       return
     }
-    const positions = computeAutoLayout(nodes, edges)
-    const commands = nodes
+    const scopedIds = new Set(scopedNodes.map((node) => node.id))
+    const scopedEdges = edges.filter(
+      (edge) => scopedIds.has(edge.source) && scopedIds.has(edge.target),
+    )
+    const positions = computeAutoLayout(scopedNodes, scopedEdges)
+    const commands = scopedNodes
       .map((node) => {
         const next = positions.get(node.id)
         if (!next) {
@@ -805,7 +864,7 @@ export function useGraphState({
     } catch (error) {
       handleError(error as ApiError)
     }
-  }, [edges, handleError, nodes, pushCommand])
+  }, [activeParentNodeId, edges, handleError, nodes, pushCommand])
 
   const clearGraphState = useCallback(() => {
     setNodes([])

@@ -581,7 +581,91 @@ Second pass (closed out everything remaining):
       (`poll_telegram_updates`) rather than inventing a second scheduling
       mechanism, (3) then revisit the template catalog once those
       primitives exist — a "daily digest" or "batch summarizer" preset only
-      makes sense after (1)/(2) land, not before.
+      makes sense after (1)/(2) land, not before. Design for (1) and (2)
+      fleshed out below.
+- [x] **Scheduled (cron) trigger** — a new `InputNodeFormat.SCHEDULE`
+      alongside `TXT`/`TELEGRAM` (`enums/node.py`), reusing the existing ARQ
+      cron pattern instead of inventing a second scheduling mechanism: a new
+      `poll_scheduled_triggers` cron job in `worker.py` (ticking every
+      30-60s, same idea as `_TELEGRAM_POLL_SECONDS`) finds Input nodes with
+      `format=schedule`, decides whether they're due, and creates an
+      execution via `ExecutionUsecase.create_execution` under a new
+      `ExecutionSource.SCHEDULE` (`enums/execution.py`). Delivery is free:
+      `_reply_via_telegram`'s existing pinned-`telegram_chat_id` fallback
+      (`worker.py::_resolve_reply_chat_id`) already handles a non-Telegram
+      trigger replying into a fixed chat, so a scheduled workflow with a
+      Telegram Output node "just works" once the trigger exists. Open
+      decisions before implementing: (1) plain interval ("every N minutes",
+      zero new dependencies) vs. full cron syntax (day/hour precision like
+      "daily digest at 9am", needs a new `croniter` dependency — not
+      currently in `pyproject.toml`); (2) catch-up semantics if the worker
+      was down past a scheduled fire — re-run once and resync vs. silently
+      skip missed fires (leaning skip: avoids a burst of stacked LLM calls
+      after an incident, unlike Telegram's offset-based catch-up, which is
+      fine to replay); (3) where `last_fired_at` lives — directly on
+      `node.data` (worker writes it via `NodeRepository.update_by`, same
+      precedent as `TelegramBot.last_update_id`) vs. a dedicated
+      `node_schedule_state` row, to avoid the worker mutating the same JSON
+      blob the user edits from the inspector.
+- [x] **Loop / iteration node** — one `NodeType.LOOP` node type supporting
+      two modes (list-map and do-while-condition), with the loop body as a
+      genuinely nested subgraph rather than an in-canvas cycle (the engine's
+      `_topological_order` hard-rejects cycles today, and `outputs_by_node`/
+      `node_executions` both assume one result per node per run). Design:
+      - **Scoping**: a nullable self-referential `parent_node_id` on `Node`
+        (FK to `nodes.id`, `ON DELETE CASCADE`) — `NULL` for the top-level
+        graph, `<loop_node_id>` for nodes inside that loop's body. Plain
+        `nodes`/`edges` rows, so CRUD, the field catalog, and
+        `_snapshot_workflow`'s whole-workflow dump all keep working
+        unchanged; only `_build_graph_context` needs to build per-scope
+        (top level treats a Loop node as one atomic node; its body isn't
+        part of the top-level adjacency at all).
+      - **Two new leaf types**: `LOOP_INPUT`/`LOOP_OUTPUT` (bodies can't
+        reuse top-level `INPUT`/`OUTPUT` — those carry a `format` concept
+        like Telegram/schedule that's meaningless inside a loop iteration).
+        Same "exactly one input/output" invariant as the top-level graph,
+        just scoped.
+      - **Execution**: Loop can't be a plain stateless `NodeHandler` like
+        every other node — it needs to recursively call back into the graph
+        runner (build the sub-graph, drive `_run_nodes_serial` over it,
+        write `node_executions` for inner nodes). Special-cased directly in
+        `ExecutionUsecase._run_node_once`/a new `_run_loop_node`, called out
+        explicitly as an exception to the "one module + one registry entry"
+        plugin pattern (`nodes/registry.py`), not a silent violation of it.
+      - **List mode**: parses the upstream node's text as a JSON array (no
+        new runtime list type — ports stay decl-time-only metadata, values
+        stay `str` end to end, same precedent as Code/Transform already
+        JSON-serializing non-string output); runs the body once per
+        element, collects `LOOP_OUTPUT` results back into a JSON array as
+        the Loop node's own output.
+      - **Condition mode**: re-runs the body with each iteration's
+        `LOOP_OUTPUT` feeding the next iteration's `LOOP_INPUT`; stop
+        condition lives on the Loop node itself (reusing
+        `ConditionNodeHandler`'s `_evaluate` logic, hoisted into a shared
+        helper) rather than requiring a Condition node inside the body.
+      - **Guardrails**: new `MAX_LOOP_ITERATIONS` constant
+        (`constants/execution.py`, same spirit as `MAX_NODE_ATTEMPTS`) —
+        list mode truncates with a visible marker past the cap (style of
+        `_truncate_for_storage`), condition mode hard-stops and marks the
+        result as "stopped: iteration cap" rather than failing the whole
+        execution. Nested loops (a Loop inside a Loop body) explicitly
+        disallowed in v1 via a create-time validation.
+      - **Data model**: nullable `iteration` column on `node_executions`
+        (`NULL` for top-level nodes, `0..N-1` inside a loop body); the Loop
+        node itself still gets exactly one top-level result row.
+      - **Frontend**: no nested React Flow canvas — double-click a Loop node
+        switches `GraphCanvas.tsx` into a scoped view (parameterized by
+        `parentNodeId`, same shape as the existing `workflow_id` param) with
+        a breadcrumb back to the parent graph; `useGraphState.ts`/CRUD calls
+        carry the scope, `useUndoRedo.ts` keeps working as the same linear
+        command stack. `ChatPanel`/`OutputRenderer`'s per-node "Details"
+        needs an iteration-grouped view (accordion of per-iteration node
+        results) instead of the current flat one-result-per-node list.
+      - **Build order**: data model + scoping + LOOP_INPUT/LOOP_OUTPUT types
+        first (graph becomes buildable/validatable with no execution yet),
+        then the recursive engine runner, then frontend scoped-canvas
+        navigation, then iteration-grouped Details rendering — each is
+        independently shippable.
 - [ ] Frontend tests (Vitest + Testing Library) — currently zero.
 - [ ] Multi-tenant quotas, audit log, cost observability (tokens/latency per run).
 - [ ] Metrics (Prometheus) + error tracking (Sentry).

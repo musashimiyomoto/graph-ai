@@ -9,6 +9,7 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { HistoryOverlay } from './components/HistoryOverlay'
 import type { HistoryTabId } from './components/HistoryOverlay'
 import { InspectorPanel } from './components/InspectorPanel'
+import { LoopBodyModal } from './components/LoopBodyModal'
 import { NewFromTemplateDialog } from './components/NewFromTemplateDialog'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
 import { useActivityLog } from './hooks/useActivityLog'
@@ -18,7 +19,7 @@ import { useGraphState } from './hooks/useGraphState'
 import { useNodeCatalog } from './hooks/useNodeCatalog'
 import { useWorkflowState } from './hooks/useWorkflowState'
 import { useWorkflowTransfer } from './hooks/useWorkflowTransfer'
-import type { ApiError, NodeType, PortType } from './lib/types'
+import type { ApiError, NodeMeta, NodeType } from './lib/types'
 
 interface NodeCreateDraft {
   type: NodeType
@@ -34,6 +35,9 @@ export function App() {
   const [historyTab, setHistoryTab] = useState<HistoryTabId | null>(null)
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
   const [showNewFromTemplate, setShowNewFromTemplate] = useState<boolean>(false)
+  // Which Loop node's body the canvas is currently showing, or null for the
+  // top-level graph — set by double-clicking into a Loop node.
+  const [activeParentNodeId, setActiveParentNodeId] = useState<number | null>(null)
 
   const {
     token,
@@ -108,11 +112,27 @@ export function App() {
   } = useGraphState({
     token,
     activeWorkflowId,
+    activeParentNodeId,
     nodeCatalogByType,
     setLoading,
     setError,
     handleError,
   })
+
+  // Leaving a Loop body when the workflow changes (or its Loop node
+  // disappears from the freshly-loaded graph) falls back to the top level
+  // rather than showing an empty canvas for a scope that no longer exists.
+  useEffect(() => {
+    setActiveParentNodeId(null)
+  }, [activeWorkflowId])
+  useEffect(() => {
+    if (activeParentNodeId === null) {
+      return
+    }
+    if (!nodes.some((node) => Number(node.id) === activeParentNodeId)) {
+      setActiveParentNodeId(null)
+    }
+  }, [activeParentNodeId, nodes])
 
   const {
     executions,
@@ -138,6 +158,87 @@ export function App() {
   })
 
   const activeWorkflow = workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null
+  const activeParentNode = useMemo(
+    () => nodes.find((node) => Number(node.id) === activeParentNodeId) ?? null,
+    [nodes, activeParentNodeId],
+  )
+  // The main Inspector only shows a top-level selection — a loop-body
+  // selection is shown by LoopBodyModal's own Inspector instead.
+  const mainSelectedNode = activeParentNodeId === null ? selectedNode : null
+  // How many nodes live in each Loop's body — shown on the Loop node itself
+  // so it's obvious there's something to drill into (see CustomNodes.tsx).
+  const loopChildCounts = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const node of nodes) {
+      const parentNodeId = node.data?.parentNodeId as number | null | undefined
+      if (parentNodeId !== null && parentNodeId !== undefined) {
+        counts.set(parentNodeId, (counts.get(parentNodeId) ?? 0) + 1)
+      }
+    }
+    return counts
+  }, [nodes])
+  // The main canvas always shows the top-level graph — drilling into a Loop
+  // opens LoopBodyModal on top instead of swapping this view out, so it's
+  // never possible to "forget" you're looking at a nested scope.
+  const topLevelNodes = useMemo(
+    () =>
+      nodes
+        .filter((node) => (node.data?.parentNodeId as number | null | undefined) === null)
+        .map((node) =>
+          node.type === 'loop'
+            ? {
+                ...node,
+                data: { ...node.data, childCount: loopChildCounts.get(Number(node.id)) ?? 0 },
+              }
+            : node,
+        ),
+    [nodes, loopChildCounts],
+  )
+  const topLevelNodeIds = useMemo(
+    () => new Set(topLevelNodes.map((node) => node.id)),
+    [topLevelNodes],
+  )
+  const topLevelEdges = useMemo(
+    () =>
+      edges.filter(
+        (edge) => topLevelNodeIds.has(edge.source) && topLevelNodeIds.has(edge.target),
+      ),
+    [edges, topLevelNodeIds],
+  )
+  const loopBodyNodes = useMemo(
+    () =>
+      activeParentNodeId === null
+        ? []
+        : nodes.filter(
+            (node) => (node.data?.parentNodeId as number | null | undefined) === activeParentNodeId,
+          ),
+    [nodes, activeParentNodeId],
+  )
+  const loopBodyNodeIds = useMemo(
+    () => new Set(loopBodyNodes.map((node) => node.id)),
+    [loopBodyNodes],
+  )
+  const loopBodyEdges = useMemo(
+    () =>
+      edges.filter(
+        (edge) => loopBodyNodeIds.has(edge.source) && loopBodyNodeIds.has(edge.target),
+      ),
+    [edges, loopBodyNodeIds],
+  )
+  // Loop_input/loop_output only make sense inside a Loop's body; loop/input/
+  // output only make sense at the top level (nested loops aren't supported,
+  // and Input/Output carry a `format` concept meaningless inside a loop).
+  const topLevelNodeCatalog = useMemo(
+    () => nodeCatalog.filter((item) => item.type !== 'loop_input' && item.type !== 'loop_output'),
+    [nodeCatalog],
+  )
+  const loopBodyNodeCatalog = useMemo(
+    () =>
+      nodeCatalog.filter(
+        (item) => item.type !== 'loop' && item.type !== 'input' && item.type !== 'output',
+      ),
+    [nodeCatalog],
+  )
   const inputNodes = useMemo(
     () => nodes.filter((node) => node.type === 'input'),
     [nodes],
@@ -147,13 +248,14 @@ export function App() {
     [nodes],
   )
   const nodeMetaByNodeId = useMemo(() => {
-    const map = new Map<number, { type: string; label: string; portType: PortType | null }>()
+    const map = new Map<number, NodeMeta>()
     for (const node of nodes) {
       const catalogItem = nodeCatalogByType[node.type ?? '']
       map.set(Number(node.id), {
         type: node.type ?? 'unknown',
         label: catalogItem?.label ?? node.type ?? 'Unknown',
         portType: catalogItem?.graph.output_port ?? null,
+        parentNodeId: (node.data?.parentNodeId as number | null | undefined) ?? null,
       })
     }
     return map
@@ -252,14 +354,24 @@ export function App() {
     [activeWorkflowId],
   )
 
-  const handleAddNode = useCallback(
+  const handleAddTopLevelNode = useCallback(
     (type: NodeType) => {
       requestCreateNode(type, {
-        x: 120 + nodes.length * 36,
-        y: 120 + nodes.length * 36,
+        x: 120 + topLevelNodes.length * 36,
+        y: 120 + topLevelNodes.length * 36,
       })
     },
-    [nodes.length, requestCreateNode],
+    [topLevelNodes.length, requestCreateNode],
+  )
+
+  const handleAddLoopBodyNode = useCallback(
+    (type: NodeType) => {
+      requestCreateNode(type, {
+        x: 120 + loopBodyNodes.length * 36,
+        y: 120 + loopBodyNodes.length * 36,
+      })
+    },
+    [loopBodyNodes.length, requestCreateNode],
   )
 
   const handleDropNode = useCallback(
@@ -315,6 +427,7 @@ export function App() {
       <AppShell
         email={email}
         workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+        showInspector={mainSelectedNode !== null}
         error={error}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -332,7 +445,7 @@ export function App() {
           workflows={workflows}
           activeWorkflowId={activeWorkflowId}
           activeWorkflowStatus={lastExecution?.status ?? null}
-          nodeCatalog={nodeCatalog}
+          nodeCatalog={topLevelNodeCatalog}
           onSelectWorkflow={setActiveWorkflowId}
           onCreateWorkflow={handleCreateWorkflow}
           onRenameWorkflow={handleRenameWorkflow}
@@ -341,12 +454,13 @@ export function App() {
           onExportWorkflow={(id) => void handleExportWorkflow(id)}
           onImportWorkflow={(file) => void handleImportWorkflow(file)}
           onOpenNewFromTemplate={() => setShowNewFromTemplate(true)}
-          onAddNode={handleAddNode}
+          onAddNode={handleAddTopLevelNode}
         />
         <GraphCanvas
           activeWorkflowId={activeWorkflowId}
-          nodes={nodes}
-          edges={edges}
+          activeParentNodeId={null}
+          nodes={topLevelNodes}
+          edges={topLevelEdges}
           nodeCatalog={nodeCatalog}
           runDisabledReason={activeWorkflowId ? runDisabledReason : null}
           selectedCount={selectedNodeIds.length}
@@ -357,13 +471,52 @@ export function App() {
           onDeleteEdge={handleDeleteEdge}
           onDropNode={handleDropNode}
           onDeleteNode={handleDeleteNode}
+          onDrillIntoLoop={(nodeId) => {
+            handleSelectionChange([], [])
+            setActiveParentNodeId(Number(nodeId))
+          }}
         />
-        <InspectorPanel
-          node={selectedNode}
-          nodeCatalog={nodeCatalog}
-          onSaveNode={handleUpdateNodeData}
-        />
+        {mainSelectedNode ? (
+          <InspectorPanel
+            node={mainSelectedNode}
+            nodeCatalog={nodeCatalog}
+            onSaveNode={handleUpdateNodeData}
+          />
+        ) : null}
       </AppShell>
+
+      {activeParentNodeId !== null && activeParentNode ? (
+        <LoopBodyModal
+          key={activeParentNodeId}
+          loopNodeId={activeParentNodeId}
+          loopLabel={String(activeParentNode.data?.label ?? 'Loop')}
+          activeWorkflowId={activeWorkflowId}
+          nodes={loopBodyNodes}
+          edges={loopBodyEdges}
+          nodeCatalog={nodeCatalog}
+          creatableNodeCatalog={loopBodyNodeCatalog}
+          selectedNode={selectedNode}
+          selectedCount={selectedNodeIds.length}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={() => void undo()}
+          onRedo={() => void redo()}
+          onAutoLayout={() => void handleAutoLayout()}
+          onSelectionChange={handleSelectionChange}
+          onNodesChange={handleNodesChange}
+          onMoveNode={handleMoveNode}
+          onConnect={handleConnect}
+          onDeleteEdge={handleDeleteEdge}
+          onDropNode={handleDropNode}
+          onDeleteNode={handleDeleteNode}
+          onAddNode={handleAddLoopBodyNode}
+          onSaveNode={handleUpdateNodeData}
+          onClose={() => {
+            handleSelectionChange([], [])
+            setActiveParentNodeId(null)
+          }}
+        />
+      ) : null}
 
       {historyTab ? (
         <HistoryOverlay

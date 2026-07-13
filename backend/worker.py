@@ -2,14 +2,17 @@
 
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from arq import cron
+from croniter import CroniterError, croniter
 
 from constants import DEFAULT_TIMEOUT
 from db.repositories import (
     ExecutionRepository,
     NodeRepository,
+    NodeScheduleRepository,
     TelegramBotRepository,
     WorkflowRepository,
 )
@@ -37,7 +40,7 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.models import Node, TelegramBot
+    from db.models import Node, NodeSchedule, TelegramBot
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,10 @@ EnqueueCallback = Callable[[int], Awaitable[None]]
 _REAPER_MINUTES = set(range(0, 60, 5))
 # Short-poll Telegram for new messages every 10 seconds.
 _TELEGRAM_POLL_SECONDS = set(range(0, 60, 10))
+# Poll cron schedules twice a minute — cron's finest granularity is 1 minute,
+# so this keeps a due schedule's fire latency under 30 seconds without
+# polling much more often than that granularity warrants.
+_SCHEDULE_POLL_SECONDS = set(range(0, 60, 30))
 
 
 async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
@@ -437,6 +444,125 @@ def _extract_message(update: dict[str, Any]) -> tuple[int | None, str | None]:
     return chat_id, text
 
 
+async def poll_scheduled_triggers(
+    ctx: dict[Any, Any], *args: object, **kwargs: object
+) -> None:
+    """Fire due cron schedules, enqueuing one execution per due schedule.
+
+    Every Input node with ``format=schedule`` has a ``NodeSchedule`` row
+    (kept in sync with the node by ``NodeUsecase._sync_node_schedule``). A
+    schedule is due once its cron expression's next boundary after
+    ``last_fired_at`` has passed. ``last_fired_at`` is then reset to the
+    wall-clock check time (not the matched boundary), so a worker that was
+    down across several missed boundaries fires once on wake-up and resumes
+    from "now" rather than replaying every boundary it missed — the same
+    "skip, don't stack" choice as the stuck-execution reaper, and distinct
+    from Telegram's offset-based catch-up (safe to replay: relaying an old
+    message costs one extra reply, replaying a missed schedule could mean
+    hours of stacked LLM calls).
+
+    Args:
+        ctx: ARQ job context.
+        args: Unused positional arguments (ARQ coroutine protocol).
+        kwargs: Unused keyword arguments (ARQ coroutine protocol).
+
+    """
+    del args, kwargs
+    redis: ArqRedis = ctx["redis"]
+    node_schedule_repository = NodeScheduleRepository()
+    node_repository = NodeRepository()
+    now = datetime.now(tz=UTC)
+
+    async def enqueue(execution_id: int) -> None:
+        """Enqueue the execution job, deduplicated by execution ID."""
+        await redis.enqueue_job(
+            "run_execution_task", execution_id, _job_id=f"execution:{execution_id}"
+        )
+
+    async with async_session() as session:
+        schedules = await node_schedule_repository.get_all(session=session)
+
+        for schedule in schedules:
+            if not _schedule_is_due(schedule=schedule, now=now):
+                continue
+
+            node = await node_repository.get_by(session=session, id=schedule.node_id)
+            if node is not None and node.type is NodeType.INPUT:
+                await _trigger_scheduled_execution(
+                    session=session, node=node, enqueue=enqueue
+                )
+
+            await node_schedule_repository.update_by(
+                session=session, data={"last_fired_at": now}, id=schedule.id
+            )
+            await session.commit()
+
+
+def _schedule_is_due(schedule: "NodeSchedule", now: datetime) -> bool:
+    """Return whether a schedule's next cron boundary after its anchor has passed.
+
+    Args:
+        schedule: The schedule to check.
+        now: The current time.
+
+    Returns:
+        Whether the schedule should fire.
+
+    """
+    try:
+        upcoming = croniter(schedule.cron_expression, schedule.last_fired_at).get_next(
+            datetime
+        )
+    except CroniterError:
+        logger.exception(
+            "Invalid cron expression for schedule %s; skipping", schedule.id
+        )
+        return False
+    return upcoming <= now
+
+
+async def _trigger_scheduled_execution(
+    session: "AsyncSession",
+    node: "Node",
+    enqueue: EnqueueCallback,
+) -> None:
+    """Create one execution for a due scheduled Input node.
+
+    A scheduled run has no incoming message, so it carries the node's fixed
+    ``scheduled_value`` text (empty if unset) as its input — same shape as a
+    manual run, just triggered by the clock instead of a user click.
+
+    Args:
+        session: Database session.
+        node: The Input node the schedule fired for.
+        enqueue: Callback that schedules an execution for background running.
+
+    """
+    workflow = await WorkflowRepository().get_by(session=session, id=node.workflow_id)
+    if workflow is None:
+        return
+
+    scheduled_value = node.data.get("scheduled_value")
+    if not isinstance(scheduled_value, str):
+        scheduled_value = ""
+
+    try:
+        await ExecutionUsecase().create_execution(
+            session=session,
+            user_id=workflow.owner_id,
+            data=ExecutionCreate(
+                workflow_id=node.workflow_id,
+                input_data=ExecutionInputPayload(value=scheduled_value),
+            ),
+            enqueue=enqueue,
+            trigger=ExecutionTrigger(source=ExecutionSource.SCHEDULE),
+        )
+    except BaseError:
+        logger.exception(
+            "Failed to create scheduled execution for workflow %s", node.workflow_id
+        )
+
+
 async def reap_stuck_executions(
     ctx: dict[Any, Any], *args: object, **kwargs: object
 ) -> None:
@@ -487,6 +613,7 @@ class WorkerSettings:
     cron_jobs: ClassVar[list] = [
         cron(reap_stuck_executions, minute=_REAPER_MINUTES),
         cron(poll_telegram_updates, second=_TELEGRAM_POLL_SECONDS),
+        cron(poll_scheduled_triggers, second=_SCHEDULE_POLL_SECONDS),
     ]
     redis_settings = redis_settings.arq
     on_startup = startup

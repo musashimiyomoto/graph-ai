@@ -15,6 +15,9 @@ class NodeType(StrEnum):
     CODE_TRANSFORM = auto()
     VECTOR_INGEST = auto()
     VECTOR_SEARCH = auto()
+    LOOP = auto()
+    LOOP_INPUT = auto()
+    LOOP_OUTPUT = auto()
     OUTPUT = auto()
 
 
@@ -47,6 +50,7 @@ class InputNodeFormat(StrEnum):
 
     TXT = auto()
     TELEGRAM = auto()
+    SCHEDULE = auto()
 
 
 class OutputNodeFormat(StrEnum):
@@ -75,3 +79,10 @@ class ConditionBranch(StrEnum):
 
     TRUE = "true"
     FALSE = "false"
+
+
+class LoopMode(StrEnum):
+    """How a loop node determines when to stop iterating."""
+
+    LIST = auto()
+    CONDITION = auto()

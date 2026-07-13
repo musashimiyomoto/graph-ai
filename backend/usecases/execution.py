@@ -6,7 +6,7 @@ import json
 import logging
 from collections import deque
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from constants import (
     DEFAULT_PAGE_SIZE,
+    MAX_LOOP_ITERATIONS,
     MAX_NODE_ATTEMPTS,
     MAX_NODE_OUTPUT_CHARS,
     NODE_TIMEOUT_SECONDS,
@@ -36,7 +37,7 @@ from db.repositories import (
     WorkflowRepository,
     WorkflowVersionRepository,
 )
-from enums import ExecutionSource, ExecutionStatus, NodeType
+from enums import ConditionType, ExecutionSource, ExecutionStatus, LoopMode, NodeType
 from exceptions import (
     BaseError,
     ExecutionGraphValidationError,
@@ -53,6 +54,7 @@ from nodes import (
     NodeHandlerRegistry,
     OnToken,
     check_edge_ports,
+    evaluate_condition,
 )
 from schemas import (
     EdgeResponse,
@@ -83,6 +85,35 @@ class _TokenPublishers:
     reset: TokenResetPublisher | None = None
 
 
+def _edges_within_scope(
+    nodes: list[NodeResponse], edges: list[EdgeResponse]
+) -> list[EdgeResponse]:
+    """Filter edges to only those whose endpoints are both in `nodes`.
+
+    Edges carry no scope column of their own — a workflow's edges are
+    fetched flat by `workflow_id`, same as before Loop existed — but by
+    construction an edge only ever connects two nodes in the same scope (a
+    loop body's canvas only lets you wire nodes inside that same body). This
+    partitions a flat edge list down to one scope without needing a new
+    column, and drops (rather than errors on) an edge whose endpoint isn't
+    in scope, since that's just an edge belonging to a *different* scope.
+
+    Args:
+        nodes: The nodes in this scope.
+        edges: The workflow's full edge list (all scopes).
+
+    Returns:
+        Only the edges whose source and target are both in `nodes`.
+
+    """
+    node_ids = {node.id for node in nodes}
+    return [
+        edge
+        for edge in edges
+        if edge.source_node_id in node_ids and edge.target_node_id in node_ids
+    ]
+
+
 def _truncate_for_storage(output: str | None) -> str | None:
     """Cap a node's output before persisting it, with a visible marker.
 
@@ -96,12 +127,42 @@ def _truncate_for_storage(output: str | None) -> str | None:
 
 
 @dataclass(frozen=True)
+class _GraphSource:
+    """A workflow's full node/edge list, across every scope.
+
+    Unlike an `ExecutionGraphContext` (always scoped to one graph — the
+    top-level graph, or one Loop node's body), this is the raw material both
+    are built from: whichever source the run is pinned to (the live DB, or a
+    `WorkflowVersion` snapshot), loaded once. The recursive loop runner
+    partitions this by `parent_node_id` on demand to build a body's own
+    `ExecutionGraphContext`, without a second DB round-trip and without
+    caring whether the run is live or replaying a pinned snapshot.
+    """
+
+    all_nodes: list[NodeResponse]
+    all_edges: list[EdgeResponse]
+
+
+@dataclass(frozen=True)
+class _LoadedGraph:
+    """The top-level graph an execution runs, bundled with its full source.
+
+    What `_load_graph`/`_build_graph_from_snapshot`/`_load_execution_graph`
+    hand back — one param instead of two everywhere it's threaded through.
+    """
+
+    top_level: ExecutionGraphContext
+    source: _GraphSource
+
+
+@dataclass(frozen=True)
 class _NodeRunContext:
     """Loop-invariant context shared across node executions in one run."""
 
     execution_id: int
     workflow_owner_id: int
     input_value: str
+    graph_source: _GraphSource
     token_publisher: TokenPublisher | None = None
     token_reset_publisher: TokenResetPublisher | None = None
 
@@ -126,6 +187,7 @@ class _NodeOutcome:
     status: ExecutionStatus
     output: str | None = None
     error: str | None = None
+    iteration: int | None = None
 
 
 @dataclass(frozen=True)
@@ -157,7 +219,10 @@ class ExecutionListFilter:
     """Filter for listing a workflow's executions."""
 
     workflow_id: int
-    source: ExecutionSource | None = None
+    # None matches any source; a non-empty list restricts to those sources
+    # (e.g. Activity Log showing Telegram + schedule together, distinct from
+    # the owner's own manual test runs).
+    source: list[ExecutionSource] | None = None
 
 
 class ExecutionUsecase:
@@ -165,6 +230,7 @@ class ExecutionUsecase:
 
     _max_node_attempts: int = MAX_NODE_ATTEMPTS
     _node_timeout_seconds: float = NODE_TIMEOUT_SECONDS
+    _max_loop_iterations: int = MAX_LOOP_ITERATIONS
 
     def __init__(self) -> None:
         """Initialize the usecase."""
@@ -316,13 +382,15 @@ class ExecutionUsecase:
                 raise ExecutionNotFoundError
             return ExecutionResponse.model_validate(current)
 
-        graph = await self._load_execution_graph(session=session, execution=execution)
+        loaded_graph = await self._load_execution_graph(
+            session=session, execution=execution
+        )
 
         try:
             output_data = await self._run_execution(
                 session=session,
                 execution_id=execution_id,
-                graph=graph,
+                loaded_graph=loaded_graph,
                 session_factory=session_factory,
                 token_publishers=_TokenPublishers(
                     delta=token_publisher, reset=token_reset_publisher
@@ -432,38 +500,47 @@ class ExecutionUsecase:
 
     async def _load_graph(
         self, session: AsyncSession, workflow_id: int
-    ) -> ExecutionGraphContext:
-        """Build and validate the execution graph for a workflow.
+    ) -> _LoadedGraph:
+        """Build and validate the top-level execution graph for a workflow.
+
+        Scoped to `parent_node_id IS NULL` — nodes inside a Loop node's body
+        aren't part of the top-level graph at all; the recursive loop runner
+        builds its own scoped `ExecutionGraphContext` per Loop node instead,
+        from the `_GraphSource` bundled alongside the top-level context.
 
         Args:
             session: The session.
             workflow_id: The workflow ID.
 
         Returns:
-            The validated graph context.
+            The validated top-level graph, bundled with the workflow's full
+            (every-scope) node/edge list it was built from.
 
         Raises:
             ExecutionGraphValidationError: If graph is invalid for execution.
 
         """
-        return self._build_graph_context(
-            nodes=[
-                NodeResponse.model_validate(node)
-                for node in await self._node_repository.get_all(
-                    session=session, workflow_id=workflow_id
-                )
-            ],
-            edges=[
-                EdgeResponse.model_validate(edge)
-                for edge in await self._edge_repository.get_all(
-                    session=session, workflow_id=workflow_id
-                )
-            ],
+        all_nodes = [
+            NodeResponse.model_validate(node)
+            for node in await self._node_repository.get_all(
+                session=session, workflow_id=workflow_id
+            )
+        ]
+        all_edges = [
+            EdgeResponse.model_validate(edge)
+            for edge in await self._edge_repository.get_all(
+                session=session, workflow_id=workflow_id
+            )
+        ]
+        graph_source = _GraphSource(all_nodes=all_nodes, all_edges=all_edges)
+        top_level = self._build_scoped_graph_context(
+            graph_source=graph_source, parent_node_id=None
         )
+        return _LoadedGraph(top_level=top_level, source=graph_source)
 
     async def _load_execution_graph(
         self, session: AsyncSession, execution: "Execution"
-    ) -> ExecutionGraphContext:
+    ) -> _LoadedGraph:
         """Load the graph an execution should run: its pinned snapshot if any.
 
         Args:
@@ -471,7 +548,8 @@ class ExecutionUsecase:
             execution: The execution ORM row.
 
         Returns:
-            The validated graph context.
+            The validated top-level graph, bundled with the workflow's full
+            (every-scope) node/edge list it was built from.
 
         Raises:
             ExecutionGraphValidationError: If the graph is invalid.
@@ -489,16 +567,17 @@ class ExecutionUsecase:
             session=session, workflow_id=execution.workflow_id
         )
 
-    def _build_graph_from_snapshot(
-        self, graph: dict[str, object]
-    ) -> ExecutionGraphContext:
+    def _build_graph_from_snapshot(self, graph: dict[str, object]) -> _LoadedGraph:
         """Build the graph context from a stored version snapshot.
 
         Args:
-            graph: Snapshot dict with ``nodes`` and ``edges`` lists.
+            graph: Snapshot dict with ``nodes`` and ``edges`` lists (every
+                scope — a loop body's nodes are dumped flat alongside the
+                top-level ones, same as the live graph; see `_GraphSource`).
 
         Returns:
-            The validated graph context.
+            The validated top-level graph, bundled with the snapshot's full
+            (every-scope) node/edge list it was built from.
 
         Raises:
             ExecutionGraphValidationError: If the snapshot graph is invalid.
@@ -508,9 +587,47 @@ class ExecutionUsecase:
         raw_edges = graph.get("edges", [])
         nodes = list(raw_nodes) if isinstance(raw_nodes, list) else []
         edges = list(raw_edges) if isinstance(raw_edges, list) else []
+        graph_source = _GraphSource(
+            all_nodes=[NodeResponse.model_validate(node) for node in nodes],
+            all_edges=[EdgeResponse.model_validate(edge) for edge in edges],
+        )
+        top_level = self._build_scoped_graph_context(
+            graph_source=graph_source, parent_node_id=None
+        )
+        return _LoadedGraph(top_level=top_level, source=graph_source)
+
+    def _build_scoped_graph_context(
+        self, graph_source: _GraphSource, parent_node_id: int | None
+    ) -> ExecutionGraphContext:
+        """Build one scope's `ExecutionGraphContext` out of a `_GraphSource`.
+
+        `parent_node_id=None` is the top-level graph (entry/exit are
+        `INPUT`/`OUTPUT`); any other value is a specific Loop node's body
+        (entry/exit are `LOOP_INPUT`/`LOOP_OUTPUT`).
+
+        Args:
+            graph_source: The workflow's full (every-scope) node/edge list.
+            parent_node_id: The scope to build — `None` for top-level, or a
+                Loop node's id for its body.
+
+        Returns:
+            The validated graph context for that one scope.
+
+        Raises:
+            ExecutionGraphValidationError: If that scope's graph is invalid.
+
+        """
+        nodes = [
+            node
+            for node in graph_source.all_nodes
+            if node.parent_node_id == parent_node_id
+        ]
+        is_top_level = parent_node_id is None
         return self._build_graph_context(
-            nodes=[NodeResponse.model_validate(node) for node in nodes],
-            edges=[EdgeResponse.model_validate(edge) for edge in edges],
+            nodes=nodes,
+            edges=_edges_within_scope(nodes=nodes, edges=graph_source.all_edges),
+            input_type=NodeType.INPUT if is_top_level else NodeType.LOOP_INPUT,
+            output_type=NodeType.OUTPUT if is_top_level else NodeType.LOOP_OUTPUT,
         )
 
     async def _snapshot_workflow(
@@ -623,7 +740,7 @@ class ExecutionUsecase:
             raise WorkflowNotFoundError
 
         filters: dict[str, object] = {"workflow_id": list_filter.workflow_id}
-        if list_filter.source is not None:
+        if list_filter.source:
             filters["source"] = list_filter.source
 
         return [
@@ -837,7 +954,7 @@ class ExecutionUsecase:
         self,
         session: AsyncSession,
         execution_id: int,
-        graph: ExecutionGraphContext,
+        loaded_graph: _LoadedGraph,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         token_publishers: _TokenPublishers | None = None,
     ) -> ExecutionOutputPayload:
@@ -846,7 +963,11 @@ class ExecutionUsecase:
         Args:
             session: Database session.
             execution_id: Execution ID.
-            graph: Validated graph context.
+            loaded_graph: Validated top-level graph, bundled with the
+                workflow's full (every-scope) node/edge list — the latter is
+                threaded into `_NodeRunContext` so a Loop node encountered
+                mid-run can build its own body's `ExecutionGraphContext`
+                on demand.
             session_factory: When provided, independent branches run concurrently.
             token_publishers: Callbacks for streaming token deltas and, before
                 a retry, signaling clients to discard a node's already-streamed
@@ -877,10 +998,12 @@ class ExecutionUsecase:
         if workflow is None:
             raise WorkflowNotFoundError
 
+        graph = loaded_graph.top_level
         run_context = _NodeRunContext(
             execution_id=execution_id,
             workflow_owner_id=workflow.owner_id,
             input_value=self._extract_input_value(input_data=execution.input_data),
+            graph_source=loaded_graph.source,
             token_publisher=token_publishers.delta,
             token_reset_publisher=token_publishers.reset,
         )
@@ -937,6 +1060,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
+        iteration: int | None = None,
     ) -> None:
         """Persist a SKIPPED result for a node with no live inbound edge.
 
@@ -944,6 +1068,8 @@ class ExecutionUsecase:
             session: Database session to record the result on.
             run_context: Loop-invariant run context.
             node: The skipped node.
+            iteration: The loop iteration this node belongs to, if any — see
+                `_run_loop_node`. `None` for a top-level node.
 
         """
         await self._record_node_result(
@@ -951,7 +1077,7 @@ class ExecutionUsecase:
             run_context=run_context,
             node=node,
             started_at=datetime.now(tz=UTC),
-            outcome=_NodeOutcome(status=ExecutionStatus.SKIPPED),
+            outcome=_NodeOutcome(status=ExecutionStatus.SKIPPED, iteration=iteration),
         )
 
     async def _record_skip_isolated(
@@ -995,6 +1121,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         graph: ExecutionGraphContext,
+        iteration: int | None = None,
     ) -> dict[int, str]:
         """Run nodes one at a time in topological order.
 
@@ -1002,6 +1129,11 @@ class ExecutionUsecase:
             session: Database session shared by all nodes.
             run_context: Loop-invariant run context.
             graph: Validated graph context.
+            iteration: When running a Loop node's body (see
+                `_run_loop_node`), the 0-based index of this pass, recorded
+                on every inner node's `node_executions` row so a rerun of
+                the same node across iterations is distinguishable. `None`
+                for the top-level graph.
 
         Returns:
             Mapping of node ID to output text.
@@ -1030,7 +1162,10 @@ class ExecutionUsecase:
                 live_by_node[node_id] = False
                 selected_handle_by_node[node_id] = None
                 await self._record_skip(
-                    session=session, run_context=run_context, node=node
+                    session=session,
+                    run_context=run_context,
+                    node=node,
+                    iteration=iteration,
                 )
                 continue
 
@@ -1040,6 +1175,7 @@ class ExecutionUsecase:
                     run_context=run_context,
                     node=node,
                     parent_values=parent_values,
+                    iteration=iteration,
                 )
             except BaseError:
                 # This node's own failure is already recorded; nodes later in
@@ -1050,6 +1186,7 @@ class ExecutionUsecase:
                         session=session,
                         run_context=run_context,
                         node=graph.nodes_by_id[unreached_id],
+                        iteration=iteration,
                     )
                 raise
             outputs_by_node[node_id] = result.output
@@ -1294,6 +1431,7 @@ class ExecutionUsecase:
         run_context: _NodeRunContext,
         node: NodeResponse,
         parent_values: list[str],
+        iteration: int | None = None,
     ) -> NodeExecutionResult:
         """Run one node with retries, persisting its final result.
 
@@ -1302,6 +1440,8 @@ class ExecutionUsecase:
             run_context: Loop-invariant run context.
             node: Node to execute.
             parent_values: Outputs of the node's parents.
+            iteration: The loop iteration this node belongs to, if any — see
+                `_run_nodes_serial`. `None` for a top-level node.
 
         Returns:
             The node execution result.
@@ -1343,7 +1483,9 @@ class ExecutionUsecase:
                     node=node,
                     started_at=started_at,
                     outcome=_NodeOutcome(
-                        status=ExecutionStatus.FAILED, error=exc.message
+                        status=ExecutionStatus.FAILED,
+                        error=exc.message,
+                        iteration=iteration,
                     ),
                 )
                 raise
@@ -1354,7 +1496,9 @@ class ExecutionUsecase:
                 node=node,
                 started_at=started_at,
                 outcome=_NodeOutcome(
-                    status=ExecutionStatus.SUCCESS, output=result.output
+                    status=ExecutionStatus.SUCCESS,
+                    output=result.output,
+                    iteration=iteration,
                 ),
             )
             return result
@@ -1387,9 +1531,28 @@ class ExecutionUsecase:
             BaseError: If the node handler fails.
 
         """
-        if node.type is not NodeType.INPUT and not parent_values:
+        if (
+            node.type not in {NodeType.INPUT, NodeType.LOOP_INPUT}
+            and not parent_values
+        ):
             message = f"Node {node.id} does not have input value"
             raise ExecutionGraphValidationError(message=message)
+
+        # Loop can't be a plain NodeHandler like every other type — running
+        # its body means recursively calling back into the graph runner
+        # itself, which a handler (only ever given one NodeExecutionContext)
+        # has no way to do. Special-cased here, before the node registry
+        # dispatch below, and deliberately outside the per-node timeout: a
+        # Loop's total runtime is bounded by (iterations x each inner
+        # node's own timeout) instead, not one fixed budget — see
+        # `_run_loop_node`. See also `nodes/loop.py`'s module docstring.
+        if node.type is NodeType.LOOP:
+            return await self._run_loop_node(
+                session=session,
+                run_context=run_context,
+                node=node,
+                parent_values=parent_values,
+            )
 
         try:
             async with asyncio.timeout(self._node_timeout_seconds):
@@ -1408,6 +1571,202 @@ class ExecutionUsecase:
                 )
         except TimeoutError as exc:
             raise NodeExecutionTimeoutError from exc
+
+    async def _run_loop_node(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        parent_values: list[str],
+    ) -> NodeExecutionResult:
+        """Run a Loop node's body to completion and return its aggregate result.
+
+        Recursively drives the body's own scoped graph (`LOOP_INPUT` -> ...
+        -> `LOOP_OUTPUT`) via `_run_nodes_serial`, entirely on `session`
+        regardless of whether the outer execution is running serial or
+        wave-parallel — loop iterations are inherently sequential (condition
+        mode needs iteration N's result before iteration N+1 can start), so
+        this never reuses the parallel wave machinery, even for independent
+        branches within one iteration's body.
+
+        Args:
+            session: Database session (the Loop node's own — isolated
+                per-node in wave-parallel mode, shared in serial mode;
+                either way, every inner node this iterates over runs on it).
+            run_context: Loop-invariant run context — carries the
+                `_GraphSource` this builds the body's scope from.
+            node: The Loop node itself.
+            parent_values: The Loop node's own upstream input: list mode
+                expects a JSON array as text; condition mode uses it as the
+                seed value for the first iteration.
+
+        Returns:
+            List mode: a JSON array of each iteration's `LOOP_OUTPUT` text.
+            Condition mode: the final iteration's `LOOP_OUTPUT` text.
+
+        Raises:
+            ExecutionGraphValidationError: If the body's graph is invalid,
+                list mode's upstream text isn't a JSON array, or the mode/
+                condition_type is unrecognized.
+            BaseError: If an inner node fails after exhausting its own
+                retries — same as any other node failure, this fails the
+                Loop node's current attempt; the outer retry loop in
+                `_run_node` then restarts the *whole* body from iteration 0
+                (loop iterations aren't individually retried/resumed).
+
+        """
+        body_graph = self._build_scoped_graph_context(
+            graph_source=run_context.graph_source, parent_node_id=node.id
+        )
+        seed_text = "\n".join(parent_values)
+
+        if node.data.get("mode") == LoopMode.CONDITION.value:
+            return await self._run_loop_condition(
+                session=session,
+                run_context=run_context,
+                node=node,
+                body_graph=body_graph,
+                seed_text=seed_text,
+            )
+        return await self._run_loop_list(
+            session=session,
+            run_context=run_context,
+            node=node,
+            body_graph=body_graph,
+            seed_text=seed_text,
+        )
+
+    async def _run_loop_list(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        body_graph: ExecutionGraphContext,
+        seed_text: str,
+    ) -> NodeExecutionResult:
+        """Run a Loop node's body once per element of a JSON array.
+
+        Args:
+            session: Database session for every inner node this runs.
+            run_context: Loop-invariant run context.
+            node: The Loop node itself.
+            body_graph: The body's own validated `ExecutionGraphContext`.
+            seed_text: The Loop node's upstream text, expected to parse as a
+                JSON array.
+
+        Returns:
+            A JSON array of each element's `LOOP_OUTPUT` text, as the Loop
+            node's own output — truncated (with a visible marker) past
+            `MAX_LOOP_ITERATIONS` elements.
+
+        Raises:
+            ExecutionGraphValidationError: If `seed_text` isn't a JSON array.
+            BaseError: If an inner node fails — see `_run_loop_node`.
+
+        """
+        try:
+            items = json.loads(seed_text)
+        except json.JSONDecodeError as exc:
+            message = f"Loop node {node.id} (list mode) requires a JSON array as input"
+            raise ExecutionGraphValidationError(message=message) from exc
+        if not isinstance(items, list):
+            message = f"Loop node {node.id} (list mode) requires a JSON array as input"
+            raise ExecutionGraphValidationError(message=message)
+
+        bounded_items = items[: self._max_loop_iterations]
+        results: list[str] = []
+        for index, item in enumerate(bounded_items):
+            item_text = item if isinstance(item, str) else json.dumps(item)
+            iteration_context = replace(run_context, input_value=item_text)
+            body_outputs = await self._run_nodes_serial(
+                session=session,
+                run_context=iteration_context,
+                graph=body_graph,
+                iteration=index,
+            )
+            results.append(body_outputs[body_graph.output_node_id])
+
+        output = json.dumps(results)
+        if len(items) > self._max_loop_iterations:
+            output = (
+                f"{output}\n\n[truncated: {len(items)} items total, "
+                f"ran the first {self._max_loop_iterations}]"
+            )
+        return NodeExecutionResult(output=output)
+
+    async def _run_loop_condition(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        body_graph: ExecutionGraphContext,
+        seed_text: str,
+    ) -> NodeExecutionResult:
+        """Re-run a Loop node's body until its stop condition matches.
+
+        Do-while semantics: the body always runs at least once before the
+        stop condition is checked against its result.
+
+        Args:
+            session: Database session for every inner node this runs.
+            run_context: Loop-invariant run context.
+            node: The Loop node itself — `condition_type`/`value`/
+                `case_sensitive` (same fields as the Condition node) decide
+                when to stop.
+            body_graph: The body's own validated `ExecutionGraphContext`.
+            seed_text: The Loop node's upstream text, used as the first
+                iteration's `LOOP_INPUT` value.
+
+        Returns:
+            The final iteration's `LOOP_OUTPUT` text as the Loop node's own
+            output — marked as stopped-by-cap (not failed) if
+            `MAX_LOOP_ITERATIONS` was reached without the condition matching.
+
+        Raises:
+            ExecutionGraphValidationError: If `condition_type` is
+                unrecognized, or (for value-based condition types) `value`
+                is empty, or it's an invalid `REGEX` pattern.
+            BaseError: If an inner node fails — see `_run_loop_node`.
+
+        """
+        condition_type = self._read_loop_condition_type(node)
+        case_sensitive = node.data.get("case_sensitive") == "true"
+        raw_value = node.data.get("value")
+        value = raw_value if isinstance(raw_value, str) else None
+
+        current_text = seed_text
+        for index in range(self._max_loop_iterations):
+            iteration_context = replace(run_context, input_value=current_text)
+            body_outputs = await self._run_nodes_serial(
+                session=session,
+                run_context=iteration_context,
+                graph=body_graph,
+                iteration=index,
+            )
+            current_text = body_outputs[body_graph.output_node_id]
+
+            if evaluate_condition(
+                condition_type=condition_type,
+                text=current_text,
+                case_sensitive=case_sensitive,
+                value=value,
+            ):
+                return NodeExecutionResult(output=current_text)
+
+        marker = (
+            f"\n\n[stopped: iteration cap ({self._max_loop_iterations}) reached "
+            "without matching the stop condition]"
+        )
+        return NodeExecutionResult(output=f"{current_text}{marker}")
+
+    def _read_loop_condition_type(self, node: NodeResponse) -> ConditionType:
+        """Read and validate a Loop node's stop condition_type."""
+        raw = node.data.get("condition_type")
+        try:
+            return ConditionType(raw)
+        except ValueError as exc:
+            message = f"Loop node {node.id} has an unsupported condition_type"
+            raise ExecutionGraphValidationError(message=message) from exc
 
     @staticmethod
     def _make_on_token(run_context: _NodeRunContext, node_id: int) -> OnToken | None:
@@ -1446,7 +1805,8 @@ class ExecutionUsecase:
             run_context: Loop-invariant run context.
             node: Executed node (from the graph snapshot).
             started_at: When the node started.
-            outcome: The node's final status, output, and error.
+            outcome: The node's final status, output, error, and (if run
+                inside a Loop node's body) iteration index.
 
         """
         await self._node_execution_repository.create(
@@ -1456,6 +1816,7 @@ class ExecutionUsecase:
                 "node_id": node.id,
                 "node_type": node.type,
                 "node_label": node.data.get("label"),
+                "iteration": outcome.iteration,
                 "status": outcome.status,
                 "output": _truncate_for_storage(outcome.output),
                 "error": outcome.error,
@@ -1546,13 +1907,25 @@ class ExecutionUsecase:
             )
 
     def _build_graph_context(
-        self, nodes: list[NodeResponse], edges: list[EdgeResponse]
+        self,
+        nodes: list[NodeResponse],
+        edges: list[EdgeResponse],
+        *,
+        input_type: NodeType = NodeType.INPUT,
+        output_type: NodeType = NodeType.OUTPUT,
     ) -> ExecutionGraphContext:
         """Build and validate graph context for execution.
 
         Args:
-            nodes: Workflow nodes.
-            edges: Workflow edges.
+            nodes: The nodes in this one scope (already filtered — see
+                `_build_scoped_graph_context`).
+            edges: This scope's edges.
+            input_type: The type that must appear exactly once as this
+                scope's entry point — `INPUT` for the top-level graph,
+                `LOOP_INPUT` for a Loop node's body.
+            output_type: The type that must appear exactly once as this
+                scope's exit point — `OUTPUT` for the top-level graph,
+                `LOOP_OUTPUT` for a Loop node's body.
 
         Returns:
             Validated graph context.
@@ -1565,14 +1938,14 @@ class ExecutionUsecase:
             message = "Workflow must contain at least one node"
             raise ExecutionGraphValidationError(message=message)
 
-        input_nodes = [node for node in nodes if node.type is NodeType.INPUT]
+        input_nodes = [node for node in nodes if node.type is input_type]
         if len(input_nodes) != 1:
-            message = "Workflow must contain exactly one input node"
+            message = f"Workflow must contain exactly one {input_type.value} node"
             raise ExecutionGraphValidationError(message=message)
 
-        output_nodes = [node for node in nodes if node.type is NodeType.OUTPUT]
+        output_nodes = [node for node in nodes if node.type is output_type]
         if len(output_nodes) != 1:
-            message = "Workflow must contain exactly one output node"
+            message = f"Workflow must contain exactly one {output_type.value} node"
             raise ExecutionGraphValidationError(message=message)
 
         # Process nodes in a stable id order so graph traversal and parent-value

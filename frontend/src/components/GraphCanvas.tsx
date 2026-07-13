@@ -28,8 +28,10 @@ interface GraphCanvasProps {
   // Included only to trigger the fitView-on-workflow-switch effect below —
   // GraphCanvas never unmounts between workflows (only its nodes/edges
   // props change), so React Flow's own `fitView` prop (mount-only) never
-  // re-centers on switch; watching this id is the trigger that does.
+  // re-centers on switch; watching this id (and the active Loop scope) is
+  // the trigger that does.
   activeWorkflowId: number | null
+  activeParentNodeId: number | null
   nodes: FlowNode[]
   edges: Edge[]
   nodeCatalog: NodeCatalogItem[]
@@ -42,6 +44,7 @@ interface GraphCanvasProps {
   onDeleteEdge: (edgeId: string) => void
   onDropNode: (type: string, position: { x: number; y: number }) => void
   onDeleteNode: (id: string) => void
+  onDrillIntoLoop: (nodeId: string) => void
 }
 
 interface ContextMenuState {
@@ -54,6 +57,7 @@ interface ContextMenuState {
 
 function GraphCanvasInner({
   activeWorkflowId,
+  activeParentNodeId,
   nodes,
   edges,
   nodeCatalog,
@@ -66,6 +70,7 @@ function GraphCanvasInner({
   onDeleteEdge,
   onDropNode,
   onDeleteNode,
+  onDrillIntoLoop,
 }: GraphCanvasProps) {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -82,7 +87,7 @@ function GraphCanvasInner({
   const pendingFitWorkflowId = useRef<number | null>(null)
   useEffect(() => {
     pendingFitWorkflowId.current = activeWorkflowId
-  }, [activeWorkflowId])
+  }, [activeWorkflowId, activeParentNodeId])
   useEffect(() => {
     if (pendingFitWorkflowId.current === null || nodes.length === 0) {
       return
@@ -174,6 +179,15 @@ function GraphCanvasInner({
     [screenToFlowPosition, onDropNode],
   )
 
+  const handleNodeDoubleClick: NodeMouseHandler = useCallback(
+    (_event, node) => {
+      if (node.type === 'loop') {
+        onDrillIntoLoop(node.id)
+      }
+    },
+    [onDrillIntoLoop],
+  )
+
   const handleNodeContextMenu: NodeMouseHandler = useCallback(
     (event, node) => {
       event.preventDefault()
@@ -251,6 +265,7 @@ function GraphCanvasInner({
         multiSelectionKeyCode="Shift"
         deleteKeyCode={null}
         onNodeClick={() => setContextMenu(null)}
+        onNodeDoubleClick={handleNodeDoubleClick}
         onPaneClick={() => setContextMenu(null)}
         onNodeContextMenu={handleNodeContextMenu}
         onEdgeContextMenu={handleEdgeContextMenu}

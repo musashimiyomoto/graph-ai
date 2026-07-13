@@ -30,6 +30,16 @@ class WorkflowGraphNode(BaseModel):
     )
     position_x: float = Field(default=0.0, description="X position on canvas")
     position_y: float = Field(default=0.0, description="Y position on canvas")
+    parent_index: int | None = Field(
+        default=None,
+        description=(
+            "Index of the owning Loop node in `nodes`, or None for a "
+            "top-level node — same by-position reference as an edge's "
+            "source_index/target_index, since the owning node's real "
+            "database ID doesn't exist yet at import time either"
+        ),
+        ge=0,
+    )
 
 
 class WorkflowGraphEdge(BaseModel):

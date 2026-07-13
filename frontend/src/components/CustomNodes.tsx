@@ -7,6 +7,10 @@ import { NodeIcon } from './NodeIcons'
 interface NodeData {
   label: string
   iconKey: string
+  nodeType?: string
+  // Only set on Loop nodes (see App.tsx) — how many nodes live in its body,
+  // shown alongside the "double-click to open" hint below.
+  childCount?: number
   graph: {
     has_input: boolean
     has_output: boolean
@@ -31,13 +35,28 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
     updateNodeInternals(id)
   }, [id, outputHandles, updateNodeInternals])
 
+  const isLoop = data.nodeType === 'loop'
+
   return (
-    <div className="pixel-node flex flex-col gap-1">
+    <div
+      className={`pixel-node flex flex-col gap-1 ${isLoop ? 'border-dashed' : ''}`}
+      title={isLoop ? 'Double-click to open this loop’s body' : undefined}
+    >
       <div className="flex items-center gap-2">
         {data.graph.has_input ? <Handle type="target" position={Position.Top} /> : null}
         <NodeIcon iconKey={data.iconKey} />
         {data.label}
       </div>
+      {isLoop ? (
+        <div className="flex items-center gap-1 border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
+          <span>⤢ Double-click to open</span>
+          {data.childCount !== undefined ? (
+            <span>
+              ({data.childCount} node{data.childCount === 1 ? '' : 's'})
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {data.graph.has_output && outputHandles && outputHandles.length > 0 ? (
         <>
           <div className="flex justify-around border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">

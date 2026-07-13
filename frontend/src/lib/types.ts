@@ -5,10 +5,10 @@ export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
 export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 
 // What triggered an execution: the owner testing the flow, or real inbound
-// traffic (currently only Telegram). Lets the UI split "Test Runs" (a
-// sandbox for trying the flow before it's relied on) from "Activity Log"
-// (real usage) instead of merging them into one list.
-export type ExecutionSource = 'manual' | 'telegram'
+// traffic (Telegram messages or a cron schedule firing). Lets the UI split
+// "Test Runs" (a sandbox for trying the flow before it's relied on) from
+// "Activity Log" (real usage) instead of merging them into one list.
+export type ExecutionSource = 'manual' | 'telegram' | 'schedule'
 
 export interface RunInputPayload {
   value: string
@@ -28,6 +28,7 @@ export interface NodeCreatePayload {
   data: Record<string, unknown>
   position_x: number
   position_y: number
+  parent_node_id?: number | null
 }
 
 export interface NodeUpdatePayload {
@@ -43,6 +44,7 @@ export interface NodeResponse {
   data: Record<string, unknown>
   position_x: number
   position_y: number
+  parent_node_id: number | null
 }
 
 export interface EdgeCreatePayload {
@@ -78,6 +80,7 @@ export interface NodeMeta {
   type: string
   label: string
   portType: PortType | null
+  parentNodeId: number | null
 }
 
 export interface WorkflowVersion {
@@ -96,6 +99,7 @@ export interface WorkflowGraphNode {
   data: Record<string, unknown>
   position_x: number
   position_y: number
+  parent_index: number | null
 }
 
 export interface WorkflowGraphEdge {
@@ -300,6 +304,7 @@ export interface NodeExecutionResult {
   error: string | null
   started_at: string
   finished_at: string | null
+  iteration: number | null
 }
 
 export interface VectorCollection {

@@ -6,6 +6,7 @@ from db.models.execution import Execution
 from db.models.llm_provider import LLMProvider
 from db.models.node import Node
 from db.models.node_execution import NodeExecution
+from db.models.node_schedule import NodeSchedule
 from db.models.telegram_bot import TelegramBot
 from db.models.user import User
 from db.models.workflow import Workflow
@@ -20,6 +21,7 @@ __all__ = [
     "LLMProvider",
     "Node",
     "NodeExecution",
+    "NodeSchedule",
     "TelegramBot",
     "User",
     "Workflow",

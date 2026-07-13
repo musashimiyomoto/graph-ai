@@ -1,17 +1,23 @@
 """Worker Telegram polling and reply tests."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 import worker as worker_module
-from db.repositories import ExecutionRepository, TelegramBotRepository
-from enums import ExecutionStatus, NodeType
+from db.repositories import (
+    ExecutionRepository,
+    NodeScheduleRepository,
+    TelegramBotRepository,
+)
+from enums import ExecutionSource, ExecutionStatus, NodeType
 from schemas import ExecutionCreate, ExecutionInputPayload
 from tests.factories import (
     EdgeFactory,
     NodeFactory,
+    NodeScheduleFactory,
     TelegramBotFactory,
     UserFactory,
     WorkflowFactory,
@@ -353,3 +359,175 @@ class TestTelegramReply(BaseTestCase):
 
         if fake_send_message.calls:
             pytest.fail("No Telegram reply should be sent without format=telegram")
+
+
+class TestPollScheduledTriggers(BaseTestCase):
+    """Tests for ``worker.poll_scheduled_triggers``."""
+
+    async def _create_scheduled_workflow(
+        self,
+        user_id: int,
+        cron_expression: str,
+        last_fired_at: datetime,
+        scheduled_value: str = "",
+    ) -> int:
+        """Create a minimal Input(schedule)->Output workflow with a schedule row.
+
+        Returns:
+            The created Input node's ID.
+
+        """
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user_id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={
+                "label": "Input",
+                "format": "schedule",
+                "cron_expression": cron_expression,
+                "scheduled_value": scheduled_value,
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=output_node.id,
+        )
+        await NodeScheduleFactory.create_async(
+            session=self.session,
+            node_id=input_node.id,
+            cron_expression=cron_expression,
+            last_fired_at=last_fired_at,
+        )
+        return input_node.id
+
+    @pytest.mark.asyncio
+    async def test_fires_a_due_schedule_and_advances_last_fired_at(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A schedule whose next boundary has passed creates an execution."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+
+        user = await UserFactory.create_async(session=self.session)
+        # Every-minute cron, anchored 2 minutes ago: certainly due.
+        node_id = await self._create_scheduled_workflow(
+            user_id=user.id,
+            cron_expression="* * * * *",
+            last_fired_at=datetime.now(tz=UTC) - timedelta(minutes=2),
+        )
+
+        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+
+        self.session.expire_all()
+        executions = await ExecutionRepository().get_all(session=self.session)
+        if len(executions) != 1:
+            pytest.fail(f"Expected exactly one execution, got {len(executions)}")
+        execution = executions[0]
+        if execution.source != ExecutionSource.SCHEDULE:
+            pytest.fail("Execution was not tagged with the SCHEDULE source")
+        if execution.input_data != {"value": ""}:
+            pytest.fail("Scheduled execution should carry an empty input value")
+
+        schedule = await NodeScheduleRepository().get_by(
+            session=self.session, node_id=node_id
+        )
+        if schedule is None or schedule.last_fired_at <= datetime.now(
+            tz=UTC
+        ) - timedelta(minutes=1):
+            pytest.fail("last_fired_at should have advanced to roughly now")
+
+    @pytest.mark.asyncio
+    async def test_fires_with_the_node_configured_scheduled_value(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A due schedule's execution carries the Input node's fixed value."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+
+        user = await UserFactory.create_async(session=self.session)
+        await self._create_scheduled_workflow(
+            user_id=user.id,
+            cron_expression="* * * * *",
+            last_fired_at=datetime.now(tz=UTC) - timedelta(minutes=2),
+            scheduled_value="latest AI news",
+        )
+
+        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+
+        self.session.expire_all()
+        executions = await ExecutionRepository().get_all(session=self.session)
+        if len(executions) != 1:
+            pytest.fail(f"Expected exactly one execution, got {len(executions)}")
+        if executions[0].input_data != {"value": "latest AI news"}:
+            pytest.fail("Execution should carry the node's configured scheduled_value")
+
+    @pytest.mark.asyncio
+    async def test_ignores_a_schedule_not_yet_due(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A schedule anchored moments ago on an hourly cron is left alone."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+
+        user = await UserFactory.create_async(session=self.session)
+        anchor = datetime.now(tz=UTC)
+        node_id = await self._create_scheduled_workflow(
+            user_id=user.id,
+            cron_expression="0 * * * *",
+            last_fired_at=anchor,
+        )
+
+        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+
+        self.session.expire_all()
+        executions = await ExecutionRepository().get_all(session=self.session)
+        if executions:
+            pytest.fail("A not-yet-due schedule should not create an execution")
+
+        schedule = await NodeScheduleRepository().get_by(
+            session=self.session, node_id=node_id
+        )
+        if schedule is None or schedule.last_fired_at != anchor:
+            pytest.fail("A not-yet-due schedule's anchor should not move")
+
+    @pytest.mark.asyncio
+    async def test_invalid_cron_expression_is_skipped_not_raised(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A malformed cron expression is logged and skipped, not fatal."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+
+        user = await UserFactory.create_async(session=self.session)
+        await self._create_scheduled_workflow(
+            user_id=user.id,
+            cron_expression="not a cron",
+            last_fired_at=datetime.now(tz=UTC) - timedelta(minutes=2),
+        )
+
+        # Must not raise.
+        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+
+        self.session.expire_all()
+        executions = await ExecutionRepository().get_all(session=self.session)
+        if executions:
+            pytest.fail("An invalid cron expression should never create an execution")

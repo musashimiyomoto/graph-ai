@@ -23,6 +23,59 @@ from schemas import (
 )
 
 
+def evaluate_condition(
+    *,
+    condition_type: ConditionType,
+    text: str,
+    case_sensitive: bool,
+    value: str | None,
+) -> bool:
+    """Evaluate a condition against text, independent of any node context.
+
+    Shared by the Condition/Router node and the Loop node's condition-mode
+    stop check, so both use the exact same matching rules without either
+    depending on ``NodeExecutionContext``.
+
+    Args:
+        condition_type: How to evaluate ``text``.
+        text: The text being evaluated.
+        case_sensitive: Whether comparisons are case-sensitive.
+        value: The comparison value; required for every condition type except
+            ``NOT_EMPTY``.
+
+    Returns:
+        Whether the condition matched.
+
+    Raises:
+        ExecutionGraphValidationError: If ``value`` is required but empty, or
+            it's an invalid regular expression under ``REGEX``.
+
+    """
+    if condition_type is ConditionType.NOT_EMPTY:
+        return bool(text.strip())
+
+    if not value:
+        message = "Condition requires a non-empty value"
+        raise ExecutionGraphValidationError(message=message)
+
+    if condition_type is ConditionType.CONTAINS:
+        if case_sensitive:
+            return value in text
+        return value.casefold() in text.casefold()
+
+    if condition_type is ConditionType.EQUALS:
+        if case_sensitive:
+            return text == value
+        return text.casefold() == value.casefold()
+
+    try:
+        flags = 0 if case_sensitive else re.IGNORECASE
+        return re.search(value, text, flags=flags) is not None
+    except re.error as exc:
+        message = "Condition has an invalid regular expression"
+        raise ExecutionGraphValidationError(message=message) from exc
+
+
 class ConditionNodeHandler:
     """Handler for condition/router nodes."""
 
@@ -43,11 +96,12 @@ class ConditionNodeHandler:
         text = upstream_text(context)
         condition_type = self._read_condition_type(context)
         case_sensitive = self._read_case_sensitive(context)
-        matched = self._evaluate(
+        value = context.node_data.get("value")
+        matched = evaluate_condition(
             condition_type=condition_type,
             text=text,
             case_sensitive=case_sensitive,
-            context=context,
+            value=value if isinstance(value, str) else None,
         )
         branch = ConditionBranch.TRUE if matched else ConditionBranch.FALSE
         return NodeExecutionResult(output=text, selected_handle=branch.value)
@@ -64,45 +118,6 @@ class ConditionNodeHandler:
     def _read_case_sensitive(self, context: NodeExecutionContext) -> bool:
         """Read the case-sensitivity flag, defaulting to insensitive."""
         return context.node_data.get("case_sensitive") == "true"
-
-    def _read_value(self, context: NodeExecutionContext) -> str:
-        """Read the comparison value, required for value-based condition types."""
-        value = context.node_data.get("value")
-        if not isinstance(value, str) or not value:
-            message = "Condition node requires a non-empty value"
-            raise ExecutionGraphValidationError(message=message)
-        return value
-
-    def _evaluate(
-        self,
-        *,
-        condition_type: ConditionType,
-        text: str,
-        case_sensitive: bool,
-        context: NodeExecutionContext,
-    ) -> bool:
-        """Evaluate the condition against the upstream text."""
-        if condition_type is ConditionType.NOT_EMPTY:
-            return bool(text.strip())
-
-        value = self._read_value(context)
-
-        if condition_type is ConditionType.CONTAINS:
-            if case_sensitive:
-                return value in text
-            return value.casefold() in text.casefold()
-
-        if condition_type is ConditionType.EQUALS:
-            if case_sensitive:
-                return text == value
-            return text.casefold() == value.casefold()
-
-        try:
-            flags = 0 if case_sensitive else re.IGNORECASE
-            return re.search(value, text, flags=flags) is not None
-        except re.error as exc:
-            message = "Condition node has an invalid regular expression"
-            raise ExecutionGraphValidationError(message=message) from exc
 
 
 def _build_handler(deps: NodeHandlerDeps) -> ConditionNodeHandler:

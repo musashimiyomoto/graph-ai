@@ -25,3 +25,8 @@ MAX_PAGE_SIZE = 100
 # does not affect the in-memory value fed to downstream nodes), so a giant
 # scraped page or LLM response can't grow that table unbounded.
 MAX_NODE_OUTPUT_CHARS = 50_000
+
+# Cap on iterations a Loop node runs, in either mode — a huge upstream list
+# (list mode) or a stop condition that never matches (condition mode) both
+# stay bounded, same spirit as MAX_NODE_ATTEMPTS for per-node retries.
+MAX_LOOP_ITERATIONS = 50

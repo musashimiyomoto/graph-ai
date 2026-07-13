@@ -23,3 +23,4 @@ class ExecutionSource(StrEnum):
 
     MANUAL = auto()
     TELEGRAM = auto()
+    SCHEDULE = auto()

@@ -156,6 +156,11 @@ class NodeCreate(BaseModel):
     )
     position_x: float = Field(default=0.0, description="X position on canvas")
     position_y: float = Field(default=0.0, description="Y position on canvas")
+    parent_node_id: int | None = Field(
+        default=None,
+        description="Owning Loop node's ID, or None for a top-level graph node",
+        gt=0,
+    )
 
 
 class NodeUpdate(BaseModel):
@@ -180,6 +185,10 @@ class NodeResponse(BaseModel):
     data: dict[str, Any] = Field(default=..., description="Node configuration data")
     position_x: float = Field(default=..., description="X position on canvas")
     position_y: float = Field(default=..., description="Y position on canvas")
+    parent_node_id: int | None = Field(
+        default=None,
+        description="Owning Loop node's ID, or None for a top-level graph node",
+    )
 
 
 class NodeCatalogDataSourceResponse(BaseModel):

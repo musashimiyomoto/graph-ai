@@ -227,12 +227,13 @@ export async function deleteEdge(edgeId: number): Promise<void> {
 
 export async function getExecutions(
   workflowId: number,
-  source?: ExecutionSource,
+  source?: ExecutionSource[],
 ): Promise<Execution[]> {
-  const query = source
-    ? `workflow_id=${workflowId}&source=${source}`
-    : `workflow_id=${workflowId}`
-  return request<Execution[]>(`/executions?${query}`)
+  const params = new URLSearchParams({ workflow_id: String(workflowId) })
+  for (const value of source ?? []) {
+    params.append('source', value)
+  }
+  return request<Execution[]>(`/executions?${params.toString()}`)
 }
 
 export async function getExecutionNodeResults(

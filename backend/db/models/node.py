@@ -19,6 +19,17 @@ class Node(BaseWithID):
         index=True,
         comment="Parent workflow ID",
     )
+    # NULL for a top-level graph node; the owning Loop node's id for a node
+    # inside that loop's body. Self-referential so a loop body is just
+    # ordinary nodes/edges scoped by this column, not a separate table —
+    # CRUD, the field catalog, and whole-workflow snapshots all keep working
+    # unchanged; only graph *validation/execution* needs to partition by it.
+    parent_node_id: Mapped[int | None] = mapped_column(
+        ForeignKey("nodes.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Owning Loop node's id, or NULL for a top-level graph node",
+    )
 
     type: Mapped[NodeType] = mapped_column(
         Enum(NodeType),

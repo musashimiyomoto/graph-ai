@@ -131,6 +131,11 @@ class WorkflowTransferUsecase:
                 ),
                 position_x=node.position_x,
                 position_y=node.position_y,
+                parent_index=(
+                    index_by_node_id[node.parent_node_id]
+                    if node.parent_node_id is not None
+                    else None
+                ),
             )
             for node in nodes
         ]
@@ -197,7 +202,8 @@ class WorkflowTransferUsecase:
             The newly created workflow.
 
         Raises:
-            NodeDataValidationError: If an edge references an out-of-range
+            NodeDataValidationError: If an edge or a Loop-body node's
+                `parent_index` references an out-of-range (or forward/self)
                 node index, or any node's data fails validation.
             LLMProviderNotFoundError: If a kept (non-scrubbed) provider
                 reference doesn't belong to this account.
@@ -221,6 +227,21 @@ class WorkflowTransferUsecase:
                     f"(have {node_count} nodes)."
                 )
                 raise NodeDataValidationError(message=message)
+        for index, graph_node in enumerate(graph.nodes):
+            # A parent must already exist by the time its body node is
+            # created (see the loop below), so it must appear strictly
+            # earlier in the list — same invariant export relies on (a Loop
+            # node's id, and so its export position, always precedes its
+            # body nodes', since a body node's parent_node_id can't be set
+            # to a not-yet-created node in the first place).
+            if graph_node.parent_index is not None and not (
+                0 <= graph_node.parent_index < index
+            ):
+                message = (
+                    f"Node {index} references an out-of-range or forward "
+                    f"parent_index (have {node_count} nodes)."
+                )
+                raise NodeDataValidationError(message=message)
 
         workflow = await self._workflow_usecase.create_workflow(
             session=session, user_id=user_id, data=WorkflowCreate(name=name)
@@ -237,6 +258,11 @@ class WorkflowTransferUsecase:
                     data=graph_node.data,
                     position_x=graph_node.position_x,
                     position_y=graph_node.position_y,
+                    parent_node_id=(
+                        created_node_ids[graph_node.parent_index]
+                        if graph_node.parent_index is not None
+                        else None
+                    ),
                 ),
                 allow_unset_references=allow_unset_references,
             )

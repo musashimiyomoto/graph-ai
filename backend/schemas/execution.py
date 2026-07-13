@@ -101,6 +101,10 @@ class NodeExecutionResponse(BaseModel):
     node_label: str | None = Field(
         default=None, description="Node label at execution time"
     )
+    iteration: int | None = Field(
+        default=None,
+        description="Loop iteration index (0-based); None for a top-level node",
+    )
     status: ExecutionStatus = Field(default=..., description="Node execution status")
     output: str | None = Field(default=None, description="Node output text")
     error: str | None = Field(default=None, description="Error message")

@@ -11,6 +11,10 @@ const ERROR_BANNER_TIMEOUT_MS = 8000
 interface AppShellProps {
   email: string
   workflowName: string
+  // Whether the Inspector column is being rendered as a child — collapses
+  // the grid to two columns instead of reserving blank space for it when
+  // nothing is selected.
+  showInspector: boolean
   error: string | null
   canUndo: boolean
   canRedo: boolean
@@ -29,6 +33,7 @@ interface AppShellProps {
 export function AppShell({
   email,
   workflowName,
+  showInspector,
   error,
   canUndo,
   canRedo,
@@ -133,7 +138,11 @@ export function AppShell({
           </button>
         </div>
       ) : null}
-      <main className="grid h-[calc(100vh-84px)] grid-cols-[280px_1fr_320px] gap-3 px-4 pt-4 pb-4">
+      <main
+        className={`grid h-[calc(100vh-84px)] gap-3 px-4 pt-4 pb-4 ${
+          showInspector ? 'grid-cols-[280px_1fr_320px]' : 'grid-cols-[280px_1fr]'
+        }`}
+      >
         {children}
       </main>
     </div>

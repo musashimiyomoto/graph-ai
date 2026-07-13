@@ -39,6 +39,9 @@ class NodeExecution(BaseWithID):
     node_label: Mapped[str | None] = mapped_column(
         Text, comment="Node label at execution time (denormalized snapshot)"
     )
+    iteration: Mapped[int | None] = mapped_column(
+        comment="Loop iteration index (0-based); NULL for a top-level node"
+    )
 
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(ExecutionStatus),
