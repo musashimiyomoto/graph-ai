@@ -442,7 +442,7 @@ Second pass (closed out everything remaining):
       a shared in-memory `FakeQdrantClient` (`tests/fakes.py`) — no real
       Qdrant server or fastembed model download needed in CI.
 
-## Phase 7 — Product breadth (parallel track)
+## Phase 7 — Product breadth (parallel track) ✅ done
 
 - [x] **Undo/redo, copy-paste, multi-select, auto-layout in the graph editor**
       — nodes/edges get server-assigned IDs (nothing client-generated), so
