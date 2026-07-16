@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.repositories import UserRepository, WorkflowRepository
 from exceptions import WorkflowNotFoundError
 from schemas import WorkflowCreate, WorkflowResponse, WorkflowUpdate
+from usecases.audit import AuditEvent, AuditUsecase
 
 
 class WorkflowUsecase:
@@ -14,6 +15,7 @@ class WorkflowUsecase:
         """Initialize the usecase."""
         self._workflow_repository = WorkflowRepository()
         self._user_repository = UserRepository()
+        self._audit_usecase = AuditUsecase()
 
     async def create_workflow(
         self, session: AsyncSession, user_id: int, data: WorkflowCreate
@@ -31,6 +33,16 @@ class WorkflowUsecase:
         """
         workflow = await self._workflow_repository.create(
             session=session, data={"owner_id": user_id, **data.model_dump()}
+        )
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="workflow.create",
+                entity_type="workflow",
+                entity_id=workflow.id,
+                metadata={"name": workflow.name},
+            ),
         )
         await session.commit()
         return WorkflowResponse.model_validate(workflow)
@@ -141,4 +153,13 @@ class WorkflowUsecase:
         )
         if not deleted:
             raise WorkflowNotFoundError
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="workflow.delete",
+                entity_type="workflow",
+                entity_id=workflow_id,
+            ),
+        )
         await session.commit()

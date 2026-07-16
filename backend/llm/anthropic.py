@@ -13,8 +13,10 @@ from exceptions import LLMProviderConfigError, LLMProviderConnectionError
 from schemas.llm_provider import (
     ChatMessage,
     ChatResponse,
+    ChatStreamChunk,
     GenerationParams,
     LLMProviderModelResponse,
+    TokenUsage,
 )
 
 
@@ -129,6 +131,30 @@ def _split_system(
     return "\n".join(system_parts), turns
 
 
+def _usage_from_message(usage: object) -> TokenUsage | None:
+    """Normalize an Anthropic ``usage`` object into a `TokenUsage`.
+
+    Anthropic reports ``input_tokens``/``output_tokens`` and no explicit
+    total, so the total is derived as their sum.
+
+    Args:
+        usage: The SDK's ``Usage`` object (or ``None`` if absent).
+
+    Returns:
+        Normalized token usage, or ``None`` when the provider omitted it.
+
+    """
+    if usage is None:
+        return None
+    prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+    completion_tokens = getattr(usage, "output_tokens", 0) or 0
+    return TokenUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+    )
+
+
 class AnthropicClient:
     """Client for the Anthropic Messages API."""
 
@@ -211,6 +237,7 @@ class AnthropicClient:
             message=ChatMessage(role=message.role, content=content),
             done=message.stop_reason != "max_tokens",
             raw=message.model_dump(),
+            usage=_usage_from_message(message.usage),
         )
 
     async def stream_chat(
@@ -218,8 +245,8 @@ class AnthropicClient:
         model: str,
         messages: list[ChatMessage],
         params: GenerationParams | None = None,
-    ) -> AsyncIterator[str]:
-        """Stream chat completion text deltas from provider.
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream chat completion frames from provider.
 
         Args:
             model: Model name.
@@ -227,7 +254,7 @@ class AnthropicClient:
             params: Optional generation parameters.
 
         Yields:
-            Text deltas as they arrive.
+            A frame per text delta; a final frame carrying token usage.
 
         Raises:
             LLMProviderConfigError: If the provider rejects the request.
@@ -246,4 +273,10 @@ class AnthropicClient:
                 top_p=request.top_p,
             ) as stream:
                 async for text in stream.text_stream:
-                    yield text
+                    yield ChatStreamChunk(delta=text)
+                # The accumulated final message carries the authoritative
+                # input/output token counts for the whole stream.
+                final_message = await stream.get_final_message()
+            usage = _usage_from_message(final_message.usage)
+            if usage is not None:
+                yield ChatStreamChunk(usage=usage)

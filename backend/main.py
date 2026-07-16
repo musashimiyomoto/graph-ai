@@ -17,6 +17,7 @@ from api.routers import (
     llm_provider,
     node,
     telegram_bot,
+    usage,
     user,
     vector,
     workflow,
@@ -90,3 +91,4 @@ app.include_router(router=execution.router)
 app.include_router(router=llm_provider.router)
 app.include_router(router=telegram_bot.router)
 app.include_router(router=vector.router)
+app.include_router(router=usage.router)

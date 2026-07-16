@@ -6,6 +6,8 @@ from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from schemas.llm_provider import TokenUsage
+
 OnToken = Callable[[str], Awaitable[None]]
 
 
@@ -29,10 +31,15 @@ class NodeExecutionResult:
     nodes (e.g. Condition) set it to the name of the one outbound edge handle
     that should carry the node's output onward; edges attached to any other
     handle are treated as not taken.
+
+    ``usage`` carries token counts for nodes that call an LLM (None for every
+    other node type), so the engine can record per-node cost and aggregate a
+    per-run total.
     """
 
     output: str
     selected_handle: str | None = None
+    usage: TokenUsage | None = None
 
 
 class NodeHandler(Protocol):

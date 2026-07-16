@@ -29,6 +29,7 @@ from exceptions.node import (
     NodeNotFoundError,
     WebSearchConnectionError,
 )
+from exceptions.quota import QuotaExceededError
 from exceptions.rag import (
     DocumentTooLargeError,
     EmptyDocumentError,
@@ -67,6 +68,7 @@ __all__ = [
     "NodeDataValidationError",
     "NodeExecutionTimeoutError",
     "NodeNotFoundError",
+    "QuotaExceededError",
     "RateLimitExceededError",
     "TelegramAPIError",
     "TelegramBotNotFoundError",

@@ -22,6 +22,7 @@ from schemas import (
     LLMProviderUpdate,
     OllamaModelPullResponse,
 )
+from usecases.audit import AuditEvent, AuditUsecase
 from utils.encryption import decrypt, encrypt
 from utils.network import blocked_url_reason
 
@@ -51,6 +52,7 @@ class LLMProviderUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._llm_provider_repository = LLMProviderRepository()
+        self._audit_usecase = AuditUsecase()
 
     async def create_llm_provider(
         self,
@@ -87,6 +89,16 @@ class LLMProviderUsecase:
             await session.rollback()
             raise LLMProviderAlreadyExistsError from exc
 
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="llm_provider.create",
+                entity_type="llm_provider",
+                entity_id=created.id,
+                metadata={"name": created.name, "type": created.type.value},
+            ),
+        )
         await session.commit()
         return LLMProviderResponse.model_validate(created)
 
@@ -206,6 +218,15 @@ class LLMProviderUsecase:
         )
         if not deleted:
             raise LLMProviderNotFoundError
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="llm_provider.delete",
+                entity_type="llm_provider",
+                entity_id=provider_id,
+            ),
+        )
         await session.commit()
 
     async def get_models(

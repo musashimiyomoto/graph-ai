@@ -17,6 +17,8 @@ from schemas import ChatMessage, GenerationParams, LLMProviderResponse
 
 _EXPECTED_TEMPERATURE = 0.5
 _EXPECTED_MAX_TOKENS = 128
+_EXPECTED_PROMPT_TOKENS = 7
+_EXPECTED_COMPLETION_TOKENS = 3
 
 
 def _make_provider(provider_type: LLMProviderType) -> LLMProviderResponse:
@@ -145,7 +147,8 @@ _STREAM_LINES = [
     '{"message": {"content": "Hel"}}',
     '{"message": {"content": "lo"}}',
     "",
-    '{"message": {"content": ""}, "done": true}',
+    '{"message": {"content": ""}, "done": true, '
+    '"prompt_eval_count": 7, "eval_count": 3}',
 ]
 
 
@@ -204,19 +207,31 @@ class TestOllamaStreamChat:
 
     @pytest.mark.asyncio
     async def test_yields_deltas(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """NDJSON stream lines are parsed into content deltas."""
+        """NDJSON stream lines are parsed into content deltas, then usage."""
         monkeypatch.setattr("llm.ollama.httpx.AsyncClient", _DummyStreamingClient)
 
         client = OllamaClient(base_url="http://ollama:11434", timeout=1.0)
-        collected = [
-            delta
-            async for delta in client.stream_chat(
+        chunks = [
+            chunk
+            async for chunk in client.stream_chat(
                 model="m", messages=[ChatMessage(role="user", content="hi")]
             )
         ]
 
-        if collected != ["Hel", "lo"]:
+        deltas = [chunk.delta for chunk in chunks if chunk.delta]
+        if deltas != ["Hel", "lo"]:
             pytest.fail("Stream did not yield the expected content deltas")
+
+        usage = next((chunk.usage for chunk in chunks if chunk.usage), None)
+        if usage is None:
+            pytest.fail("Stream did not yield a final usage frame")
+        elif (
+            usage.prompt_tokens != _EXPECTED_PROMPT_TOKENS
+            or usage.completion_tokens != _EXPECTED_COMPLETION_TOKENS
+            or usage.total_tokens
+            != _EXPECTED_PROMPT_TOKENS + _EXPECTED_COMPLETION_TOKENS
+        ):
+            pytest.fail("Stream usage did not match the terminal NDJSON counts")
 
 
 _PULL_LINES = [

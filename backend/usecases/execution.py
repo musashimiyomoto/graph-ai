@@ -64,9 +64,12 @@ from schemas import (
     ExecutionResponse,
     NodeExecutionResponse,
     NodeResponse,
+    TokenUsage,
     WorkflowVersionResponse,
 )
 from streaming import subscribe_tokens
+from usecases.audit import AuditEvent, AuditUsecase
+from usecases.usage import UsageUsecase
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +191,7 @@ class _NodeOutcome:
     output: str | None = None
     error: str | None = None
     iteration: int | None = None
+    usage: TokenUsage | None = None
 
 
 @dataclass(frozen=True)
@@ -244,6 +248,8 @@ class ExecutionUsecase:
         self._node_registry = NodeHandlerRegistry(
             NodeHandlerDeps(llm_provider_repository=self._llm_provider_repository)
         )
+        self._usage_usecase = UsageUsecase()
+        self._audit_usecase = AuditUsecase()
 
     async def create_execution(
         self,
@@ -285,6 +291,10 @@ class ExecutionUsecase:
         if not workflow:
             raise WorkflowNotFoundError
 
+        # Reject up front if the tenant is already at a configured daily limit,
+        # before snapshotting the graph or scheduling any background work.
+        await self._usage_usecase.check_quota(session=session, user_id=user_id)
+
         # Pin the run to an immutable graph snapshot: either a requested past
         # version, or a fresh snapshot of the current live graph (deduped).
         if data.version_id is not None:
@@ -311,6 +321,19 @@ class ExecutionUsecase:
                 "source": trigger.source,
                 "telegram_chat_id": trigger.telegram_chat_id,
             },
+        )
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="execution.create",
+                entity_type="execution",
+                entity_id=execution.id,
+                metadata={
+                    "workflow_id": data.workflow_id,
+                    "source": trigger.source.value,
+                },
+            ),
         )
         await session.commit()
 
@@ -421,7 +444,28 @@ class ExecutionUsecase:
         if finalized is None:
             raise ExecutionNotFoundError
 
-        return ExecutionResponse.model_validate(finalized)
+        # Snapshot the response before touching usage: record_run commits,
+        # which expires the ORM object and would make a later attribute read
+        # trigger a lazy reload outside the async context.
+        response = ExecutionResponse.model_validate(finalized)
+
+        # Record tenant usage against the durable source of truth once the run
+        # has finalized (tokens are now summed onto the execution row). Keyed
+        # by the workflow owner — the tenant boundary, since executions have no
+        # direct user column. Best-effort: a usage-accounting failure must not
+        # turn a finished run into a failed one.
+        try:
+            await self._usage_usecase.record_run(
+                session=session,
+                user_id=workflow.owner_id,
+                total_tokens=response.total_tokens or 0,
+            )
+            await session.commit()
+        except Exception:
+            logger.exception("Failed to record usage for execution %s", execution_id)
+            await session.rollback()
+
+        return response
 
     async def reap_stuck_executions(
         self,
@@ -1499,6 +1543,7 @@ class ExecutionUsecase:
                     status=ExecutionStatus.SUCCESS,
                     output=result.output,
                     iteration=iteration,
+                    usage=result.usage,
                 ),
             )
             return result
@@ -1820,6 +1865,15 @@ class ExecutionUsecase:
                 "status": outcome.status,
                 "output": _truncate_for_storage(outcome.output),
                 "error": outcome.error,
+                "prompt_tokens": (
+                    outcome.usage.prompt_tokens if outcome.usage else None
+                ),
+                "completion_tokens": (
+                    outcome.usage.completion_tokens if outcome.usage else None
+                ),
+                "total_tokens": (
+                    outcome.usage.total_tokens if outcome.usage else None
+                ),
                 "started_at": started_at,
                 "finished_at": datetime.now(tz=UTC),
             },
@@ -1859,6 +1913,11 @@ class ExecutionUsecase:
             output_data: Final output payload.
 
         """
+        prompt_tokens, completion_tokens, total_tokens = (
+            await self._node_execution_repository.sum_tokens(
+                session=session, execution_id=execution_id
+            )
+        )
         won = await self._execution_repository.update_status_if(
             session=session,
             execution_id=execution_id,
@@ -1867,6 +1926,9 @@ class ExecutionUsecase:
                 "status": ExecutionStatus.SUCCESS,
                 "output_data": output_data.model_dump(),
                 "error": None,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
                 "finished_at": datetime.now(tz=UTC),
             },
         )
@@ -1890,6 +1952,11 @@ class ExecutionUsecase:
             error: Failure reason.
 
         """
+        prompt_tokens, completion_tokens, total_tokens = (
+            await self._node_execution_repository.sum_tokens(
+                session=session, execution_id=execution_id
+            )
+        )
         won = await self._execution_repository.update_status_if(
             session=session,
             execution_id=execution_id,
@@ -1897,6 +1964,9 @@ class ExecutionUsecase:
             data={
                 "status": ExecutionStatus.FAILED,
                 "error": error,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
                 "finished_at": datetime.now(tz=UTC),
             },
         )

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from testcontainers.postgres import PostgresContainer
 
-from api.dependencies import db, qdrant, queue, rate_limit
+from api.dependencies import db, qdrant, queue, quota, rate_limit
 from api.dependencies import redis as redis_dependency
 from db.models import Base
 from main import app
@@ -116,6 +116,10 @@ async def test_client(
         """Bypass rate limiting so repeated test requests never 429."""
         return
 
+    async def override_quota() -> None:
+        """Bypass the execution quota gate so tests never 429 on volume."""
+        return
+
     app.dependency_overrides[db.get_session] = override_get_session
     app.dependency_overrides[db.get_session_factory] = override_get_session_factory
     app.dependency_overrides[queue.get_arq_pool] = override_get_arq_pool
@@ -127,6 +131,7 @@ async def test_client(
     app.dependency_overrides[rate_limit.enforce_register_rate_limit] = (
         override_rate_limit
     )
+    app.dependency_overrides[quota.enforce_execution_quota] = override_quota
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

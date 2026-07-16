@@ -6,6 +6,7 @@ from typing import Protocol
 from schemas.llm_provider import (
     ChatMessage,
     ChatResponse,
+    ChatStreamChunk,
     GenerationParams,
     LLMProviderModelResponse,
 )
@@ -30,5 +31,9 @@ class BaseLLMClient(Protocol):
         model: str,
         messages: list[ChatMessage],
         params: GenerationParams | None = None,
-    ) -> AsyncIterator[str]:
-        """Stream chat completion text deltas from provider."""
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream chat completion frames from provider.
+
+        Yields a frame per text delta; the final frame carries token usage
+        when the provider reports it.
+        """

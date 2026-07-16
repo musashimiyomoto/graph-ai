@@ -12,8 +12,10 @@ from llm.base import BaseLLMClient
 from schemas.llm_provider import (
     ChatMessage,
     ChatResponse,
+    ChatStreamChunk,
     GenerationParams,
     LLMProviderModelResponse,
+    TokenUsage,
 )
 
 
@@ -40,6 +42,33 @@ def _wrap_httpx_errors() -> Iterator[None]:
         raise LLMProviderConnectionError(message=message) from exc
     except httpx.HTTPError as exc:
         raise LLMProviderConnectionError from exc
+
+
+def _usage_from_payload(payload: dict[str, object]) -> TokenUsage | None:
+    """Normalize an Ollama response payload's token counts into a `TokenUsage`.
+
+    Ollama reports ``prompt_eval_count``/``eval_count`` on its final (``done``)
+    response object and no explicit total, so the total is their sum. Returns
+    ``None`` when neither count is present.
+
+    Args:
+        payload: A parsed Ollama ``/api/chat`` response object.
+
+    Returns:
+        Normalized token usage, or ``None`` when no counts are present.
+
+    """
+    prompt = payload.get("prompt_eval_count")
+    completion = payload.get("eval_count")
+    if not isinstance(prompt, int) and not isinstance(completion, int):
+        return None
+    prompt_tokens = prompt if isinstance(prompt, int) else 0
+    completion_tokens = completion if isinstance(completion, int) else 0
+    return TokenUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+    )
 
 
 def _build_options(params: GenerationParams | None) -> dict[str, float | int]:
@@ -156,6 +185,7 @@ class OllamaClient(BaseLLMClient):
             ),
             done=bool(data.get("done", False)),
             raw=data,
+            usage=_usage_from_payload(data),
         )
 
     async def stream_chat(
@@ -163,8 +193,8 @@ class OllamaClient(BaseLLMClient):
         model: str,
         messages: list[ChatMessage],
         params: GenerationParams | None = None,
-    ) -> AsyncIterator[str]:
-        """Stream chat completion text deltas from provider.
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream chat completion frames from provider.
 
         Args:
             model: Model name.
@@ -172,7 +202,7 @@ class OllamaClient(BaseLLMClient):
             params: Optional generation parameters.
 
         Yields:
-            Text deltas as they arrive.
+            A frame per text delta; a final frame carrying token usage.
 
         Raises:
             LLMProviderConnectionError: If the provider is unreachable.
@@ -207,7 +237,13 @@ class OllamaClient(BaseLLMClient):
                     payload = json.loads(line)
                     delta = (payload.get("message") or {}).get("content")
                     if delta:
-                        yield delta
+                        yield ChatStreamChunk(delta=delta)
+                    # The terminal NDJSON line (done=True) carries the token
+                    # counts for the whole generation.
+                    if payload.get("done"):
+                        usage = _usage_from_payload(payload)
+                        if usage is not None:
+                            yield ChatStreamChunk(usage=usage)
 
     async def pull_model(self, model: str) -> AsyncIterator[dict[str, object]]:
         """Pull a model into the server, streaming download progress.

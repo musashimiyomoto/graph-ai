@@ -52,6 +52,18 @@ class Execution(BaseWithID):
         comment="Telegram chat to reply to, if this run was triggered by a message",
     )
 
+    # Run-level token totals, summed across every LLM node in the run. NULL
+    # until the run finalizes (and stays 0 for a run with no LLM nodes).
+    prompt_tokens: Mapped[int | None] = mapped_column(
+        comment="Total LLM prompt tokens across the run"
+    )
+    completion_tokens: Mapped[int | None] = mapped_column(
+        comment="Total LLM completion tokens across the run"
+    )
+    total_tokens: Mapped[int | None] = mapped_column(
+        comment="Total LLM tokens across the run"
+    )
+
     started_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         comment="Execution start time",

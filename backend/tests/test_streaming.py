@@ -13,6 +13,7 @@ from testcontainers.redis import RedisContainer
 from enums import LLMProviderType
 from nodes import llm as llm_module
 from nodes.base import NodeExecutionContext
+from schemas import ChatStreamChunk, TokenUsage
 from streaming import (
     publish_pull_progress,
     publish_token,
@@ -31,20 +32,31 @@ if TYPE_CHECKING:
 _EXECUTION_ID = 42
 _NODE_ID = 7
 _DELTAS = ["Hello", ", ", "world"]
+_STREAM_PROMPT_TOKENS = 11
+_STREAM_COMPLETION_TOKENS = 5
 
 
 class _StubStreamingClient:
-    """LLM client stub that streams a fixed sequence of deltas."""
+    """LLM client stub that streams a fixed sequence of deltas then usage."""
 
     def __init__(self, deltas: list[str]) -> None:
         """Store the deltas to emit."""
         self._deltas = deltas
 
-    async def stream_chat(self, *args: object, **kwargs: object) -> AsyncIterator[str]:
-        """Yield the configured deltas."""
+    async def stream_chat(
+        self, *args: object, **kwargs: object
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Yield the configured deltas, then a final usage frame."""
         del args, kwargs
         for delta in self._deltas:
-            yield delta
+            yield ChatStreamChunk(delta=delta)
+        yield ChatStreamChunk(
+            usage=TokenUsage(
+                prompt_tokens=_STREAM_PROMPT_TOKENS,
+                completion_tokens=_STREAM_COMPLETION_TOKENS,
+                total_tokens=_STREAM_PROMPT_TOKENS + _STREAM_COMPLETION_TOKENS,
+            )
+        )
 
 
 class _StubProviderRepository:
@@ -104,6 +116,12 @@ class TestNodeTokenSink:
             pytest.fail("Each delta should have been forwarded to on_token")
         if result.output != "".join(_DELTAS):
             pytest.fail("Node output should be the concatenated deltas")
+        if result.usage is None:
+            pytest.fail("Node result should carry token usage from the stream")
+        elif result.usage.total_tokens != (
+            _STREAM_PROMPT_TOKENS + _STREAM_COMPLETION_TOKENS
+        ):
+            pytest.fail("Node usage should match the stream's final usage frame")
 
 
 class TestTokenPubSub:

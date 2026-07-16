@@ -78,6 +78,15 @@ class ExecutionResponse(BaseModel):
         default=None, description="Execution output"
     )
     error: str | None = Field(default=None, description="Error message")
+    prompt_tokens: int | None = Field(
+        default=None, description="Total LLM prompt tokens across the run"
+    )
+    completion_tokens: int | None = Field(
+        default=None, description="Total LLM completion tokens across the run"
+    )
+    total_tokens: int | None = Field(
+        default=None, description="Total LLM tokens across the run"
+    )
     started_at: datetime = Field(default=..., description="Started at")
     finished_at: datetime | None = Field(default=None, description="Finished at")
 
@@ -108,5 +117,14 @@ class NodeExecutionResponse(BaseModel):
     status: ExecutionStatus = Field(default=..., description="Node execution status")
     output: str | None = Field(default=None, description="Node output text")
     error: str | None = Field(default=None, description="Error message")
+    prompt_tokens: int | None = Field(
+        default=None, description="LLM prompt tokens, if this node called an LLM"
+    )
+    completion_tokens: int | None = Field(
+        default=None, description="LLM completion tokens, if this node called an LLM"
+    )
+    total_tokens: int | None = Field(
+        default=None, description="LLM total tokens, if this node called an LLM"
+    )
     started_at: datetime = Field(default=..., description="Started at")
     finished_at: datetime | None = Field(default=None, description="Finished at")

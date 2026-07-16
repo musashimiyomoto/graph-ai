@@ -55,6 +55,19 @@ class NodeExecution(BaseWithID):
         Text, comment="Error message if the node failed"
     )
 
+    # Token usage for nodes that call an LLM; NULL for node types that never
+    # do (Input, Template, HTTP, etc.) so "no LLM call" is distinguishable
+    # from "an LLM call that reported zero tokens".
+    prompt_tokens: Mapped[int | None] = mapped_column(
+        comment="LLM prompt/input tokens, if this node called an LLM"
+    )
+    completion_tokens: Mapped[int | None] = mapped_column(
+        comment="LLM completion/output tokens, if this node called an LLM"
+    )
+    total_tokens: Mapped[int | None] = mapped_column(
+        comment="LLM total tokens, if this node called an LLM"
+    )
+
     started_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         comment="Node execution start time",

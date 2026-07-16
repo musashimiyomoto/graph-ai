@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.repositories import TelegramBotRepository
 from exceptions import TelegramBotNotFoundError
 from schemas import TelegramBotCreate, TelegramBotResponse, TelegramBotUpdate
+from usecases.audit import AuditEvent, AuditUsecase
 from utils.encryption import encrypt
 
 
@@ -14,6 +15,7 @@ class TelegramBotUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._telegram_bot_repository = TelegramBotRepository()
+        self._audit_usecase = AuditUsecase()
 
     async def create_telegram_bot(
         self,
@@ -39,6 +41,16 @@ class TelegramBotUsecase:
                 "name": data.name,
                 "bot_token": encrypt(data.bot_token),
             },
+        )
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="telegram_bot.create",
+                entity_type="telegram_bot",
+                entity_id=bot.id,
+                metadata={"name": bot.name},
+            ),
         )
         await session.commit()
         return TelegramBotResponse.model_validate(bot)
@@ -149,4 +161,13 @@ class TelegramBotUsecase:
         )
         if not deleted:
             raise TelegramBotNotFoundError
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action="telegram_bot.delete",
+                entity_type="telegram_bot",
+                entity_id=bot_id,
+            ),
+        )
         await session.commit()

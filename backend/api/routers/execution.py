@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.dependencies import auth, db, execution, queue
 from api.dependencies.pagination import Pagination, get_pagination
+from api.dependencies.quota import enforce_execution_quota
 from schemas import (
     ExecutionCreate,
     ExecutionResponse,
@@ -21,7 +22,11 @@ from usecases import ExecutionListFilter
 router = APIRouter(prefix="/executions", tags=["Executions"])
 
 
-@router.post(path="", status_code=HTTPStatus.ACCEPTED)
+@router.post(
+    path="",
+    status_code=HTTPStatus.ACCEPTED,
+    dependencies=[Depends(dependency=enforce_execution_quota)],
+)
 async def create_execution(
     data: Annotated[
         ExecutionCreate, Body(description="Data for creating an execution")

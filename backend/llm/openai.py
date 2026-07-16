@@ -16,8 +16,10 @@ from llm.base import BaseLLMClient
 from schemas.llm_provider import (
     ChatMessage,
     ChatResponse,
+    ChatStreamChunk,
     GenerationParams,
     LLMProviderModelResponse,
+    TokenUsage,
 )
 
 
@@ -72,6 +74,25 @@ def _top_p(params: GenerationParams | None) -> float | openai.Omit:
     if params is not None and params.top_p is not None:
         return params.top_p
     return openai.omit
+
+
+def _usage_from_response(usage: object) -> TokenUsage | None:
+    """Normalize an OpenAI ``usage`` object into a `TokenUsage`.
+
+    Args:
+        usage: The SDK's ``CompletionUsage`` (or ``None`` if absent).
+
+    Returns:
+        Normalized token usage, or ``None`` when the provider omitted it.
+
+    """
+    if usage is None:
+        return None
+    return TokenUsage(
+        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+    )
 
 
 def _to_openai_messages(
@@ -183,6 +204,7 @@ class OpenAIClient(BaseLLMClient):
             ),
             done=True,
             raw=response.model_dump(),
+            usage=_usage_from_response(response.usage),
         )
 
     async def stream_chat(
@@ -190,8 +212,8 @@ class OpenAIClient(BaseLLMClient):
         model: str,
         messages: list[ChatMessage],
         params: GenerationParams | None = None,
-    ) -> AsyncIterator[str]:
-        """Stream chat completion text deltas from provider.
+    ) -> AsyncIterator[ChatStreamChunk]:
+        """Stream chat completion frames from provider.
 
         Args:
             model: Model name.
@@ -199,7 +221,7 @@ class OpenAIClient(BaseLLMClient):
             params: Optional generation parameters.
 
         Yields:
-            Text deltas as they arrive.
+            A frame per text delta; a final frame carrying token usage.
 
         Raises:
             LLMProviderConfigError: If the provider rejects the request.
@@ -214,10 +236,18 @@ class OpenAIClient(BaseLLMClient):
                 max_tokens=_max_tokens(params),
                 top_p=_top_p(params),
                 stream=True,
+                # Ask the API to append a final chunk with cumulative token
+                # usage; without this the streamed response reports no usage.
+                stream_options={"include_usage": True},
             )
+            usage: TokenUsage | None = None
             async for chunk in stream:
+                if chunk.usage is not None:
+                    usage = _usage_from_response(chunk.usage)
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta.content
                 if delta:
-                    yield delta
+                    yield ChatStreamChunk(delta=delta)
+            if usage is not None:
+                yield ChatStreamChunk(usage=usage)

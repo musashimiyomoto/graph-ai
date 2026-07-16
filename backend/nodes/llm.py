@@ -18,6 +18,7 @@ from schemas import (
     NodeFieldUI,
     NodeFieldWidget,
     NodeGraphSpec,
+    TokenUsage,
 )
 from utils.encryption import decrypt
 from utils.network import blocked_url_reason
@@ -124,16 +125,22 @@ class LLMNodeHandler:
 
         if context.on_token is None:
             response = await client.chat(model=model, messages=messages, params=params)
-            return NodeExecutionResult(output=response.message.content)
+            return NodeExecutionResult(
+                output=response.message.content, usage=response.usage
+            )
 
         chunks: list[str] = []
-        async for delta in client.stream_chat(
+        usage: TokenUsage | None = None
+        async for chunk in client.stream_chat(
             model=model, messages=messages, params=params
         ):
-            chunks.append(delta)
-            await context.on_token(delta)
+            if chunk.usage is not None:
+                usage = chunk.usage
+            if chunk.delta:
+                chunks.append(chunk.delta)
+                await context.on_token(chunk.delta)
 
-        return NodeExecutionResult(output="".join(chunks))
+        return NodeExecutionResult(output="".join(chunks), usage=usage)
 
 
 def _build_handler(deps: NodeHandlerDeps) -> LLMNodeHandler:

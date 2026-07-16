@@ -36,6 +36,26 @@ class ChatMessage(BaseModel):
     content: str = Field(default=..., description="Message content")
 
 
+class TokenUsage(BaseModel):
+    """Token counts reported by a provider for one chat completion.
+
+    Providers report usage under different names (OpenAI ``prompt_tokens``/
+    ``completion_tokens``, Anthropic ``input_tokens``/``output_tokens``,
+    Ollama ``prompt_eval_count``/``eval_count``); each client normalizes into
+    this shape. All fields default to 0 so a provider that omits usage (or a
+    stream that ends before the usage frame arrives) contributes nothing to
+    the run total rather than failing.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    prompt_tokens: int = Field(default=0, ge=0, description="Input/prompt tokens")
+    completion_tokens: int = Field(
+        default=0, ge=0, description="Generated/completion tokens"
+    )
+    total_tokens: int = Field(default=0, ge=0, description="Total tokens")
+
+
 class ChatResponse(BaseModel):
     """Chat response payload."""
 
@@ -45,6 +65,27 @@ class ChatResponse(BaseModel):
     message: ChatMessage = Field(default=..., description="Response message")
     done: bool = Field(default=..., description="Completion flag")
     raw: dict[str, object] = Field(default_factory=dict, description="Raw payload")
+    usage: TokenUsage | None = Field(
+        default=None, description="Token usage, when the provider reports it"
+    )
+
+
+class ChatStreamChunk(BaseModel):
+    """One frame of a streamed chat completion.
+
+    Ordinary frames carry a text ``delta`` and no ``usage``. The final frame
+    of a stream carries the provider's token ``usage`` (and usually an empty
+    ``delta``), so the streaming path can report cost without a second
+    non-streaming request. ``usage`` is ``None`` on every non-final frame and
+    stays ``None`` for the whole stream if the provider never reports it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    delta: str = Field(default="", description="Text delta for this frame")
+    usage: "TokenUsage | None" = Field(
+        default=None, description="Token usage, present only on the final frame"
+    )
 
 
 class GenerationParams(BaseModel):
