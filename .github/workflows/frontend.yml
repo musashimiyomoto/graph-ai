@@ -30,6 +30,9 @@ jobs:
       - name: Type check
         run: make front-typecheck
 
+      - name: Test
+        run: make front-test
+
   build:
     runs-on: ubuntu-latest
 

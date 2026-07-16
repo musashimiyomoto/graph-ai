@@ -666,7 +666,38 @@ Second pass (closed out everything remaining):
         then the recursive engine runner, then frontend scoped-canvas
         navigation, then iteration-grouped Details rendering — each is
         independently shippable.
-- [ ] Frontend tests (Vitest + Testing Library) — currently zero.
+- [x] **Frontend tests (Vitest + Testing Library)** — the first-ever frontend
+      suite, since there were zero. Wired Vitest into the existing Vite config
+      (a `test` block: `environment: 'jsdom'`, `globals: true`, a
+      `src/test/setup.ts` importing `@testing-library/jest-dom/vitest`,
+      `include: ['src/**/*.test.{ts,tsx}']`) rather than a separate config, plus
+      `test`/`test:run` npm scripts, a `front-test` Make target, and a Test step
+      in `.github/workflows/frontend.yml`'s lint job. Test files live beside
+      their subjects under `src/`, so `tsc -b` (CI typecheck) and `eslint .`
+      cover them too — they import the Vitest API explicitly (`import { describe,
+      it, expect, vi }`) to satisfy strict TS + the browser-only eslint globals,
+      no `any`. 50 tests across 8 files, weighted toward the highest-value pure
+      logic: `lib/validation.ts` (`matchesVisibility` equals/not_equals/null;
+      `validateFields` across required, the number/provider widget rules,
+      `min_length`, `ge`/`le`, `select` membership, and the optional-empty
+      skip), `lib/executionFormat.ts` (`formatDuration` ms/s/null/negative
+      branches, `formatTime` invalid-date), `lib/autoLayout.ts` (empty input,
+      left-to-right ordering, the center-preservation invariant, fallback sizes
+      — against real `@dagrejs/dagre`, which is DOM-free), and
+      `lib/api.ts`'s `request()` error normalization via `getWorkflows`/`login`
+      with a stubbed `fetch` (success JSON, network-error `{status: 0}` shape,
+      server `detail`/`statusText` fallback, JSON content-type + body, bearer
+      injection). Plus `hooks/useUndoRedo.ts` via `renderHook` (push enables
+      undo + clears the redo future, undo/redo move commands and fire the right
+      callbacks, empty-stack no-op, `clear`) and two provider-free RTL component
+      tests: `Modal.tsx` (dialog a11y attrs, Escape/click-outside → `onClose`,
+      click-inside doesn't, first-focusable autofocus, Tab focus-trap wrap) and
+      `OutputRenderer.tsx` (text, JSON pretty-print, malformed-JSON degrade to
+      text, unknown/absent `PortType` fallback). Deliberately skipped the
+      React-Flow canvas (needs measured DOM/ResizeObserver, brittle in jsdom)
+      and React-Query-backed components (`NodeFieldsForm`, Settings tabs) —
+      their pure logic (`validation.ts`) is tested directly instead of through a
+      provider+api-mock render.
 - [x] **Multi-tenant quotas, audit log, cost observability (tokens/latency per
       run)** — the tenant boundary is the `User` (no separate Org table), so
       everything keys off `user_id` (executions have no direct user column, so

@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: back-lint back-format back-typecheck back-test back-migrate \
-        front-lint front-typecheck front-build \
+        front-lint front-typecheck front-build front-test \
         setup run
 
 # ── Backend ──────────────────────────────────────────────
@@ -37,6 +37,9 @@ front-typecheck:
 
 front-build:
 	cd frontend && npm run build
+
+front-test:
+	cd frontend && npm run test:run
 
 # ── Common ───────────────────────────────────────────────
 
