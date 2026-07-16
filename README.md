@@ -14,6 +14,37 @@
 
 Visual graph-based AI workflow builder — FastAPI + ARQ · Postgres + Redis + Qdrant + React/Vite + Ollama.
 
+Build AI workflows as a graph: drag nodes onto a canvas, wire them together, and
+run them synchronously (chat) or on a trigger (Telegram, cron schedule). Every run
+is executed in the background, versioned, streamed token-by-token, and observable.
+
+## Features
+
+- **Visual graph editor** (React 19 + React Flow) — catalog-driven node inspector,
+  undo/redo, copy-paste, multi-select, auto-layout; workflow export/import,
+  duplication, and a global template library (Simple/RAG Chatbot, Telegram Echo).
+- **Node types** — Input, LLM, Web Search, Template, HTTP Request, Condition
+  (if/else branching), Code/Transform (sandboxed Python), Vector Ingest/Search
+  (RAG), Loop (list-map & do-while), and Output.
+- **Async execution engine** — ARQ + Redis background runs, per-node retries with
+  backoff, wave-parallel scheduling for independent branches, a stuck-run reaper,
+  per-node result persistence, SSE token streaming with a polling fallback, and
+  workflow versioning with pinned reruns.
+- **Multi-provider LLM** — Ollama, OpenAI, and Anthropic (the OpenAI client also
+  serves any OpenAI-compatible endpoint via a custom base URL), with token
+  streaming to the client.
+- **RAG** — Qdrant vector store with local CPU embeddings (`fastembed`); upload
+  `.pdf`/`.docx`/`.txt`/`.md` documents and search them from a workflow.
+- **Channels & triggers** — chat, Telegram bots (per-user, encrypted token,
+  trigger-and-reply), and cron-scheduled runs.
+- **Multi-tenant hardening** — JWT auth, Fernet-encrypted secrets, per-user
+  quotas (executions & tokens/day), an append-only audit log, and cost
+  observability (tokens/latency per run).
+- **Observability** — Prometheus metrics (`/metrics`) and optional Sentry error
+  tracking across both the API and the worker.
+
+See [ROADMAP.md](./ROADMAP.md) for what's built and what's planned next.
+
 ## Requirements
 
 - Python 3.12
@@ -28,10 +59,16 @@ make run
 
 This copies `.env.example` → `.env` and runs `docker compose up --build`.
 
-| Service  | URL                        |
-| -------- | -------------------------- |
-| Frontend | http://localhost:3000       |
-| Swagger  | http://localhost:5000/docs  |
+| Service          | URL                                |
+| ---------------- | ---------------------------------- |
+| Frontend         | http://localhost:3000              |
+| Backend (Swagger)| http://localhost:5000/docs         |
+| Metrics          | http://localhost:5000/metrics      |
+| Qdrant dashboard | http://localhost:6333/dashboard    |
+| Ollama           | http://localhost:11434             |
+
+Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling but have
+no browser UI.
 
 ## Local Development
 
@@ -54,6 +91,6 @@ make back-migrate MSG="…"   # Generate Alembic migration
 ```bash
 make front-lint             # Lint (eslint)
 make front-typecheck        # Type check (tsc)
+make front-test             # Tests (vitest)
 make front-build            # Production build (vite)
 ```
-

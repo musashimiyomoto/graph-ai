@@ -757,7 +757,228 @@ Second pass (closed out everything remaining):
       vars documented in `.env.example`.
 
 
+## Phase 8 — Toward a production multi-tenant platform (proposed)
+
+Everything below is **not yet built** — grounded in the current code, prioritized
+by impact. Phases 0–7 hardened the single-user engine; Phase 8 is about the jump
+from "one owner per workflow" to a real collaborative, externally-integrated,
+operable product. Ordered roughly by dependency and value.
+
+### 8a — Auth & account lifecycle (highest priority; security-facing)
+
+- [ ] **Refresh tokens + server-side revocation** — the long-standing open gap
+      (`usecases/auth.py::_create_access_token` already stamps `iat`/`jti` as
+      groundwork, but there's still only a single short-lived access token and
+      no way to log out server-side). Add a `refresh_tokens` table (or a Redis
+      revocation set keyed on `jti`), a `POST /auth/refresh`, and a
+      `POST /auth/logout` that revokes. Without this a leaked token is valid
+      until expiry with no recourse.
+- [ ] **Password reset + email verification** — `db/models/user.py` is just
+      `email`/`hashed_password`; there's no `email_verified` flag, no reset
+      token flow, and no `PATCH /users/me/password`. Needs a transactional-email
+      integration point (a new `integrations/email.py` alongside
+      `integrations/telegram.py`) and single-use tokens. Blocks any real
+      end-user signup.
+- [ ] **API keys / service accounts** — every entry point today is a
+      user-Bearer JWT (`api/dependencies/auth.py`). A programmatic caller (CI, a
+      script triggering a workflow) has no first-class credential. Add
+      per-user, scoped, revocable API keys (hashed at rest like passwords),
+      accepted by the same `get_current_user` dependency.
+
+### 8b — Real multi-tenancy (organizations & collaboration)
+
+- [ ] **Organizations / teams** — today the `User` *is* the tenant; there is no
+      `Organization` model, and ownership is a flat `workflow.owner_id → users.id`.
+      Introduce `organizations` + `organization_members` (role per member), move
+      quotas/usage/audit from per-user to per-org (`usage_records.user_id` →
+      `org_id`), and scope workflows/providers/bots to an org. This is the
+      largest structural change and unlocks everything in this sub-phase.
+- [ ] **Workflow sharing & roles (RBAC)** — no sharing exists; a workflow is
+      visible only to its `owner_id`. Add member roles (owner/editor/viewer)
+      enforced at the usecase layer (`WorkflowUsecase` currently filters by
+      `owner_id` everywhere) so a team can co-edit. Depends on 8b-orgs.
+- [ ] **Admin endpoints** — usage/audit are self-service only
+      (`api/routers/usage.py` is scoped to `get_current_user`). An org admin
+      can't see members' usage or the org-wide audit trail. Add an
+      admin-guarded router (reusing the audit log and `usage_records` already
+      built) for cross-member visibility and quota management.
+
+### 8c — Execution engine breadth
+
+- [ ] **Webhook trigger source** — `ExecutionSource` is `MANUAL`/`TELEGRAM`/
+      `SCHEDULE` (`enums/execution.py`); there's no way to start a workflow from
+      an inbound HTTP call. Add `ExecutionSource.WEBHOOK` + a public, per-workflow
+      signed webhook URL (`POST /webhooks/{token}`) that creates an execution,
+      mirroring how the Telegram poller already calls `create_execution`. The
+      single highest-leverage integration feature — it makes the platform
+      reachable from anything.
+- [ ] **User-initiated cancellation** — there is no `CANCELLED` status
+      (`ExecutionStatus` = created/running/success/failed/skipped) and no
+      `POST /executions/{id}/cancel`. A long or runaway run (a Loop node, a slow
+      LLM) can't be stopped except by the stuck-reaper timeout. Add a cancel
+      signal the worker checks between waves/nodes, plus the status + endpoint.
+- [ ] **Sub-workflow / "call workflow" node** — the Loop node proved the engine
+      can recurse into a subgraph (`_run_loop_node`), but there's no node type
+      that invokes *another saved workflow* as a step. Add a `WORKFLOW_CALL`
+      node (pinned to a `version_id`) so common chains become reusable building
+      blocks. Depends on nothing new; reuses the versioning already in place.
+- [ ] **Human-in-the-loop / approval node** — no way to pause a run for manual
+      approval before a side-effecting step. Add an `APPROVAL` node that parks
+      the execution in a new `WAITING` state until a `POST /executions/{id}/approve`
+      resumes it. Requires making the engine resumable (today `run_execution` is
+      one straight-through pass), so this is a larger lift — sequence it after
+      cancellation, which introduces the first "external signal mid-run".
+
+### 8d — Data lifecycle & operability
+
+- [ ] **Execution history retention/cleanup** — `executions` and
+      `node_executions` grow unbounded; the only cron that touches them is the
+      stuck-reaper (`worker.py`), which never deletes finished rows. Add a
+      retention cron (configurable age, e.g. `EXECUTION_RETENTION_DAYS`) that
+      prunes old terminal executions (cascade already drops their
+      `node_executions`). Straightforward, reuses the existing ARQ cron pattern
+      — do this early; it's cheap and prevents unbounded table growth.
+- [ ] **Queue-depth & worker-health metrics** — `api/metrics.py` covers HTTP +
+      execution outcomes but not the ARQ queue itself. Export queue depth,
+      oldest-pending age, and worker liveness as gauges so a backlog is
+      visible before users notice latency. Small add on top of the Prometheus
+      setup already wired.
+- [ ] **Distributed tracing (OpenTelemetry)** — metrics answer "how many/how
+      slow" but not "where in one request." Add OTel spans across
+      router → usecase → node handler → LLM call, correlated with the existing
+      execution-id log context, exported behind an optional endpoint env (no-op
+      when unset, same pattern as Sentry). Lower priority than the above;
+      valuable once traffic and multi-node runs make per-run breakdowns matter.
+
+### 8e — API surface & test depth
+
+- [ ] **Paginate all list endpoints + `/v1` prefix** — `GET /workflows` and the
+      Settings list endpoints return unbounded arrays (only `/executions` and
+      `/executions/{id}/nodes` take `Pagination`). Add limit/offset everywhere a
+      list can grow, and introduce a `/v1` prefix so future breaking changes are
+      versioned rather than silent.
+- [ ] **Thin-coverage integration paths** — backend tests are strong on API +
+      execution, but the SSE streaming endpoint (`stream_execution`), the RAG
+      ingest/search worker path end-to-end, and the new webhook/cancel flows
+      (once built) deserve integration tests. Track coverage explicitly rather
+      than by feel.
+
+
+## Phase 9 — Product functionality: channels, node types, integrations (proposed)
+
+Where Phase 8 is platform plumbing, Phase 9 is **what users can actually build**:
+more ways in and out (beyond Telegram), more node types, and connectors to the
+outside world. The whole point is that each of these is *cheap* thanks to the
+existing extension points — a channel is a new `InputNodeFormat`/`OutputNodeFormat`
+value + declarative `visible_when` fields + an `integrations/*.py` module (exactly
+how Telegram was added), and a node is one module + one `nodes/registry.py` entry.
+No frontend rewrites: the catalog-driven inspector renders new fields automatically.
+
+### 9a — New channels (Input/Output formats)
+
+- [ ] **Email channel** — a new `InputNodeFormat.EMAIL` + `OutputNodeFormat.EMAIL`
+      alongside `TXT`/`TELEGRAM`/`SCHEDULE` (`enums/node.py`). *In:* an incoming
+      email triggers a run — either an IMAP poller as an ARQ cron (mirroring
+      `poll_telegram_updates` in `worker.py`) or an inbound-email webhook
+      (Mailgun/SES/Postmark). *Out:* the Output node sends the result via SMTP or
+      a provider API (new `integrations/email.py`, same shape as
+      `integrations/telegram.py`; a new `EmailAccount` entity with encrypted
+      credentials, mirroring `TelegramBot`). The Output node's `visible_when`
+      already handles per-format fields (to/subject) with zero new frontend
+      branches. Highest-value channel — email is the universal business inbox.
+- [ ] **Inbound webhook trigger + outbound webhook Output** — `ExecutionSource`
+      has no `WEBHOOK` (`enums/execution.py`) and there's no public trigger URL.
+      *In:* a per-workflow signed `POST /webhooks/{token}` creates an execution
+      (reuses `create_execution`, same as the Telegram poller). *Out:* an
+      Output-node webhook format POSTs the result to a configured URL (the HTTP
+      Request node already has the client plumbing to lean on). Makes the
+      platform callable from — and able to notify — literally anything. (Shares
+      the trigger half with Phase 8c's webhook item; list once, build once.)
+- [ ] **Embeddable web-chat widget** — a public, unauthenticated per-workflow
+      chat endpoint + a drop-in JS snippet so a workflow can back a website chat
+      bubble. Backend: a scoped public run endpoint (reusing the SSE streaming
+      already built in `stream_execution`) keyed by a per-workflow public token,
+      rate-limited (`api/dependencies/rate_limit.py` pattern) and quota-bounded.
+      Frontend: a standalone minimal chat bundle (separate Vite entry) that talks
+      to that endpoint. Turns any workflow into a shippable product surface.
+- [ ] **Slack / Discord channel** (follow-up) — same channel shape as Telegram
+      (bot entity + poll/events cron + reply), just a different
+      `integrations/*.py`. Lower priority than email/webhook/web-chat but a
+      natural next connector once the channel abstraction has proven itself
+      across two more formats.
+
+### 9b — New node types (each = one module + one registry entry)
+
+- [ ] **Translator node** — a dedicated `NodeType.TRANSLATE` that translates its
+      upstream text to a target language. Simplest form is an LLM-backed prompt
+      wrapper (reuse the provider clients in `llm/`) with a `target_language`
+      select field; optionally a dedicated translation API later. Clean, obvious
+      first new node — demonstrates the "one module + one registry entry" path
+      end to end.
+- [ ] **JSON / data-shaping nodes** — the pipeline is text-only end to end today
+      (values stay `str`, ports are decl-time-only). Add pragmatic string-JSON
+      nodes: **JSON Extract** (JSONPath/`jq`-lite pluck a field from upstream
+      JSON text), **Filter/Map** over a JSON array (pairs with the Loop node's
+      list mode), and **Merge** (combine multiple parents into one JSON object).
+      These unlock real data workflows without introducing a runtime type system.
+- [ ] **Switch / multi-branch router** — the Condition node is binary
+      (`nodes/condition.py`, true/false handles). A `SWITCH` node routing to one
+      of N named outputs by matching a value generalizes it — the engine already
+      supports named `source_handle` per edge and per-branch liveness, so this is
+      mostly a new handler + more output handles, not new scheduler work.
+- [ ] **Delay / Wait node** — pause a branch for a fixed duration (or until a
+      timestamp) before continuing. Needs the resumable-execution work from Phase
+      8c (approval node) to avoid holding a worker slot while waiting — sequence
+      it after that, or ship a bounded in-run sleep first.
+- [ ] **Vision / multimodal support on the existing LLM node** — *not a new node
+      type*: extend the current LLM node (`nodes/llm.py`) to optionally accept an
+      image (URL, or an uploaded file building on the RAG document-upload
+      plumbing) and pass it as an image content-part to a multimodal model. The
+      provider clients (`llm/openai.py`/`anthropic.py`/`ollama.py`) already speak
+      the chat-messages format that carries image parts, so this is mainly:
+      threading a non-text value through the port model (values are `str` end to
+      end today) and adding image content-parts to the message builder. Opens OCR
+      / document-scan / "user sent a photo" use cases without a separate node —
+      scope it once file ports exist.
+
+### 9c — External integrations & tools
+
+- [ ] **LLM tool-calling / function-calling** — the LLM node returns text only;
+      it can't call tools mid-generation. Add a tool-calling mode where the LLM
+      node is given a set of the graph's own nodes (or built-in tools) as
+      callable functions, executes the calls, and feeds results back. The single
+      biggest capability jump toward "agent" workflows — but a substantial engine
+      change (a call/response loop inside one node), so it wants its own design
+      pass. Flagship item of this sub-phase.
+- [ ] **Ready-made connector nodes** — beyond the generic HTTP Request node, add
+      typed connectors for the common SaaS: **Google Sheets** (read/append rows),
+      **Notion** (create/query pages), **S3-compatible storage** (put/get
+      objects), **Slack/Discord post** (as plain Output-side nodes, distinct from
+      the full channel in 9a). Each is a thin `integrations/*.py` + node module
+      with credential entities like `LLMProvider`/`TelegramBot`.
+- [ ] **MCP tool nodes** — expose Model Context Protocol servers as nodes/tools,
+      so any MCP-compatible tool becomes usable in a workflow without a bespoke
+      connector. Pairs naturally with tool-calling (9c-flagship) — an MCP server
+      is just another set of callable tools. Forward-looking; sequence after
+      tool-calling lands.
+
+### 9d — Template library expansion
+
+- [ ] **New starter templates for the above** — the template library
+      (`templates/`, one module per preset) currently ships Simple/RAG Chatbot +
+      Telegram Echo. Once the channels/nodes above exist, add end-to-end presets
+      that showcase them: **Support bot with RAG** (web-chat in → Vector Search →
+      LLM → web-chat out), **Email auto-responder / triage** (email in →
+      Condition/Switch → LLM → email out), **Lead qualification** (webhook in →
+      LLM scoring → connector to a sheet/CRM), **Website change monitor**
+      (schedule → HTTP Request → Condition → email/Telegram alert), and a
+      **Translation pipeline** (input → Translate → output). Templates only make
+      sense *after* their building blocks land — track them here, build them last.
+
+
 ---
+
+
 
 ### North star
 
