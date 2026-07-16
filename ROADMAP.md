@@ -667,8 +667,64 @@ Second pass (closed out everything remaining):
         navigation, then iteration-grouped Details rendering — each is
         independently shippable.
 - [ ] Frontend tests (Vitest + Testing Library) — currently zero.
-- [ ] Multi-tenant quotas, audit log, cost observability (tokens/latency per run).
-- [ ] Metrics (Prometheus) + error tracking (Sentry).
+- [x] **Multi-tenant quotas, audit log, cost observability (tokens/latency per
+      run)** — the tenant boundary is the `User` (no separate Org table), so
+      everything keys off `user_id` (executions have no direct user column, so
+      it's resolved from `workflow.owner_id`). **Cost capture** flows from the
+      provider clients up: `stream_chat` now yields a `ChatStreamChunk`
+      (text delta + a final `TokenUsage` frame) instead of a bare `str`, so the
+      *streaming* worker path — not just the rarely-taken non-streaming `chat`
+      path — captures tokens (OpenAI `stream_options={"include_usage": True}`,
+      Anthropic `get_final_message().usage`, Ollama's terminal `done` line's
+      `prompt_eval_count`/`eval_count`; each normalized into one `TokenUsage`
+      shape). `NodeExecutionResult.usage` carries it back through
+      `_NodeOutcome` into `_record_node_result`, which persists per-node
+      `prompt_tokens`/`completion_tokens`/`total_tokens` (nullable — NULL for
+      non-LLM node types, distinguishing "no LLM call" from "zero tokens");
+      `_mark_execution_success`/`_failed` aggregate the run total via
+      `NodeExecutionRepository.sum_tokens` onto matching `executions` columns
+      (latency is derived from `finished_at - started_at`, no new column).
+      **Quotas** are hybrid: a cheap Redis fixed-window counter
+      (`api/dependencies/quota.py`, mirroring `rate_limit.py`, keyed by
+      `(user, day)`) gates `POST /executions`, while `UsageUsecase.check_quota`
+      re-checks the durable `usage_records` table (the source of truth) inside
+      `create_execution` — so a lost/reset Redis counter can't let a tenant
+      exceed the limit, and Telegram/schedule triggers that bypass the HTTP
+      dependency are still bounded. Limits come from `settings/quota.py`
+      (`QUOTA_MAX_EXECUTIONS_PER_DAY`/`QUOTA_MAX_TOKENS_PER_DAY`, both `0` =
+      unlimited, so an unconfigured deploy behaves exactly as before). Usage is
+      upserted (`INSERT … ON CONFLICT DO UPDATE`, race-safe) on run finalize,
+      keyed by workflow owner. **Audit log** is an append-only `audit_logs`
+      table; `AuditUsecase.record` stages a row on the caller's session (no
+      commit — same transaction as the mutation it describes) from execution
+      create and workflow/provider/bot create+delete. New `/usage` router:
+      `GET /usage` (today's executions/tokens used + limit/remaining) and
+      `GET /usage/audit` (paginated, tenant-scoped), both behind
+      `get_current_user`. New `QuotaExceededError` (429). Migration
+      `d7dc4089af97` adds the 6 token columns + the two tables; verified both
+      directions against the real dev DB.
+- [x] **Metrics (Prometheus) + error tracking (Sentry)** — Prometheus via
+      `prometheus-client` (`api/metrics.py`): an HTTP middleware in `main.py`
+      (after CORS) records `graphai_http_requests_total` +
+      `graphai_http_request_duration_seconds` labeled by method and the matched
+      *route template* (`request.scope["route"].path_format`, so per-id paths
+      don't explode cardinality; `/metrics` itself is excluded from its own
+      counters), and the worker records `graphai_executions_total` (by terminal
+      status) / `graphai_execution_duration_seconds` /
+      `graphai_execution_tokens_total` after each run finalizes. An
+      unauthenticated `GET /metrics` router (like `health`) serves the
+      exposition text; under gunicorn's multiple workers (plus the separate ARQ
+      worker process) `PROMETHEUS_MULTIPROC_DIR` (`settings/metrics.py`) makes
+      `prometheus_client` aggregate across processes via a
+      `MultiProcessCollector`, else a single in-process registry is scraped
+      (correct for a single-worker dev run). Sentry (`sentry-sdk[fastapi]`,
+      `observability.py::init_sentry`, `settings/sentry.py`) initializes in
+      **both** processes — `main.py` at import (`component="api"`) and
+      `worker.py::startup` (`component="worker"`) — and is a **no-op when
+      `SENTRY_DSN` is unset** (deliberately not fail-fast, unlike the
+      auth/encryption secrets, so local/CI needs no Sentry account). New env
+      vars documented in `.env.example`.
+
 
 ---
 

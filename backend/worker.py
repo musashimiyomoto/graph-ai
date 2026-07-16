@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from arq import cron
 from croniter import CroniterError, croniter
 
+from api.metrics import record_execution
 from constants import DEFAULT_TIMEOUT
 from db.repositories import (
     ExecutionRepository,
@@ -27,6 +28,7 @@ from exceptions import BaseError, TelegramAPIError
 from integrations.telegram import get_updates, send_message
 from llm.ollama import OllamaClient
 from logging_config import configure_logging
+from observability import init_sentry
 from rag.qdrant import get_qdrant_client
 from schemas import ExecutionCreate, ExecutionInputPayload
 from sessions import async_session
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from db.models import Node, NodeSchedule, TelegramBot
+    from schemas import ExecutionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +79,7 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
         await publish_token_reset(redis, exec_id, node_id)
 
     async with async_session() as session:
-        await ExecutionUsecase().run_execution(
+        result = await ExecutionUsecase().run_execution(
             session=session,
             execution_id=execution_id,
             session_factory=async_session,
@@ -84,6 +87,29 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
             token_reset_publisher=token_reset_publisher,
         )
         await _reply_via_telegram(session=session, execution_id=execution_id)
+
+    _record_execution_metrics(result)
+
+
+def _record_execution_metrics(result: "ExecutionResponse") -> None:
+    """Emit Prometheus counters/histograms for a finalized execution.
+
+    Best-effort observability only — a metrics failure must never fail the run.
+
+    Args:
+        result: The finalized execution.
+
+    """
+    duration = 0.0
+    if result.finished_at is not None:
+        duration = max(
+            0.0, (result.finished_at - result.started_at).total_seconds()
+        )
+    record_execution(
+        status=result.status.value,
+        duration_seconds=duration,
+        total_tokens=result.total_tokens or 0,
+    )
 
 
 async def ingest_document_task(
@@ -592,7 +618,7 @@ async def reap_stuck_executions(
 
 
 async def startup(ctx: dict[Any, Any]) -> None:
-    """Configure logging when the worker starts.
+    """Configure logging and error tracking when the worker starts.
 
     Args:
         ctx: ARQ job context.
@@ -600,6 +626,7 @@ async def startup(ctx: dict[Any, Any]) -> None:
     """
     del ctx
     configure_logging()
+    init_sentry(component="worker")
 
 
 class WorkerSettings:

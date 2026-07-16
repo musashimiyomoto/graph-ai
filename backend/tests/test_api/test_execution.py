@@ -32,6 +32,9 @@ from tests.factories import (
 from tests.test_api.base import BaseTestCase
 from usecases import ExecutionUsecase
 
+# The mocked Ollama LLM node reports 12 prompt + 4 completion tokens.
+_EXPECTED_LLM_TOTAL_TOKENS = 16
+
 
 async def run_execution(session: AsyncSession, execution_id: int) -> ExecutionResponse:
     """Run a queued execution to completion (worker stand-in for tests).
@@ -212,6 +215,8 @@ class TestExecutionCreate(BaseTestCase):
                     "model": "test-model",
                     "message": {"role": "assistant", "content": "hi from llm"},
                     "done": True,
+                    "prompt_eval_count": 12,
+                    "eval_count": 4,
                 }
 
         class DummyAsyncClient:
@@ -298,6 +303,23 @@ class TestExecutionCreate(BaseTestCase):
             pytest.fail("Execution with LLM node should succeed")
         if result.output_data != {"value": "hi from llm"}:
             pytest.fail("Execution output did not match mocked LLM content")
+        # Non-streaming worker path (no token publisher) captures usage from
+        # the chat response and aggregates it onto the execution.
+        if result.total_tokens != _EXPECTED_LLM_TOTAL_TOKENS:
+            pytest.fail(
+                f"Expected {_EXPECTED_LLM_TOTAL_TOKENS} total tokens, "
+                f"got {result.total_tokens}"
+            )
+        await self._assert_usage_recorded(headers)
+
+    async def _assert_usage_recorded(self, headers: dict) -> None:
+        """Assert the finalized run is reflected in the tenant usage summary."""
+        usage = await self.client.get(url="/usage", headers=headers)
+        usage_data = await self.assert_response_dict(response=usage)
+        if usage_data["executions"]["used"] != 1:
+            pytest.fail("Usage summary should count the finalized execution")
+        if usage_data["tokens"]["used"] != _EXPECTED_LLM_TOTAL_TOKENS:
+            pytest.fail("Usage summary should sum the run's tokens")
 
     @pytest.mark.asyncio
     async def test_ok_with_web_search_node(
