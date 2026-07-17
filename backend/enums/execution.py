@@ -26,3 +26,4 @@ class ExecutionSource(StrEnum):
     SCHEDULE = auto()
     EMAIL = auto()
     WEBHOOK = auto()
+    WEB_CHAT = auto()

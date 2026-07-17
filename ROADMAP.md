@@ -756,75 +756,43 @@ Second pass (closed out everything remaining):
       auth/encryption secrets, so local/CI needs no Sentry account). New env
       vars documented in `.env.example`.
 
-## Phase 8 — Accounts, teams, and execution control
+## Phase 8 — Product roadmap
 
-This phase contains product capabilities for managing an account, collaborating
-on workflows, and controlling long-running executions.
+Pending work is ordered by product value: flagship MVP capabilities first,
+useful workflow extensions next, and routine or post-MVP improvements last.
 
+- [x] **Embeddable web chat** — turn any workflow into a usable website chat
+      widget with a public workflow-specific endpoint and streamed responses.
+- [ ] **LLM tool calling** — let an LLM call selected workflow tools, inspect their
+      results, and continue until it can produce a final answer.
+- [ ] **Google Sheets connector nodes** — read rows and append workflow results to
+      a spreadsheet, unlocking common lead, reporting, and operations workflows.
+- [ ] **Vision support for the LLM node** — accept images for OCR, document review,
+      screenshot analysis, and other multimodal workflows.
+- [ ] **Call Workflow node** — reuse another saved workflow as a step inside the
+      current graph instead of duplicating common chains.
+- [ ] **Execution cancellation** — stop queued or running workflow executions from
+      the UI before they waste more time or tokens.
+- [ ] **Approval node** — pause a workflow until a person approves or rejects the
+      next step.
+- [ ] **Switch node** — route a value into one of several named branches instead
+      of the Condition node's binary true/false split.
+- [ ] **MCP tool nodes** — connect workflows to tools exposed by MCP servers after
+      the core LLM tool-calling flow is established.
 - [ ] **Session management** — keep users signed in with refresh tokens and let
       them securely log out or revoke active sessions.
 - [ ] **Email verification and password recovery** — verify new accounts, reset a
       forgotten password, and change the current password from account settings.
-- [ ] **API keys** — create scoped, revocable credentials for scripts, CI jobs,
-      and external services that need to use Graph AI programmatically.
-- [ ] **Organizations and teams** — create a shared workspace, invite members, and
-      manage the people who can access its workflows and integrations.
-- [ ] **Workflow sharing and roles** — share workflows with owner, editor, and
-      viewer permissions.
-- [ ] **Organization administration** — view team-wide usage and activity, manage
-      members, and configure workspace quotas.
-- [ ] **Execution cancellation** — stop queued or running workflow executions from
-      the UI.
-- [ ] **Call Workflow node** — reuse another saved workflow as a step inside the
-      current graph.
-- [ ] **Approval node** — pause a workflow until a person approves or rejects the
-      next step.
-
-## Phase 9 — Product functionality
-
-This phase contains only functionality users can directly add to a workflow or
-use as a product surface: channels, node types, integrations, and ready-made
-workflow templates.
-
-- [x] **Email channel** — incoming messages can trigger workflows through an
-      IMAP inbox, and Email Output can send the result through SMTP. Email
-      accounts are managed in Settings and can be selected on Input/Output nodes.
+- [ ] **Translate node** — translate upstream text into a selected target language;
+      useful, but already achievable with the existing LLM node.
+- [ ] **Delay / Wait node** — pause a branch for a duration or until a timestamp;
+      primarily useful for longer-running automation beyond the initial MVP.
+- [x] **Email channel** — incoming messages can trigger workflows through IMAP,
+      and Email Output can deliver the result through SMTP.
 - [x] **Email Auto-Responder template** — a ready-made
-      `Email Input → LLM → Email Output` workflow that drafts a support response
-      and replies to the original sender and subject.
-- [x] **Webhook channel** — trigger a workflow through a public signed URL and
-      optionally POST the workflow result to another webhook URL.
-- [ ] **Embeddable web chat** — a drop-in website chat widget backed by a selected
-      workflow, with streamed responses and a public workflow-specific endpoint.
-- [ ] **Slack and Discord channels** — receive messages as workflow input and send
-      workflow results back to the originating conversation.
-- [ ] **Translate node** — translate upstream text into a selected target language.
-- [ ] **JSON Extract node** — read a field or nested value from upstream JSON.
-- [ ] **JSON Filter/Map node** — filter or transform items in a JSON array.
-- [ ] **JSON Merge node** — combine outputs from multiple parent nodes into one
-      JSON object.
-- [ ] **Switch node** — route a value into one of several named branches instead
-      of the Condition node's binary true/false split.
-- [ ] **Delay / Wait node** — pause a workflow branch for a duration or until a
-      selected timestamp.
-- [ ] **Vision support for the LLM node** — accept images for OCR, document review,
-      screenshot analysis, and other multimodal workflows.
-- [ ] **LLM tool calling** — allow an LLM node to call selected workflow tools and
-      use their results before producing its final response.
-- [ ] **Google Sheets connector nodes** — read rows and append workflow results.
-- [ ] **Notion connector nodes** — query pages and create new pages from workflows.
-- [ ] **S3-compatible storage nodes** — upload and retrieve workflow files or data.
-- [ ] **Slack / Discord post nodes** — send notifications without configuring a
-      full inbound messaging channel.
-- [ ] **MCP tool nodes** — connect workflows to tools exposed by MCP servers.
-- [ ] **Support Bot with RAG template** — web chat backed by Vector Search and an
-      LLM over an uploaded knowledge base.
-- [ ] **Lead Qualification template** — accept a webhook lead, score it with an
-      LLM, and send the result to a sheet or CRM connector.
-- [ ] **Website Change Monitor template** — check a page on a schedule and send an
-      email or chat notification when its content changes.
-- [ ] **Translation Pipeline template** — receive text, translate it, and deliver
-      the result through a selected output channel.
+      `Email Input → LLM → Email Output` support workflow.
+- [x] **Webhook channel** — workflows can be triggered through a signed public URL
+      and can POST their result to a configured callback URL.
 
 ---
 

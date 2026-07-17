@@ -20,7 +20,13 @@ interface UseActivityLogResult {
 // Read-only log of real inbound traffic (channel messages and scheduled runs),
 // kept separate from useExecutions' manual test runs so a workflow's
 // actual usage never gets mixed into the owner's test sandbox.
-const ACTIVITY_LOG_SOURCES: ExecutionSource[] = ['telegram', 'schedule', 'email', 'webhook']
+const ACTIVITY_LOG_SOURCES: ExecutionSource[] = [
+  'telegram',
+  'schedule',
+  'email',
+  'webhook',
+  'web_chat',
+]
 
 export function useActivityLog({
   token,

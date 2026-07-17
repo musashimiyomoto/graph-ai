@@ -5,6 +5,7 @@ interface WorkflowActionsMenuProps {
   onDuplicate: () => void
   onExport: () => void
   onCopyWebhook: () => Promise<boolean>
+  onCopyWebChat: () => Promise<boolean>
   onDelete: () => void
 }
 
@@ -15,17 +16,20 @@ export function WorkflowActionsMenu({
   onDuplicate,
   onExport,
   onCopyWebhook,
+  onCopyWebChat,
   onDelete,
 }: WorkflowActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [webhookCopied, setWebhookCopied] = useState(false)
+  const [webChatCopied, setWebChatCopied] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   function close(): void {
     setOpen(false)
     setConfirmingDelete(false)
     setWebhookCopied(false)
+    setWebChatCopied(false)
   }
 
   useEffect(() => {
@@ -92,6 +96,16 @@ export function WorkflowActionsMenu({
             }}
           >
             {webhookCopied ? 'Copied' : 'Copy webhook URL'}
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 text-left text-xs hover:bg-white/5"
+            title="Use the Embeddable Web Chat template or set Input and Output to web_chat"
+            onClick={() => {
+              void onCopyWebChat().then(setWebChatCopied)
+            }}
+          >
+            {webChatCopied ? 'Copied' : 'Copy web chat embed'}
           </button>
           {confirmingDelete ? (
             <div className="flex gap-1">

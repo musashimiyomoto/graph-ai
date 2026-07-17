@@ -46,6 +46,12 @@ export function publicWebhookUrl(webhookPath: string): string {
   return new URL(`${BASE}${webhookPath}`, window.location.origin).toString()
 }
 
+export function webChatEmbedSnippet(webChatPath: string): string {
+  const loaderUrl = new URL('/graph-ai-chat.js', window.location.origin).toString()
+  const endpoint = new URL(`${BASE}${webChatPath}`, window.location.origin).toString()
+  return `<script src="${loaderUrl}" data-endpoint="${endpoint}" async></script>`
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},

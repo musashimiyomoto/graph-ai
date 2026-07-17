@@ -45,6 +45,7 @@ from exceptions.rag import (
 from exceptions.rate_limit import RateLimitExceededError
 from exceptions.telegram import TelegramAPIError, TelegramBotNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
+from exceptions.web_chat import WebChatNotFoundError
 from exceptions.webhook import WebhookConnectionError, WebhookNotFoundError
 from exceptions.workflow import (
     WorkflowNotFoundError,
@@ -87,6 +88,7 @@ __all__ = [
     "UserNotFoundError",
     "VectorCollectionNotFoundError",
     "VectorDocumentNotFoundError",
+    "WebChatNotFoundError",
     "WebSearchConnectionError",
     "WebhookConnectionError",
     "WebhookNotFoundError",

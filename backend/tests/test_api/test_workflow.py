@@ -30,6 +30,7 @@ class TestWorkflowCreate(BaseTestCase):
                 "owner_id",
                 "name",
                 "webhook_path",
+                "web_chat_path",
                 "created_at",
                 "updated_at",
             },
@@ -40,6 +41,8 @@ class TestWorkflowCreate(BaseTestCase):
             pytest.fail("Workflow owner did not match current user")
         if not data["webhook_path"].startswith(f"/webhooks/{data['id']}."):
             pytest.fail("Workflow response did not include its signed webhook path")
+        if not data["web_chat_path"].startswith(f"/web-chat/{data['id']}."):
+            pytest.fail("Workflow response did not include its signed web-chat path")
 
     @pytest.mark.asyncio
     async def test_empty_name_rejected(self) -> None:

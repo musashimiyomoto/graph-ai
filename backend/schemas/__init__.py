@@ -68,6 +68,7 @@ from schemas.vector import (
     VectorUploadJobResponse,
     VectorUploadResponse,
 )
+from schemas.web_chat import WebChatMessage
 from schemas.workflow import (
     WorkflowCreate,
     WorkflowExportResponse,
@@ -143,6 +144,7 @@ __all__ = [
     "VectorJobStatusResponse",
     "VectorUploadJobResponse",
     "VectorUploadResponse",
+    "WebChatMessage",
     "WorkflowCreate",
     "WorkflowExportResponse",
     "WorkflowGraphEdge",

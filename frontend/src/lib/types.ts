@@ -8,7 +8,13 @@ export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 // traffic (channel messages or a cron schedule firing). Lets the UI split
 // "Test Runs" (a sandbox for trying the flow before it's relied on) from
 // "Activity Log" (real usage) instead of merging them into one list.
-export type ExecutionSource = 'manual' | 'telegram' | 'schedule' | 'email' | 'webhook'
+export type ExecutionSource =
+  | 'manual'
+  | 'telegram'
+  | 'schedule'
+  | 'email'
+  | 'webhook'
+  | 'web_chat'
 
 export interface RunInputPayload {
   value: string
@@ -19,6 +25,7 @@ export interface Workflow {
   owner_id: number
   name: string
   webhook_path: string
+  web_chat_path: string
   created_at: string
   updated_at: string
 }

@@ -1,0 +1,132 @@
+"""Public embedded web-chat API tests."""
+
+from http import HTTPStatus
+
+import pytest
+
+from enums import (
+    ExecutionSource,
+    ExecutionStatus,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+)
+from tests.factories import (
+    EdgeFactory,
+    ExecutionFactory,
+    NodeFactory,
+    WorkflowFactory,
+)
+from tests.test_api.base import BaseTestCase
+from utils.web_chat import build_web_chat_path
+
+
+class TestWebChatAPI(BaseTestCase):
+    """Tests for the signed public web-chat surface."""
+
+    async def _create_workflow(
+        self,
+        user_id: int,
+        *,
+        input_format: InputNodeFormat = InputNodeFormat.WEB_CHAT,
+        output_format: OutputNodeFormat = OutputNodeFormat.WEB_CHAT,
+    ) -> int:
+        """Create a minimal channel-configured workflow and return its ID."""
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user_id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Visitor", "format": input_format.value},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Reply", "format": output_format.value},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=output_node.id,
+        )
+        return workflow.id
+
+    @pytest.mark.asyncio
+    async def test_public_message_queues_web_chat_execution(self) -> None:
+        """A visitor message queues a web-chat sourced run without auth."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(user["id"])
+
+        response = await self.client.post(
+            url=f"{build_web_chat_path(workflow_id)}/executions",
+            json={"value": "Hello"},
+        )
+
+        data = await self.assert_response_dict(response=response)
+        if data["workflow_id"] != workflow_id:
+            pytest.fail("Web chat targeted the wrong workflow")
+        if data["source"] != ExecutionSource.WEB_CHAT.value:
+            pytest.fail("Execution was not tagged with the web_chat source")
+        if data["input_data"] != {"value": "Hello"}:
+            pytest.fail("Visitor message was not persisted as execution input")
+
+    @pytest.mark.asyncio
+    async def test_both_channel_formats_must_be_enabled(self) -> None:
+        """A signed URL stays disabled until Input and Output both use web_chat."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(
+            user["id"], output_format=OutputNodeFormat.TXT
+        )
+
+        response = await self.client.post(
+            url=f"{build_web_chat_path(workflow_id)}/executions",
+            json={"value": "Hello"},
+        )
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail(f"Expected 404, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_execution_cannot_be_read_through_another_workflow(self) -> None:
+        """A valid token cannot expose an execution belonging to another workflow."""
+        user, _ = await self.create_user_and_get_token()
+        first_id = await self._create_workflow(user["id"])
+        second_id = await self._create_workflow(user["id"])
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=second_id,
+            source=ExecutionSource.WEB_CHAT,
+        )
+
+        response = await self.client.get(
+            url=f"{build_web_chat_path(first_id)}/executions/{execution.id}"
+        )
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail(f"Expected 404, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_terminal_execution_streams_public_status(self) -> None:
+        """A completed web-chat run is available through the public SSE endpoint."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(user["id"])
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            source=ExecutionSource.WEB_CHAT,
+            status=ExecutionStatus.SUCCESS,
+            output_data={"value": "Hi there"},
+        )
+
+        response = await self.client.get(
+            url=(f"{build_web_chat_path(workflow_id)}/executions/{execution.id}/stream")
+        )
+
+        if response.status_code != HTTPStatus.OK:
+            pytest.fail(f"Expected 200, got {response.status_code}")
+        if '"source": "web_chat"' not in response.text:
+            pytest.fail("Public stream did not include the web-chat execution")

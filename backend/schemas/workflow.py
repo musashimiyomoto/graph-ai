@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from enums import NodeType
+from utils.web_chat import build_web_chat_path
 from utils.webhooks import build_webhook_path
 
 
@@ -131,3 +132,9 @@ class WorkflowResponse(BaseModel):
     def webhook_path(self) -> str:
         """Return this workflow's stable signed public webhook path."""
         return build_webhook_path(self.id)
+
+    @computed_field
+    @property
+    def web_chat_path(self) -> str:
+        """Return this workflow's stable signed public web-chat API path."""
+        return build_web_chat_path(self.id)

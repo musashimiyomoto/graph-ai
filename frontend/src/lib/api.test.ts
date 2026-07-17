@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getWorkflows, login, publicWebhookUrl, setToken } from './api'
+import {
+  getWorkflows,
+  login,
+  publicWebhookUrl,
+  setToken,
+  webChatEmbedSnippet,
+} from './api'
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -98,6 +104,15 @@ describe('publicWebhookUrl()', () => {
   it('builds an absolute URL through the public API prefix', () => {
     expect(publicWebhookUrl('/webhooks/12.signature')).toBe(
       `${window.location.origin}/api/webhooks/12.signature`,
+    )
+  })
+})
+
+describe('webChatEmbedSnippet()', () => {
+  it('builds a drop-in loader with the signed public endpoint', () => {
+    expect(webChatEmbedSnippet('/web-chat/12.signature')).toBe(
+      `<script src="${window.location.origin}/graph-ai-chat.js" ` +
+        `data-endpoint="${window.location.origin}/api/web-chat/12.signature" async></script>`,
     )
   })
 })

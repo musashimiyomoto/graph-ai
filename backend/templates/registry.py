@@ -13,6 +13,9 @@ from templates.document_ingest import DEFINITION as DOCUMENT_INGEST_DEFINITION
 from templates.email_auto_responder import (
     DEFINITION as EMAIL_AUTO_RESPONDER_DEFINITION,
 )
+from templates.embeddable_web_chat import (
+    DEFINITION as EMBEDDABLE_WEB_CHAT_DEFINITION,
+)
 from templates.rag_chatbot import DEFINITION as RAG_CHATBOT_DEFINITION
 from templates.simple_chatbot import DEFINITION as SIMPLE_CHATBOT_DEFINITION
 from templates.support_ticket_router import (
@@ -24,6 +27,7 @@ from templates.weather_bot import DEFINITION as WEATHER_BOT_DEFINITION
 
 TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
     SIMPLE_CHATBOT_DEFINITION,
+    EMBEDDABLE_WEB_CHAT_DEFINITION,
     RAG_CHATBOT_DEFINITION,
     DOCUMENT_INGEST_DEFINITION,
     TELEGRAM_ECHO_BOT_DEFINITION,

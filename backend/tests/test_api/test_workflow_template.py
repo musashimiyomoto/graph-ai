@@ -65,6 +65,18 @@ def test_email_auto_responder_template_uses_email_channel() -> None:
         pytest.fail("Email template should reply to the triggering sender and subject")
 
 
+def test_embeddable_web_chat_template_uses_public_chat_channel() -> None:
+    """The web-chat starter exposes matching public Input and Output formats."""
+    definition = get_template_definition("embeddable-web-chat")
+    input_node, llm_node, output_node = definition.graph.nodes
+    if input_node.data.get("format") != InputNodeFormat.WEB_CHAT.value:
+        pytest.fail("Web-chat template Input should use the web_chat format")
+    if llm_node.type is not NodeType.LLM:
+        pytest.fail("Web-chat template should contain an LLM node")
+    if output_node.data.get("format") != OutputNodeFormat.WEB_CHAT.value:
+        pytest.fail("Web-chat template Output should use the web_chat format")
+
+
 class TestWorkflowTemplateInstantiate(BaseTestCase):
     """Tests for POST /workflow-templates/{template_key}/instantiate."""
 
