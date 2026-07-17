@@ -42,6 +42,10 @@ export function setToken(token: string | null): void {
   currentToken = token
 }
 
+export function publicWebhookUrl(webhookPath: string): string {
+  return new URL(`${BASE}${webhookPath}`, window.location.origin).toString()
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},

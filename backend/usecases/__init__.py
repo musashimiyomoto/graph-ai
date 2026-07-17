@@ -12,6 +12,7 @@ from usecases.telegram_bot import TelegramBotUsecase
 from usecases.usage import UsageUsecase
 from usecases.user import UserUsecase
 from usecases.vector import VectorUsecase
+from usecases.webhook import WebhookUsecase
 from usecases.workflow import WorkflowUsecase
 from usecases.workflow_transfer import WorkflowTransferUsecase
 
@@ -31,6 +32,7 @@ __all__ = [
     "UsageUsecase",
     "UserUsecase",
     "VectorUsecase",
+    "WebhookUsecase",
     "WorkflowTransferUsecase",
     "WorkflowUsecase",
 ]

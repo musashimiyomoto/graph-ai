@@ -25,3 +25,4 @@ class ExecutionSource(StrEnum):
     TELEGRAM = auto()
     SCHEDULE = auto()
     EMAIL = auto()
+    WEBHOOK = auto()

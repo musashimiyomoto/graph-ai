@@ -16,6 +16,7 @@ interface WorkflowSidebarProps {
   onDeleteWorkflow: (id: number) => void
   onDuplicateWorkflow: (id: number) => void
   onExportWorkflow: (id: number) => void
+  onCopyWebhook: (workflow: Workflow) => Promise<boolean>
   onImportWorkflow: (file: File) => void
   onOpenNewFromTemplate: () => void
   onAddNode: (type: NodeType) => void
@@ -32,6 +33,7 @@ export function WorkflowSidebar({
   onDeleteWorkflow,
   onDuplicateWorkflow,
   onExportWorkflow,
+  onCopyWebhook,
   onImportWorkflow,
   onOpenNewFromTemplate,
   onAddNode,
@@ -172,6 +174,7 @@ export function WorkflowSidebar({
                       onEdit={() => startEditing(workflow)}
                       onDuplicate={() => onDuplicateWorkflow(workflow.id)}
                       onExport={() => onExportWorkflow(workflow.id)}
+                      onCopyWebhook={() => onCopyWebhook(workflow)}
                       onDelete={() => onDeleteWorkflow(workflow.id)}
                     />
                   </div>

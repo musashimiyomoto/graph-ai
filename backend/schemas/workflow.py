@@ -3,9 +3,10 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from enums import NodeType
+from utils.webhooks import build_webhook_path
 
 
 class WorkflowCreate(BaseModel):
@@ -124,3 +125,9 @@ class WorkflowResponse(BaseModel):
     name: str = Field(default=..., description="Workflow name")
     created_at: datetime = Field(default=..., description="Created at")
     updated_at: datetime = Field(default=..., description="Updated at")
+
+    @computed_field
+    @property
+    def webhook_path(self) -> str:
+        """Return this workflow's stable signed public webhook path."""
+        return build_webhook_path(self.id)

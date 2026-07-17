@@ -66,7 +66,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.LOOP: {"label", "mode"},
     NodeType.LOOP_INPUT: {"label"},
     NodeType.LOOP_OUTPUT: {"label"},
-    NodeType.OUTPUT: {"label", "format"},
+    NodeType.OUTPUT: {"label", "format", "webhook_url"},
 }
 
 # Node types whose top-level "exactly one input/output" semantics are
@@ -241,6 +241,34 @@ class TestNodeCreate(BaseTestCase):
         }
 
         response = await self.client.post(url=self.url, json=payload, headers=headers)
+
+        expected = HTTPStatus.UNPROCESSABLE_ENTITY
+        if response.status_code != expected:
+            pytest.fail(f"Expected {expected}, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("webhook_url", [None, "/relative-callback"])
+    async def test_webhook_output_requires_absolute_callback_url(
+        self, webhook_url: str | None
+    ) -> None:
+        """Webhook Output requires a configured absolute HTTP(S) callback URL."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        data = {"label": "Webhook Output", "format": OutputNodeFormat.WEBHOOK}
+        if webhook_url is not None:
+            data["webhook_url"] = webhook_url
+
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "type": NodeType.OUTPUT,
+                "data": data,
+            },
+            headers=headers,
+        )
 
         expected = HTTPStatus.UNPROCESSABLE_ENTITY
         if response.status_code != expected:

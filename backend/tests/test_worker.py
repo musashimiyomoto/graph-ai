@@ -107,6 +107,16 @@ class _FakeSendEmail:
         _FakeSendEmail.calls.append((recipient, subject, text))
 
 
+class _FakeSendWebhook:
+    """Record outbound webhook delivery calls."""
+
+    calls: ClassVar[list[tuple[str, dict[str, Any]]]] = []
+
+    async def __call__(self, url: str, payload: dict[str, Any]) -> None:
+        """Record the callback URL and JSON body."""
+        _FakeSendWebhook.calls.append((url, payload))
+
+
 class TestPollTelegramUpdates(BaseTestCase):
     """Tests for ``worker.poll_telegram_updates``."""
 
@@ -535,6 +545,76 @@ class TestEmailReply(BaseTestCase):
             ("customer@example.com", "Re: Need help", "resolved")
         ]:
             pytest.fail(f"Unexpected email delivery: {_FakeSendEmail.calls}")
+
+
+class TestWebhookDelivery(BaseTestCase):
+    """Tests for callback delivery after an execution finishes."""
+
+    async def test_posts_finished_execution(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Webhook Output receives the final status and output payload."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+        fake_send_webhook = _FakeSendWebhook()
+        _FakeSendWebhook.calls = []
+        monkeypatch.setattr(worker_module, "send_webhook", fake_send_webhook)
+
+        user = await UserFactory.create_async(session=self.session)
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user.id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={
+                "label": "Output",
+                "format": "webhook",
+                "webhook_url": "https://hooks.example.com/result",
+            },
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=output_node.id,
+        )
+
+        async def _noop_enqueue(_execution_id: int) -> None:
+            """Skip ARQ enqueue; execute the job inline."""
+
+        execution = await ExecutionUsecase().create_execution(
+            session=self.session,
+            user_id=user.id,
+            data=ExecutionCreate(
+                workflow_id=workflow.id,
+                input_data=ExecutionInputPayload(value="callback result"),
+            ),
+            enqueue=_noop_enqueue,
+        )
+
+        await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)
+
+        expected_payload = {
+            "execution_id": execution.id,
+            "workflow_id": workflow.id,
+            "status": ExecutionStatus.SUCCESS.value,
+            "output": {"value": "callback result"},
+            "error": None,
+        }
+        if _FakeSendWebhook.calls != [
+            ("https://hooks.example.com/result", expected_payload)
+        ]:
+            pytest.fail(f"Unexpected webhook delivery: {_FakeSendWebhook.calls}")
 
 
 class TestPollScheduledTriggers(BaseTestCase):

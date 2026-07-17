@@ -25,12 +25,21 @@ class TestWorkflowCreate(BaseTestCase):
         data = await self.assert_response_dict(response=response)
         self.assert_has_keys(
             data,
-            {"id", "owner_id", "name", "created_at", "updated_at"},
+            {
+                "id",
+                "owner_id",
+                "name",
+                "webhook_path",
+                "created_at",
+                "updated_at",
+            },
         )
         if data["name"] != payload["name"]:
             pytest.fail("Workflow name did not match request")
         if data["owner_id"] != user["id"]:
             pytest.fail("Workflow owner did not match current user")
+        if not data["webhook_path"].startswith(f"/webhooks/{data['id']}."):
+            pytest.fail("Workflow response did not include its signed webhook path")
 
     @pytest.mark.asyncio
     async def test_empty_name_rejected(self) -> None:

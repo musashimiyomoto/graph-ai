@@ -19,7 +19,8 @@ import { useGraphState } from './hooks/useGraphState'
 import { useNodeCatalog } from './hooks/useNodeCatalog'
 import { useWorkflowState } from './hooks/useWorkflowState'
 import { useWorkflowTransfer } from './hooks/useWorkflowTransfer'
-import type { ApiError, NodeMeta, NodeType } from './lib/types'
+import { publicWebhookUrl } from './lib/api'
+import type { ApiError, NodeMeta, NodeType, Workflow } from './lib/types'
 
 interface NodeCreateDraft {
   type: NodeType
@@ -158,6 +159,20 @@ export function App() {
   })
 
   const activeWorkflow = workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null
+
+  const handleCopyWebhook = useCallback(
+    async (workflow: Workflow): Promise<boolean> => {
+      try {
+        await navigator.clipboard.writeText(publicWebhookUrl(workflow.webhook_path))
+        setError(null)
+        return true
+      } catch {
+        handleError({ message: 'Could not copy the webhook URL.', status: 0 })
+        return false
+      }
+    },
+    [handleError],
+  )
   const activeParentNode = useMemo(
     () => nodes.find((node) => Number(node.id) === activeParentNodeId) ?? null,
     [nodes, activeParentNodeId],
@@ -452,6 +467,7 @@ export function App() {
           onDeleteWorkflow={handleDeleteWorkflow}
           onDuplicateWorkflow={(id) => void handleDuplicateWorkflow(id)}
           onExportWorkflow={(id) => void handleExportWorkflow(id)}
+          onCopyWebhook={handleCopyWebhook}
           onImportWorkflow={(file) => void handleImportWorkflow(file)}
           onOpenNewFromTemplate={() => setShowNewFromTemplate(true)}
           onAddNode={handleAddTopLevelNode}

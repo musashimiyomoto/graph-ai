@@ -15,6 +15,7 @@ function makeField(
     widget?: NodeFieldWidget
     label?: string
     validators?: NodeFieldValidator
+    visibleWhen?: NodeCatalogFieldVisibility | null
   } = {},
 ): NodeCatalogField {
   return {
@@ -30,7 +31,7 @@ function makeField(
     },
     default: undefined,
     datasource: null,
-    visible_when: null,
+    visible_when: overrides.visibleWhen ?? null,
   }
 }
 
@@ -163,6 +164,36 @@ describe('validateFields', () => {
       format: 'Format has an invalid option',
     })
     expect(validateFields(fields, { format: 'telegram' })).toEqual({})
+  })
+
+  it('only requires a conditionally visible field while it is visible', () => {
+    const fields = [
+      makeField({
+        name: 'webhook_url',
+        required: true,
+        label: 'Callback URL',
+        visibleWhen: visibility({ equals: 'webhook' }),
+      }),
+    ]
+    expect(validateFields(fields, { other: 'txt' })).toEqual({})
+    expect(validateFields(fields, { other: 'webhook', webhook_url: '' })).toEqual({
+      webhook_url: 'Callback URL is required',
+    })
+  })
+
+  it('requires an absolute HTTP(S) URL', () => {
+    const fields = [
+      makeField({
+        name: 'webhook_url',
+        required: true,
+        label: 'Callback URL',
+        validators: { url: true },
+      }),
+    ]
+    expect(validateFields(fields, { webhook_url: '/relative' })).toEqual({
+      webhook_url: 'Callback URL must be an absolute HTTP(S) URL',
+    })
+    expect(validateFields(fields, { webhook_url: 'https://example.com/callback' })).toEqual({})
   })
 
   it('collects errors across multiple fields', () => {

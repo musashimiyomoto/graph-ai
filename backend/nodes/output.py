@@ -140,6 +140,26 @@ DEFINITION = NodeDefinition(
                 field="format", equals=OutputNodeFormat.EMAIL.value
             ),
         ),
+        NodeFieldSpec(
+            name="webhook_url",
+            required=True,
+            validators={
+                ValidatorType.MIN_LENGTH.value: 1,
+                ValidatorType.URL.value: True,
+            },
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.TEXT,
+                label="Callback URL",
+                placeholder="https://example.com/workflow-result",
+                help=(
+                    "The public HTTP endpoint that receives the execution result "
+                    "as a JSON POST request."
+                ),
+            ),
+            visible_when=NodeFieldVisibility(
+                field="format", equals=OutputNodeFormat.WEBHOOK.value
+            ),
+        ),
     ),
     build_handler=_build_handler,
 )

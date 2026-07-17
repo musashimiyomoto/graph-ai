@@ -37,8 +37,8 @@ export function ActivityLog({
           </div>
         ) : sorted.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
-            No real traffic yet. Runs from Telegram (or another connected
-            channel) will show up here.
+            No real traffic yet. Runs from a connected channel or webhook will
+            show up here.
           </div>
         ) : (
           <div className="flex flex-col gap-3">

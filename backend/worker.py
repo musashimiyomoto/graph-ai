@@ -25,7 +25,12 @@ from enums import (
     NodeType,
     OutputNodeFormat,
 )
-from exceptions import BaseError, EmailConnectionError, TelegramAPIError
+from exceptions import (
+    BaseError,
+    EmailConnectionError,
+    TelegramAPIError,
+    WebhookConnectionError,
+)
 from integrations.email import (
     EmailConnectionConfig,
     InboundEmail,
@@ -33,6 +38,7 @@ from integrations.email import (
     send_email,
 )
 from integrations.telegram import get_updates, send_message
+from integrations.webhook import send_webhook
 from llm.ollama import OllamaClient
 from logging_config import configure_logging
 from observability import init_sentry
@@ -98,6 +104,7 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
         )
         await _reply_via_telegram(session=session, execution_id=execution_id)
         await _reply_via_email(session=session, execution_id=execution_id)
+        await _deliver_via_webhook(session=session, execution_id=execution_id)
 
     _record_execution_metrics(result)
 
@@ -384,6 +391,42 @@ async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
         )
     except EmailConnectionError:
         logger.exception("Failed to deliver email reply for execution %s", execution_id)
+
+
+async def _deliver_via_webhook(session: "AsyncSession", execution_id: int) -> None:
+    """POST a finished execution to a webhook-formatted Output node."""
+    execution = await ExecutionRepository().get_by(session=session, id=execution_id)
+    if execution is None:
+        return
+
+    output_node = await NodeRepository().get_by(
+        session=session, workflow_id=execution.workflow_id, type=NodeType.OUTPUT
+    )
+    if (
+        output_node is None
+        or output_node.data.get("format") != OutputNodeFormat.WEBHOOK
+    ):
+        return
+
+    url = output_node.data.get("webhook_url")
+    if not isinstance(url, str) or not url.strip():
+        return
+
+    try:
+        await send_webhook(
+            url=url.strip(),
+            payload={
+                "execution_id": execution.id,
+                "workflow_id": execution.workflow_id,
+                "status": execution.status.value,
+                "output": execution.output_data,
+                "error": execution.error,
+            },
+        )
+    except WebhookConnectionError:
+        logger.exception(
+            "Failed to deliver webhook result for execution %s", execution_id
+        )
 
 
 def _email_nodes_triggered_by(

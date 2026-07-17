@@ -42,7 +42,7 @@ function requiredError(field: NodeCatalogField, value: unknown): string | null {
 
 function valueError(field: NodeCatalogField, value: unknown): string | null {
   const label = field.ui.label
-  const { min_length: minLength, ge, le, select } = field.validators
+  const { min_length: minLength, ge, le, select, url } = field.validators
 
   if (minLength !== undefined && typeof value === 'string') {
     if (value.length < minLength) {
@@ -69,6 +69,17 @@ function valueError(field: NodeCatalogField, value: unknown): string | null {
     return `${label} has an invalid option`
   }
 
+  if (url && typeof value === 'string') {
+    try {
+      const parsed = new URL(value)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return `${label} must be an absolute HTTP(S) URL`
+      }
+    } catch {
+      return `${label} must be an absolute HTTP(S) URL`
+    }
+  }
+
   return null
 }
 
@@ -87,6 +98,13 @@ export function validateFields(
 
   for (const field of fields) {
     const value = data[field.name]
+
+    if (
+      field.visible_when &&
+      !matchesVisibility(field.visible_when, data[field.visible_when.field])
+    ) {
+      continue
+    }
 
     if (field.required) {
       const required = requiredError(field, value)

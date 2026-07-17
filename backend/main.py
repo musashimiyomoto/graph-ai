@@ -24,6 +24,7 @@ from api.routers import (
     usage,
     user,
     vector,
+    webhook,
     workflow,
     workflow_template,
 )
@@ -133,3 +134,4 @@ app.include_router(router=telegram_bot.router)
 app.include_router(router=vector.router)
 app.include_router(router=usage.router)
 app.include_router(router=metrics.router)
+app.include_router(router=webhook.router)

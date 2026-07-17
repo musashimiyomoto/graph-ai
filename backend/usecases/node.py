@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from urllib.parse import urlparse
 
 from croniter import croniter
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,6 +134,9 @@ class NodeUsecase:
         if ValidatorType.CRON.value in validators:
             self._validate_cron_field(field=field, value=value, errors=errors)
 
+        if ValidatorType.URL.value in validators:
+            self._validate_url_field(field=field, value=value, errors=errors)
+
     def _validate_min_length_field(
         self,
         *,
@@ -220,6 +224,21 @@ class NodeUsecase:
         if not croniter.is_valid(value):
             errors.append(f"Field '{field.name}' must be a valid cron expression")
 
+    def _validate_url_field(
+        self,
+        *,
+        field: NodeFieldSpec,
+        value: object,
+        errors: list[str],
+    ) -> None:
+        """Append an error unless a value is an absolute HTTP(S) URL."""
+        if not isinstance(value, str):
+            errors.append(f"Field '{field.name}' must be an absolute http(s) URL")
+            return
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            errors.append(f"Field '{field.name}' must be an absolute http(s) URL")
+
     def _validate_node_data(
         self,
         node_type: NodeType,
@@ -253,6 +272,8 @@ class NodeUsecase:
             errors.append(f"Unexpected fields: {', '.join(sorted(unexpected))}")
 
         for field in spec.fields:
+            if not _field_is_visible(field, data):
+                continue
             if field.required and field.name not in data:
                 errors.append(f"Missing required field: '{field.name}'")
                 continue

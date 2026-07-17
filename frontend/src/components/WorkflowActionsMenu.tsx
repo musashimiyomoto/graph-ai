@@ -4,25 +4,28 @@ interface WorkflowActionsMenuProps {
   onEdit: () => void
   onDuplicate: () => void
   onExport: () => void
+  onCopyWebhook: () => Promise<boolean>
   onDelete: () => void
 }
 
-// Collapses the per-workflow Edit/Duplicate/Export/Delete actions behind one
-// "..." toggle — four always-visible pixel-icon buttons don't fit the
-// 280px sidebar column once the workflow name itself needs room to breathe.
+// Collapses the per-workflow actions behind one "..." toggle — several
+// always-visible buttons don't fit the 280px sidebar once the name needs room.
 export function WorkflowActionsMenu({
   onEdit,
   onDuplicate,
   onExport,
+  onCopyWebhook,
   onDelete,
 }: WorkflowActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [webhookCopied, setWebhookCopied] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   function close(): void {
     setOpen(false)
     setConfirmingDelete(false)
+    setWebhookCopied(false)
   }
 
   useEffect(() => {
@@ -79,6 +82,16 @@ export function WorkflowActionsMenu({
             }}
           >
             Export
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 text-left text-xs hover:bg-white/5"
+            title="Enable the webhook format on the workflow Input node before using this URL"
+            onClick={() => {
+              void onCopyWebhook().then(setWebhookCopied)
+            }}
+          >
+            {webhookCopied ? 'Copied' : 'Copy webhook URL'}
           </button>
           {confirmingDelete ? (
             <div className="flex gap-1">

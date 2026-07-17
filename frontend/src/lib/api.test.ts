@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getWorkflows, login, setToken } from './api'
+import { getWorkflows, login, publicWebhookUrl, setToken } from './api'
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -91,5 +91,13 @@ describe('api request()', () => {
 
     const [, options] = fetchMock.mock.calls[0]
     expect(options.headers['Authorization']).toBe('Bearer abc123')
+  })
+})
+
+describe('publicWebhookUrl()', () => {
+  it('builds an absolute URL through the public API prefix', () => {
+    expect(publicWebhookUrl('/webhooks/12.signature')).toBe(
+      `${window.location.origin}/api/webhooks/12.signature`,
+    )
   })
 })
