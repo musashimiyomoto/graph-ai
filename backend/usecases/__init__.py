@@ -3,6 +3,7 @@
 from usecases.audit import AuditEvent, AuditUsecase
 from usecases.auth import AuthUsecase
 from usecases.edge import EdgeUsecase
+from usecases.email_account import EmailAccountUsecase
 from usecases.execution import ExecutionListFilter, ExecutionTrigger, ExecutionUsecase
 from usecases.health import HealthUsecase
 from usecases.llm_provider import LLMProviderUsecase
@@ -19,6 +20,7 @@ __all__ = [
     "AuditUsecase",
     "AuthUsecase",
     "EdgeUsecase",
+    "EmailAccountUsecase",
     "ExecutionListFilter",
     "ExecutionTrigger",
     "ExecutionUsecase",

@@ -51,6 +51,7 @@ class InputNodeFormat(StrEnum):
     TXT = auto()
     TELEGRAM = auto()
     SCHEDULE = auto()
+    EMAIL = auto()
 
 
 class OutputNodeFormat(StrEnum):
@@ -58,6 +59,7 @@ class OutputNodeFormat(StrEnum):
 
     TXT = auto()
     TELEGRAM = auto()
+    EMAIL = auto()
 
 
 class ConditionType(StrEnum):

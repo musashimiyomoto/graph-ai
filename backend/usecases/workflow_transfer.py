@@ -39,6 +39,7 @@ from usecases.workflow import WorkflowUsecase
 # and VECTOR_COLLECTION are plain strings naming a model/collection, not an
 # owned resource ID, so they travel with the export unchanged.
 _ACCOUNT_PRIVATE_DATASOURCE_KINDS = {
+    NodeFieldDataSourceKind.EMAIL_ACCOUNT,
     NodeFieldDataSourceKind.LLM_PROVIDER,
     NodeFieldDataSourceKind.TELEGRAM_BOT,
 }

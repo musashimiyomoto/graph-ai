@@ -11,6 +11,7 @@ from croniter import CroniterError, croniter
 from api.metrics import record_execution
 from constants import DEFAULT_TIMEOUT
 from db.repositories import (
+    EmailAccountRepository,
     ExecutionRepository,
     NodeRepository,
     NodeScheduleRepository,
@@ -24,7 +25,13 @@ from enums import (
     NodeType,
     OutputNodeFormat,
 )
-from exceptions import BaseError, TelegramAPIError
+from exceptions import BaseError, EmailConnectionError, TelegramAPIError
+from integrations.email import (
+    EmailConnectionConfig,
+    InboundEmail,
+    fetch_messages,
+    send_email,
+)
 from integrations.telegram import get_updates, send_message
 from llm.ollama import OllamaClient
 from logging_config import configure_logging
@@ -42,7 +49,7 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.models import Node, NodeSchedule, TelegramBot
+    from db.models import EmailAccount, Node, NodeSchedule, TelegramBot
     from schemas import ExecutionResponse
 
 logger = logging.getLogger(__name__)
@@ -53,6 +60,9 @@ EnqueueCallback = Callable[[int], Awaitable[None]]
 _REAPER_MINUTES = set(range(0, 60, 5))
 # Short-poll Telegram for new messages every 10 seconds.
 _TELEGRAM_POLL_SECONDS = set(range(0, 60, 10))
+# Email polling opens an IMAP connection per active account, so keep it less
+# frequent than Telegram's lightweight HTTP short poll.
+_EMAIL_POLL_SECONDS = set(range(0, 60, 30))
 # Poll cron schedules twice a minute — cron's finest granularity is 1 minute,
 # so this keeps a due schedule's fire latency under 30 seconds without
 # polling much more often than that granularity warrants.
@@ -87,6 +97,7 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
             token_reset_publisher=token_reset_publisher,
         )
         await _reply_via_telegram(session=session, execution_id=execution_id)
+        await _reply_via_email(session=session, execution_id=execution_id)
 
     _record_execution_metrics(result)
 
@@ -102,9 +113,7 @@ def _record_execution_metrics(result: "ExecutionResponse") -> None:
     """
     duration = 0.0
     if result.finished_at is not None:
-        duration = max(
-            0.0, (result.finished_at - result.started_at).total_seconds()
-        )
+        duration = max(0.0, (result.finished_at - result.started_at).total_seconds())
     record_execution(
         status=result.status.value,
         duration_seconds=duration,
@@ -295,6 +304,194 @@ async def _resolve_telegram_bot(
         return None
 
     return await TelegramBotRepository().get_by(session=session, id=bot_id)
+
+
+def _email_config(account: "EmailAccount") -> EmailConnectionConfig:
+    """Build decrypted integration config from a persisted account."""
+    return EmailConnectionConfig(
+        email_address=account.email_address,
+        username=account.username,
+        password=decrypt(account.password),
+        imap_host=account.imap_host,
+        imap_port=account.imap_port,
+        imap_use_ssl=account.imap_use_ssl,
+        smtp_host=account.smtp_host,
+        smtp_port=account.smtp_port,
+        smtp_use_tls=account.smtp_use_tls,
+        smtp_use_ssl=account.smtp_use_ssl,
+    )
+
+
+def _email_reply_subject(configured: object, triggered: str | None) -> str:
+    """Resolve a fixed subject or derive a conventional reply subject."""
+    if isinstance(configured, str) and configured.strip():
+        return configured.strip()
+    if triggered:
+        return triggered if triggered.lower().startswith("re:") else f"Re: {triggered}"
+    return "Workflow result"
+
+
+async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
+    """Deliver a finished execution through an email-formatted Output node."""
+    execution_repository = ExecutionRepository()
+    execution = await execution_repository.get_by(session=session, id=execution_id)
+    if execution is None:
+        return
+
+    output_node = await NodeRepository().get_by(
+        session=session, workflow_id=execution.workflow_id, type=NodeType.OUTPUT
+    )
+    if output_node is None or output_node.data.get("format") != OutputNodeFormat.EMAIL:
+        return
+
+    workflow = await WorkflowRepository().get_by(
+        session=session, id=execution.workflow_id
+    )
+    account_id = output_node.data.get("email_account_id")
+    if workflow is None or not isinstance(account_id, int):
+        return
+    account = await EmailAccountRepository().get_by(
+        session=session, id=account_id, user_id=workflow.owner_id
+    )
+    if account is None:
+        return
+
+    configured_recipient = output_node.data.get("email_to")
+    recipient = (
+        configured_recipient.strip()
+        if isinstance(configured_recipient, str) and configured_recipient.strip()
+        else execution.email_reply_to
+    )
+    if not recipient:
+        return
+
+    if execution.status is ExecutionStatus.SUCCESS:
+        output = execution.output_data or {}
+        text = output.get("value", "") if isinstance(output, dict) else ""
+    elif execution.status is ExecutionStatus.FAILED:
+        text = f"Execution failed: {execution.error or 'unknown error'}"
+    else:
+        return
+
+    try:
+        await send_email(
+            config=_email_config(account),
+            recipient=recipient,
+            subject=_email_reply_subject(
+                output_node.data.get("email_subject"), execution.email_subject
+            ),
+            text=text or "(empty output)",
+        )
+    except EmailConnectionError:
+        logger.exception("Failed to deliver email reply for execution %s", execution_id)
+
+
+def _email_nodes_triggered_by(
+    account: "EmailAccount", input_nodes: list["Node"]
+) -> list["Node"]:
+    """Filter email Input nodes that reference an account."""
+    return [
+        node
+        for node in input_nodes
+        if node.data.get("format") == InputNodeFormat.EMAIL
+        and node.data.get("email_account_id") == account.id
+    ]
+
+
+def _email_input_value(message: InboundEmail) -> str:
+    """Compose subject and body into the engine's text input contract."""
+    value = (
+        f"Subject: {message.subject}\n\n{message.body}"
+        if message.subject
+        else message.body
+    )
+    return value[:50_000]
+
+
+async def _trigger_email_executions(
+    session: "AsyncSession",
+    account: "EmailAccount",
+    node: "Node",
+    messages: list[InboundEmail],
+    enqueue: EnqueueCallback,
+) -> None:
+    """Create one execution per incoming email for one Input node."""
+    workflow = await WorkflowRepository().get_by(session=session, id=node.workflow_id)
+    if workflow is None or workflow.owner_id != account.user_id:
+        return
+
+    usecase = ExecutionUsecase()
+    for message in messages:
+        if not message.sender:
+            continue
+        try:
+            await usecase.create_execution(
+                session=session,
+                user_id=workflow.owner_id,
+                data=ExecutionCreate(
+                    workflow_id=node.workflow_id,
+                    input_data=ExecutionInputPayload(value=_email_input_value(message)),
+                ),
+                enqueue=enqueue,
+                trigger=ExecutionTrigger(
+                    source=ExecutionSource.EMAIL,
+                    email_reply_to=message.sender,
+                    email_subject=message.subject,
+                ),
+            )
+        except BaseError:
+            logger.exception(
+                "Failed to create execution from email for workflow %s",
+                node.workflow_id,
+            )
+
+
+async def poll_email_updates(
+    ctx: dict[Any, Any], *args: object, **kwargs: object
+) -> None:
+    """Poll enabled IMAP accounts and enqueue runs for new messages."""
+    del args, kwargs
+    redis: ArqRedis = ctx["redis"]
+
+    async def enqueue(execution_id: int) -> None:
+        """Enqueue a deduplicated execution job."""
+        await redis.enqueue_job(
+            "run_execution_task", execution_id, _job_id=f"execution:{execution_id}"
+        )
+
+    account_repository = EmailAccountRepository()
+    async with async_session() as session:
+        accounts = await account_repository.get_all(session=session, enabled=True)
+        input_nodes = await NodeRepository().get_all(
+            session=session, type=NodeType.INPUT
+        )
+        for account in accounts:
+            nodes = _email_nodes_triggered_by(account, input_nodes)
+            if not nodes:
+                continue
+            try:
+                messages = await fetch_messages(
+                    config=_email_config(account), last_uid=account.last_uid
+                )
+            except EmailConnectionError:
+                logger.exception("Failed to poll email account %s", account.id)
+                continue
+
+            for node in nodes:
+                await _trigger_email_executions(
+                    session=session,
+                    account=account,
+                    node=node,
+                    messages=messages,
+                    enqueue=enqueue,
+                )
+            if messages:
+                await account_repository.update_by(
+                    session=session,
+                    data={"last_uid": max(message.uid for message in messages)},
+                    id=account.id,
+                )
+                await session.commit()
 
 
 async def poll_telegram_updates(
@@ -640,6 +837,7 @@ class WorkerSettings:
     cron_jobs: ClassVar[list] = [
         cron(reap_stuck_executions, minute=_REAPER_MINUTES),
         cron(poll_telegram_updates, second=_TELEGRAM_POLL_SECONDS),
+        cron(poll_email_updates, second=_EMAIL_POLL_SECONDS),
         cron(poll_scheduled_triggers, second=_SCHEDULE_POLL_SECONDS),
     ]
     redis_settings = redis_settings.arq

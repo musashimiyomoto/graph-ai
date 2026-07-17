@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { ApiError } from '../lib/types'
+import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
 import { ProviderSettings } from './ProviderSettings'
 import { TelegramSettings } from './TelegramSettings'
@@ -22,6 +23,7 @@ interface SettingsSection {
 const SECTIONS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
+  { id: 'email', label: 'Email Accounts', Component: EmailSettings },
   { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
 

@@ -2,6 +2,8 @@ import type {
   ApiError,
   EdgeCreatePayload,
   EdgeResponse,
+  EmailAccount,
+  EmailAccountCreatePayload,
   Execution,
   ExecutionSource,
   ExecutionStreamEvent,
@@ -420,6 +422,23 @@ export async function createTelegramBot(
 
 export async function deleteTelegramBot(botId: number): Promise<void> {
   await request(`/telegram-bots/${botId}`, { method: 'DELETE' })
+}
+
+export async function getEmailAccounts(): Promise<EmailAccount[]> {
+  return request<EmailAccount[]>('/email-accounts')
+}
+
+export async function createEmailAccount(
+  payload: EmailAccountCreatePayload,
+): Promise<EmailAccount> {
+  return request<EmailAccount>('/email-accounts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteEmailAccount(accountId: number): Promise<void> {
+  await request(`/email-accounts/${accountId}`, { method: 'DELETE' })
 }
 
 export async function getVectorCollections(): Promise<VectorCollection[]> {

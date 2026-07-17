@@ -3,6 +3,7 @@
 from db.models.audit_log import AuditLog
 from db.models.base import Base, BaseWithDate, BaseWithID
 from db.models.edge import Edge
+from db.models.email_account import EmailAccount
 from db.models.execution import Execution
 from db.models.llm_provider import LLMProvider
 from db.models.node import Node
@@ -20,6 +21,7 @@ __all__ = [
     "BaseWithDate",
     "BaseWithID",
     "Edge",
+    "EmailAccount",
     "Execution",
     "LLMProvider",
     "Node",

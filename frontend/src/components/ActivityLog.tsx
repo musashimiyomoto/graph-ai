@@ -10,7 +10,7 @@ interface ActivityLogProps {
   nodeMetaByNodeId: Map<number, NodeMeta>
 }
 
-// Read-only log of real inbound traffic (Telegram today), separate from
+// Read-only log of real inbound traffic from connected channels, separate from
 // Test Runs so a flow's actual usage is never confused with the owner's own
 // trial-and-error while building it.
 export function ActivityLog({

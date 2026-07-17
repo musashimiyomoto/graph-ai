@@ -2,6 +2,7 @@
 
 from db.repositories.audit_log import AuditLogRepository
 from db.repositories.edge import EdgeRepository
+from db.repositories.email_account import EmailAccountRepository
 from db.repositories.execution import ExecutionRepository
 from db.repositories.llm_provider import LLMProviderRepository
 from db.repositories.node import NodeRepository
@@ -16,6 +17,7 @@ from db.repositories.workflow_version import WorkflowVersionRepository
 __all__ = [
     "AuditLogRepository",
     "EdgeRepository",
+    "EmailAccountRepository",
     "ExecutionRepository",
     "LLMProviderRepository",
     "NodeExecutionRepository",

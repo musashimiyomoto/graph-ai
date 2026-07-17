@@ -73,6 +73,20 @@ DEFINITION = NodeDefinition(
             ),
         ),
         NodeFieldSpec(
+            name="email_account_id",
+            required=False,
+            validators={ValidatorType.GE.value: 1},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.EMAIL_ACCOUNT,
+                label="Email Account",
+                help="The IMAP inbox to poll for incoming messages.",
+            ),
+            datasource=NodeFieldDataSource(kind=NodeFieldDataSourceKind.EMAIL_ACCOUNT),
+            visible_when=NodeFieldVisibility(
+                field="format", equals=InputNodeFormat.EMAIL.value
+            ),
+        ),
+        NodeFieldSpec(
             name="cron_expression",
             required=False,
             validators={ValidatorType.CRON.value: True},

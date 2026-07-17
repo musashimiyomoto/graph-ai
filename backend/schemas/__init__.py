@@ -2,6 +2,11 @@
 
 from schemas.auth import LoginCreate, LoginResponse
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
+from schemas.email_account import (
+    EmailAccountCreate,
+    EmailAccountResponse,
+    EmailAccountUpdate,
+)
 from schemas.execution import (
     ExecutionCreate,
     ExecutionGraphContext,
@@ -85,6 +90,9 @@ __all__ = [
     "EdgeCreate",
     "EdgeResponse",
     "EdgeUpdate",
+    "EmailAccountCreate",
+    "EmailAccountResponse",
+    "EmailAccountUpdate",
     "ExecutionCreate",
     "ExecutionGraphContext",
     "ExecutionInputPayload",

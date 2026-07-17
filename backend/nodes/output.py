@@ -92,6 +92,54 @@ DEFINITION = NodeDefinition(
                 field="format", equals=OutputNodeFormat.TELEGRAM.value
             ),
         ),
+        NodeFieldSpec(
+            name="email_account_id",
+            required=False,
+            validators={ValidatorType.GE.value: 1},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.EMAIL_ACCOUNT,
+                label="Email Account",
+                help="The SMTP account used to send the result.",
+            ),
+            datasource=NodeFieldDataSource(kind=NodeFieldDataSourceKind.EMAIL_ACCOUNT),
+            visible_when=NodeFieldVisibility(
+                field="format", equals=OutputNodeFormat.EMAIL.value
+            ),
+        ),
+        NodeFieldSpec(
+            name="email_to",
+            required=False,
+            validators={ValidatorType.MIN_LENGTH.value: 0},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.TEXT,
+                label="To",
+                placeholder="recipient@example.com",
+                help=(
+                    "Optional fixed recipient. Leave blank to reply to the sender "
+                    "that triggered the run."
+                ),
+            ),
+            visible_when=NodeFieldVisibility(
+                field="format", equals=OutputNodeFormat.EMAIL.value
+            ),
+        ),
+        NodeFieldSpec(
+            name="email_subject",
+            required=False,
+            validators={ValidatorType.MIN_LENGTH.value: 0},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.TEXT,
+                label="Subject",
+                placeholder="Workflow result",
+                help=(
+                    "Optional fixed subject. Replies use the incoming subject "
+                    "when blank."
+                ),
+            ),
+            visible_when=NodeFieldVisibility(
+                field="format", equals=OutputNodeFormat.EMAIL.value
+            ),
+        ),
     ),
     build_handler=_build_handler,
 )

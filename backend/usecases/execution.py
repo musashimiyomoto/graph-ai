@@ -209,13 +209,14 @@ class _Adjacency:
 class ExecutionTrigger:
     """Internal-only metadata about what triggered an execution.
 
-    Never set by the public API (which always creates a manual test run via
-    the default); the Telegram poller passes ``source=ExecutionSource.
-    TELEGRAM`` with the chat to reply to once the run finishes.
+    Never set by the public API. Channel pollers attach the address/chat needed
+    to deliver the finished result back to the triggering conversation.
     """
 
     source: ExecutionSource = ExecutionSource.MANUAL
     telegram_chat_id: int | None = None
+    email_reply_to: str | None = None
+    email_subject: str | None = None
 
 
 @dataclass(frozen=True)
@@ -270,9 +271,7 @@ class ExecutionUsecase:
             user_id: The owner user ID.
             data: The execution payload.
             enqueue: Callback that schedules the execution for background running.
-            trigger: What triggered this run and, for Telegram, which chat to
-                reply to. Defaults to a manual test run; only internal callers
-                (the Telegram poller) pass a non-default value.
+            trigger: Internal source and reply metadata for channel-triggered runs.
 
         Returns:
             The created execution in ``CREATED`` (queued) state.
@@ -320,6 +319,8 @@ class ExecutionUsecase:
                 "status": ExecutionStatus.CREATED,
                 "source": trigger.source,
                 "telegram_chat_id": trigger.telegram_chat_id,
+                "email_reply_to": trigger.email_reply_to,
+                "email_subject": trigger.email_subject,
             },
         )
         await self._audit_usecase.record(
@@ -1576,10 +1577,7 @@ class ExecutionUsecase:
             BaseError: If the node handler fails.
 
         """
-        if (
-            node.type not in {NodeType.INPUT, NodeType.LOOP_INPUT}
-            and not parent_values
-        ):
+        if node.type not in {NodeType.INPUT, NodeType.LOOP_INPUT} and not parent_values:
             message = f"Node {node.id} does not have input value"
             raise ExecutionGraphValidationError(message=message)
 
@@ -1871,9 +1869,7 @@ class ExecutionUsecase:
                 "completion_tokens": (
                     outcome.usage.completion_tokens if outcome.usage else None
                 ),
-                "total_tokens": (
-                    outcome.usage.total_tokens if outcome.usage else None
-                ),
+                "total_tokens": (outcome.usage.total_tokens if outcome.usage else None),
                 "started_at": started_at,
                 "finished_at": datetime.now(tz=UTC),
             },
@@ -1913,10 +1909,12 @@ class ExecutionUsecase:
             output_data: Final output payload.
 
         """
-        prompt_tokens, completion_tokens, total_tokens = (
-            await self._node_execution_repository.sum_tokens(
-                session=session, execution_id=execution_id
-            )
+        (
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        ) = await self._node_execution_repository.sum_tokens(
+            session=session, execution_id=execution_id
         )
         won = await self._execution_repository.update_status_if(
             session=session,
@@ -1952,10 +1950,12 @@ class ExecutionUsecase:
             error: Failure reason.
 
         """
-        prompt_tokens, completion_tokens, total_tokens = (
-            await self._node_execution_repository.sum_tokens(
-                session=session, execution_id=execution_id
-            )
+        (
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        ) = await self._node_execution_repository.sum_tokens(
+            session=session, execution_id=execution_id
         )
         won = await self._execution_repository.update_status_if(
             session=session,

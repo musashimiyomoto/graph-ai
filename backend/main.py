@@ -14,6 +14,7 @@ from api.metrics import http_request_duration_seconds, http_requests_total
 from api.routers import (
     auth,
     edge,
+    email_account,
     execution,
     health,
     llm_provider,
@@ -94,9 +95,9 @@ async def _record_http_metrics(
     path = _route_label(request)
     # /metrics itself is excluded so a scrape doesn't inflate its own counters.
     if path != "/metrics":
-        http_request_duration_seconds.labels(
-            method=request.method, path=path
-        ).observe(time.perf_counter() - start)
+        http_request_duration_seconds.labels(method=request.method, path=path).observe(
+            time.perf_counter() - start
+        )
         http_requests_total.labels(
             method=request.method, path=path, status=str(response.status_code)
         ).inc()
@@ -125,6 +126,7 @@ app.include_router(router=workflow.router)
 app.include_router(router=workflow_template.router)
 app.include_router(router=node.router)
 app.include_router(router=edge.router)
+app.include_router(router=email_account.router)
 app.include_router(router=execution.router)
 app.include_router(router=llm_provider.router)
 app.include_router(router=telegram_bot.router)

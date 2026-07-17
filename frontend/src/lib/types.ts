@@ -5,10 +5,10 @@ export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
 export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 
 // What triggered an execution: the owner testing the flow, or real inbound
-// traffic (Telegram messages or a cron schedule firing). Lets the UI split
+// traffic (channel messages or a cron schedule firing). Lets the UI split
 // "Test Runs" (a sandbox for trying the flow before it's relied on) from
 // "Activity Log" (real usage) instead of merging them into one list.
-export type ExecutionSource = 'manual' | 'telegram' | 'schedule'
+export type ExecutionSource = 'manual' | 'telegram' | 'schedule' | 'email'
 
 export interface RunInputPayload {
   value: string
@@ -181,12 +181,14 @@ export type NodeFieldWidget =
   | 'provider'
   | 'model'
   | 'telegram_bot'
+  | 'email_account'
   | 'vector_collection'
 
 export type NodeFieldDataSourceKind =
   | 'llm_provider'
   | 'llm_model'
   | 'telegram_bot'
+  | 'email_account'
   | 'vector_collection'
 
 export type PortType = 'text' | 'json' | 'file' | 'list'
@@ -291,6 +293,36 @@ export interface TelegramBot {
 export interface TelegramBotCreatePayload {
   name: string
   bot_token: string
+}
+
+export interface EmailAccount {
+  id: number
+  user_id: number
+  name: string
+  email_address: string
+  username: string
+  imap_host: string
+  imap_port: number
+  imap_use_ssl: boolean
+  smtp_host: string
+  smtp_port: number
+  smtp_use_tls: boolean
+  smtp_use_ssl: boolean
+  enabled: boolean
+}
+
+export interface EmailAccountCreatePayload {
+  name: string
+  email_address: string
+  username: string
+  password: string
+  imap_host: string
+  imap_port: number
+  imap_use_ssl: boolean
+  smtp_host: string
+  smtp_port: number
+  smtp_use_tls: boolean
+  smtp_use_ssl: boolean
 }
 
 export interface NodeExecutionResult {

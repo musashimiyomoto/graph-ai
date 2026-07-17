@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 
+import { useEmailAccounts } from '../hooks/useEmailAccounts'
 import { useLlmProviders } from '../hooks/useLlmProviders'
 import { useProviderModels } from '../hooks/useProviderModels'
 import { useTelegramBots } from '../hooks/useTelegramBots'
 import { useVectorCollections } from '../hooks/useVectorCollections'
 import type {
+  EmailAccount,
   LlmModel,
   LlmProvider,
   NodeCatalogField,
@@ -202,6 +204,31 @@ function TelegramBotField({
   )
 }
 
+function EmailAccountField({
+  accounts,
+  value,
+  onChange,
+}: {
+  accounts: EmailAccount[]
+  value: unknown
+  onChange: (value: number) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      <option value="">-- select account --</option>
+      {accounts.map((account) => (
+        <option key={account.id} value={account.id}>
+          {account.name} ({account.email_address})
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function VectorCollectionField({
   collections,
   value,
@@ -238,6 +265,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   const hasTelegramBotDatasource = fields.some(
     (field) => field.datasource?.kind === 'telegram_bot',
   )
+  const hasEmailAccountDatasource = fields.some(
+    (field) => field.datasource?.kind === 'email_account',
+  )
   const hasVectorCollectionDatasource = fields.some(
     (field) => field.datasource?.kind === 'vector_collection',
   )
@@ -257,6 +287,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   })
   const { bots, loading: botsLoading } = useTelegramBots({
     enabled: hasTelegramBotDatasource,
+  })
+  const { accounts, loading: accountsLoading } = useEmailAccounts({
+    enabled: hasEmailAccountDatasource,
   })
   const { collections } = useVectorCollections({
     enabled: hasVectorCollectionDatasource,
@@ -283,6 +316,11 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
     }
     if (field.ui.widget === 'telegram_bot' && !botsLoading) {
       return bots.some((bot) => bot.id === Number(value)) ? null : 'Selected bot no longer exists.'
+    }
+    if (field.ui.widget === 'email_account' && !accountsLoading) {
+      return accounts.some((account) => account.id === Number(value))
+        ? null
+        : 'Selected email account no longer exists.'
     }
     return null
   }
@@ -355,6 +393,16 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
           bots={bots}
           value={value}
           onChange={(botId) => updateField(field.name, botId)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'email_account') {
+      return (
+        <EmailAccountField
+          accounts={accounts}
+          value={value}
+          onChange={(accountId) => updateField(field.name, accountId)}
         />
       )
     }

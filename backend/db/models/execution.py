@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Text, func
+from sqlalchemy import BigInteger, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,7 +38,7 @@ class Execution(BaseWithID):
         default=ExecutionSource.MANUAL,
         server_default=ExecutionSource.MANUAL.name,
         nullable=False,
-        comment="What triggered this execution (manual test run vs Telegram traffic)",
+        comment="Channel or mechanism that triggered this execution",
     )
     input_data: Mapped[dict | None] = mapped_column(
         JSONB, comment="Input data for execution"
@@ -50,6 +50,12 @@ class Execution(BaseWithID):
     telegram_chat_id: Mapped[int | None] = mapped_column(
         BigInteger,
         comment="Telegram chat to reply to, if this run was triggered by a message",
+    )
+    email_reply_to: Mapped[str | None] = mapped_column(
+        String(320), comment="Sender address to reply to for email-triggered runs"
+    )
+    email_subject: Mapped[str | None] = mapped_column(
+        String(998), comment="Subject of the email that triggered this run"
     )
 
     # Run-level token totals, summed across every LLM node in the run. NULL

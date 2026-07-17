@@ -8,14 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 import worker as worker_module
 from db.repositories import (
+    EmailAccountRepository,
     ExecutionRepository,
     NodeScheduleRepository,
     TelegramBotRepository,
 )
 from enums import ExecutionSource, ExecutionStatus, NodeType
+from integrations.email import EmailConnectionConfig, InboundEmail
 from schemas import ExecutionCreate, ExecutionInputPayload
 from tests.factories import (
     EdgeFactory,
+    EmailAccountFactory,
     NodeFactory,
     NodeScheduleFactory,
     TelegramBotFactory,
@@ -28,6 +31,7 @@ from usecases import ExecutionTrigger, ExecutionUsecase
 _FAKE_CHAT_ID = 999
 _FAKE_UPDATE_ID = 501
 _PINNED_CHAT_ID = 555
+_FAKE_EMAIL_UID = 701
 
 
 class _FakeRedis:
@@ -69,6 +73,38 @@ async def _fake_get_updates(
             },
         }
     ]
+
+
+async def _fake_fetch_messages(
+    config: EmailConnectionConfig, last_uid: int
+) -> list[InboundEmail]:
+    """Return one normalized incoming email."""
+    del config, last_uid
+    return [
+        InboundEmail(
+            uid=_FAKE_EMAIL_UID,
+            sender="customer@example.com",
+            subject="Need help",
+            body="My order is late",
+        )
+    ]
+
+
+class _FakeSendEmail:
+    """Record SMTP delivery calls."""
+
+    calls: ClassVar[list[tuple[str, str, str]]] = []
+
+    async def __call__(
+        self,
+        config: EmailConnectionConfig,
+        recipient: str,
+        subject: str,
+        text: str,
+    ) -> None:
+        """Record a message instead of connecting to SMTP."""
+        del config
+        _FakeSendEmail.calls.append((recipient, subject, text))
 
 
 class TestPollTelegramUpdates(BaseTestCase):
@@ -359,6 +395,146 @@ class TestTelegramReply(BaseTestCase):
 
         if fake_send_message.calls:
             pytest.fail("No Telegram reply should be sent without format=telegram")
+
+
+class TestPollEmailUpdates(BaseTestCase):
+    """Tests for ``worker.poll_email_updates``."""
+
+    async def test_creates_email_execution_and_advances_uid(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A new email is persisted with reply metadata and advances the UID."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+        monkeypatch.setattr(worker_module, "fetch_messages", _fake_fetch_messages)
+
+        user = await UserFactory.create_async(session=self.session)
+        account = await EmailAccountFactory.create_async(
+            session=self.session, user_id=user.id
+        )
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user.id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={
+                "label": "Input",
+                "format": "email",
+                "email_account_id": account.id,
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=output_node.id,
+        )
+        workflow_id = workflow.id
+        account_id = account.id
+
+        await worker_module.poll_email_updates({"redis": _FakeRedis()})
+
+        self.session.expire_all()
+        executions = await ExecutionRepository().get_all(
+            session=self.session, workflow_id=workflow_id
+        )
+        if len(executions) != 1:
+            pytest.fail(f"Expected one email execution, got {len(executions)}")
+        execution = executions[0]
+        if execution.source is not ExecutionSource.EMAIL:
+            pytest.fail("Execution was not tagged with the email source")
+        if execution.email_reply_to != "customer@example.com":
+            pytest.fail("Sender address was not saved for the reply")
+        if execution.email_subject != "Need help":
+            pytest.fail("Incoming subject was not saved")
+        if execution.input_data != {"value": "Subject: Need help\n\nMy order is late"}:
+            pytest.fail("Email subject and body did not reach the workflow input")
+        refreshed = await EmailAccountRepository().get_by(
+            session=self.session, id=account_id
+        )
+        if refreshed is None or refreshed.last_uid != _FAKE_EMAIL_UID:
+            pytest.fail("Email UID offset was not advanced")
+
+
+class TestEmailReply(BaseTestCase):
+    """Tests for SMTP delivery after an execution finishes."""
+
+    async def test_replies_to_triggering_sender(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Email Output uses the trigger sender and derives a reply subject."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+        fake_send_email = _FakeSendEmail()
+        _FakeSendEmail.calls = []
+        monkeypatch.setattr(worker_module, "send_email", fake_send_email)
+
+        user = await UserFactory.create_async(session=self.session)
+        account = await EmailAccountFactory.create_async(
+            session=self.session, user_id=user.id
+        )
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user.id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={
+                "label": "Output",
+                "format": "email",
+                "email_account_id": account.id,
+            },
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=output_node.id,
+        )
+
+        async def _noop_enqueue(_execution_id: int) -> None:
+            """Skip ARQ enqueue; execute the job inline."""
+
+        execution = await ExecutionUsecase().create_execution(
+            session=self.session,
+            user_id=user.id,
+            data=ExecutionCreate(
+                workflow_id=workflow.id,
+                input_data=ExecutionInputPayload(value="resolved"),
+            ),
+            enqueue=_noop_enqueue,
+            trigger=ExecutionTrigger(
+                source=ExecutionSource.EMAIL,
+                email_reply_to="customer@example.com",
+                email_subject="Need help",
+            ),
+        )
+
+        await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)
+
+        if _FakeSendEmail.calls != [
+            ("customer@example.com", "Re: Need help", "resolved")
+        ]:
+            pytest.fail(f"Unexpected email delivery: {_FakeSendEmail.calls}")
 
 
 class TestPollScheduledTriggers(BaseTestCase):

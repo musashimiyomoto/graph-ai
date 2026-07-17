@@ -9,6 +9,11 @@ from exceptions.edge import (
     EdgeNotFoundError,
     EdgePortMismatchError,
 )
+from exceptions.email import (
+    EmailAccountConfigError,
+    EmailAccountNotFoundError,
+    EmailConnectionError,
+)
 from exceptions.execution import (
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
@@ -56,6 +61,9 @@ __all__ = [
     "EdgeNodeMismatchError",
     "EdgeNotFoundError",
     "EdgePortMismatchError",
+    "EmailAccountConfigError",
+    "EmailAccountNotFoundError",
+    "EmailConnectionError",
     "EmptyDocumentError",
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",

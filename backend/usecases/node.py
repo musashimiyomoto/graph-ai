@@ -7,6 +7,7 @@ from croniter import croniter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repositories import (
+    EmailAccountRepository,
     LLMProviderRepository,
     NodeRepository,
     NodeScheduleRepository,
@@ -15,6 +16,7 @@ from db.repositories import (
 )
 from enums import InputNodeFormat, NodeType, ValidatorType
 from exceptions import (
+    EmailAccountNotFoundError,
     LLMProviderNotFoundError,
     NodeDataValidationError,
     NodeNotFoundError,
@@ -60,6 +62,7 @@ class NodeUsecase:
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
         self._telegram_bot_repository = TelegramBotRepository()
+        self._email_account_repository = EmailAccountRepository()
         self._node_schedule_repository = NodeScheduleRepository()
         self._node_catalog = build_node_catalog()
 
@@ -110,6 +113,7 @@ class NodeUsecase:
                 in {
                     NodeFieldDataSourceKind.LLM_PROVIDER,
                     NodeFieldDataSourceKind.TELEGRAM_BOT,
+                    NodeFieldDataSourceKind.EMAIL_ACCOUNT,
                     NodeFieldDataSourceKind.LLM_MODEL,
                 }
             )
@@ -312,40 +316,72 @@ class NodeUsecase:
             ):
                 continue
 
+            value = data[field.name]
             if field.datasource.kind is NodeFieldDataSourceKind.LLM_PROVIDER:
-                provider_id = data[field.name]
-                if not isinstance(provider_id, int) or provider_id <= 0:
-                    raise NodeDataValidationError(
-                        message=(
-                            f"Field '{field.name}' must be a positive integer "
-                            "provider ID."
-                        )
-                    )
-
-                provider = await self._llm_provider_repository.get_by(
-                    session=session,
-                    id=provider_id,
-                    user_id=user_id,
+                await self._validate_provider_reference(
+                    session=session, user_id=user_id, field=field, value=value
                 )
-                if not provider:
-                    raise LLMProviderNotFoundError
-
-            if field.datasource.kind is NodeFieldDataSourceKind.TELEGRAM_BOT:
-                bot_id = data[field.name]
-                if not isinstance(bot_id, int) or bot_id <= 0:
-                    raise NodeDataValidationError(
-                        message=(
-                            f"Field '{field.name}' must be a positive integer bot ID."
-                        )
-                    )
-
-                bot = await self._telegram_bot_repository.get_by(
-                    session=session,
-                    id=bot_id,
-                    user_id=user_id,
+            elif field.datasource.kind is NodeFieldDataSourceKind.TELEGRAM_BOT:
+                await self._validate_telegram_reference(
+                    session=session, user_id=user_id, field=field, value=value
                 )
-                if not bot:
-                    raise TelegramBotNotFoundError
+            elif field.datasource.kind is NodeFieldDataSourceKind.EMAIL_ACCOUNT:
+                await self._validate_email_reference(
+                    session=session, user_id=user_id, field=field, value=value
+                )
+
+    @staticmethod
+    def _reference_id(field: NodeFieldSpec, value: object, label: str) -> int:
+        """Validate and return a positive external-resource ID."""
+        if not isinstance(value, int) or value <= 0:
+            message = f"Field '{field.name}' must be a positive integer {label} ID."
+            raise NodeDataValidationError(message=message)
+        return value
+
+    async def _validate_provider_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a referenced LLM provider belongs to the user."""
+        provider_id = self._reference_id(field, value, "provider")
+        provider = await self._llm_provider_repository.get_by(
+            session=session, id=provider_id, user_id=user_id
+        )
+        if provider is None:
+            raise LLMProviderNotFoundError
+
+    async def _validate_telegram_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a referenced Telegram bot belongs to the user."""
+        bot_id = self._reference_id(field, value, "bot")
+        bot = await self._telegram_bot_repository.get_by(
+            session=session, id=bot_id, user_id=user_id
+        )
+        if bot is None:
+            raise TelegramBotNotFoundError
+
+    async def _validate_email_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a referenced email account belongs to the user."""
+        account_id = self._reference_id(field, value, "email account")
+        account = await self._email_account_repository.get_by(
+            session=session, id=account_id, user_id=user_id
+        )
+        if account is None:
+            raise EmailAccountNotFoundError
 
     async def _sync_node_schedule(
         self,
