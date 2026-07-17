@@ -54,8 +54,7 @@ class UsageRecordRepository(BaseRepository[UsageRecord]):
             .on_conflict_do_update(
                 constraint="uq_usage_records_user_period",
                 set_={
-                    "executions_count": UsageRecord.executions_count
-                    + executions_delta,
+                    "executions_count": UsageRecord.executions_count + executions_delta,
                     "total_tokens": UsageRecord.total_tokens + tokens_delta,
                 },
             )

@@ -63,9 +63,7 @@ class TestAuditLog(BaseTestCase):
         actions = {row["action"] for row in rows}
         if "workflow.create" not in actions:
             pytest.fail("Expected a workflow.create audit row")
-        matching = next(
-            row for row in rows if row["action"] == "workflow.create"
-        )
+        matching = next(row for row in rows if row["action"] == "workflow.create")
         if matching["entity_id"] != workflow["id"]:
             pytest.fail("Audit row entity_id did not match the created workflow")
 
@@ -120,9 +118,7 @@ class TestQuotaEnforcement(BaseTestCase):
 
         # First run is under the limit and records usage.
         await usecase.check_quota(session=self.session, user_id=user.id)
-        await usecase.record_run(
-            session=self.session, user_id=user.id, total_tokens=0
-        )
+        await usecase.record_run(session=self.session, user_id=user.id, total_tokens=0)
         await self.session.commit()
 
         # Second attempt is now at the limit and must be rejected.

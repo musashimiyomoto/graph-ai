@@ -10,6 +10,9 @@ from templates.batch_summarizer import DEFINITION as BATCH_SUMMARIZER_DEFINITION
 from templates.daily_digest import DEFINITION as DAILY_DIGEST_DEFINITION
 from templates.definition import TemplateDefinition
 from templates.document_ingest import DEFINITION as DOCUMENT_INGEST_DEFINITION
+from templates.email_auto_responder import (
+    DEFINITION as EMAIL_AUTO_RESPONDER_DEFINITION,
+)
 from templates.rag_chatbot import DEFINITION as RAG_CHATBOT_DEFINITION
 from templates.simple_chatbot import DEFINITION as SIMPLE_CHATBOT_DEFINITION
 from templates.support_ticket_router import (
@@ -24,6 +27,7 @@ TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
     RAG_CHATBOT_DEFINITION,
     DOCUMENT_INGEST_DEFINITION,
     TELEGRAM_ECHO_BOT_DEFINITION,
+    EMAIL_AUTO_RESPONDER_DEFINITION,
     DAILY_DIGEST_DEFINITION,
     SUPPORT_TICKET_ROUTER_DEFINITION,
     BATCH_SUMMARIZER_DEFINITION,

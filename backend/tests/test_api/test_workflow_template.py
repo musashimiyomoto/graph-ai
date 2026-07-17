@@ -4,7 +4,12 @@ from http import HTTPStatus
 
 import pytest
 
-from templates import TEMPLATE_DEFINITIONS, TemplateDefinition
+from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from templates import (
+    TEMPLATE_DEFINITIONS,
+    TemplateDefinition,
+    get_template_definition,
+)
 from tests.test_api.base import BaseTestCase
 
 
@@ -33,6 +38,31 @@ class TestWorkflowTemplateList(BaseTestCase):
 
         for item in data:
             self.assert_has_keys(item, {"key", "name", "description"})
+
+
+def test_email_auto_responder_template_uses_email_channel() -> None:
+    """The email demo listens to and replies through unbound email accounts."""
+    definition = get_template_definition("email-auto-responder")
+    input_node, llm_node, output_node = definition.graph.nodes
+
+    if input_node.type is not NodeType.INPUT:
+        pytest.fail("Email template should start with an Input node")
+    if input_node.data.get("format") != InputNodeFormat.EMAIL.value:
+        pytest.fail("Email template Input should use the email format")
+    if input_node.data.get("email_account_id") is not None:
+        pytest.fail("Template Input should not reference a private email account")
+
+    if llm_node.type is not NodeType.LLM:
+        pytest.fail("Email template should draft its reply with an LLM node")
+
+    if output_node.type is not NodeType.OUTPUT:
+        pytest.fail("Email template should end with an Output node")
+    if output_node.data.get("format") != OutputNodeFormat.EMAIL.value:
+        pytest.fail("Email template Output should use the email format")
+    if output_node.data.get("email_account_id") is not None:
+        pytest.fail("Template Output should not reference a private email account")
+    if output_node.data.get("email_to") or output_node.data.get("email_subject"):
+        pytest.fail("Email template should reply to the triggering sender and subject")
 
 
 class TestWorkflowTemplateInstantiate(BaseTestCase):
