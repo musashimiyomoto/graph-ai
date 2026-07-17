@@ -7,14 +7,14 @@
 //
 // Requires the full stack incl. ollama + worker:
 //   docker compose up -d --build          # everything, or at least: postgres redis qdrant backend frontend ollama worker
-//   docker compose exec -T ollama ollama list   # confirm qwen2.5:1.5b is pulled
+//   docker compose exec -T ollama ollama list   # confirm qwen2.5:0.5b is pulled
 //
 // Usage (from this skill dir):
 //   node smoke.mjs
-//   API=http://localhost:5000 MODEL=qwen2.5:1.5b node smoke.mjs
+//   API=http://localhost:5000 MODEL=qwen2.5:0.5b node smoke.mjs
 
 const API = process.env.API ?? 'http://localhost:5000'
-const MODEL = process.env.MODEL ?? 'qwen2.5:1.5b'
+const MODEL = process.env.MODEL ?? 'qwen2.5:0.5b'
 const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://ollama:11434' // reachable from the backend container
 const stamp = String(process.pid)
 const email = process.env.EMAIL ?? `smoke+${stamp}@graph.ai`

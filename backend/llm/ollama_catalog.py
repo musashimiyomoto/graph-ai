@@ -57,11 +57,4 @@ OLLAMA_MODEL_CATALOG: list[OllamaCatalogEntry] = [
             OllamaCatalogTag(tag="gemma2:9b", size_gb=5.4, params="9B"),
         ],
     ),
-    OllamaCatalogEntry(
-        name="nomic-embed-text",
-        description="Nomic embedding model — for vector/RAG embeddings.",
-        tags=[
-            OllamaCatalogTag(tag="nomic-embed-text", size_gb=0.3, params="137M"),
-        ],
-    ),
 ]

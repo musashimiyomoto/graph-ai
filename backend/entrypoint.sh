@@ -5,7 +5,7 @@ set -eu
 entrypoint_mode="${ENTRYPOINT_MODE:-backend}"
 
 if [ "${entrypoint_mode}" = "ollama" ]; then
-  model_name="${OLLAMA_BOOT_MODEL:-qwen2.5:1.5b}"
+  model_name="${OLLAMA_BOOT_MODEL:-qwen2.5:0.5b}"
 
   ollama serve &
   ollama_pid="$!"

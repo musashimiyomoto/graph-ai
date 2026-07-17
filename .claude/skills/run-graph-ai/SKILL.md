@@ -46,7 +46,7 @@ docker compose up -d --build postgres redis qdrant backend frontend
 ```
 
 To **execute a workflow** (LLM node), also start `ollama` + `worker`. The `ollama`
-container pulls `qwen2.5:1.5b` (~1GB) on first boot — slow; wait for the model:
+container pulls `qwen2.5:0.5b` (~0.4GB) on first boot — slow; wait for the model:
 
 ```bash
 docker compose up -d --build ollama worker
@@ -95,7 +95,7 @@ Useful flags / env:
 ```bash
 node driver.mjs --email you@graph.ai --password secret123   # explicit creds
 BASE=http://localhost:3000 node driver.mjs                  # override target URL
-MODEL=qwen2.5:1.5b node driver.mjs --run                    # override the LLM model
+MODEL=qwen2.5:0.5b node driver.mjs --run                    # override the LLM model
 ```
 
 ## Verify the full AI pipeline (no browser)
@@ -169,7 +169,7 @@ the driver above to actually see/verify the UI.
   point Ollama at `http://ollama:11434` (the compose service name) — **not**
   `localhost`. The provider `type` is `ollama` and `base_url` is required.
 - **The LLM node needs `llm_provider_id`, `model`, and `system_prompt`.** `model`
-  must be a tag Ollama has pulled (`qwen2.5:1.5b` by default; `docker compose exec
+  must be a tag Ollama has pulled (`qwen2.5:0.5b` by default; `docker compose exec
   ollama ollama list` to check). An execution runs on the ARQ **worker** — if it
   sits in `created`/`running` forever, the worker isn't up.
 - **Run requires exactly one Input + one Output node** (format `txt`) with a path

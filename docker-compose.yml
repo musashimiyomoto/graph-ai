@@ -86,7 +86,7 @@ services:
     entrypoint: [ "/bin/sh", "/docker-entrypoint.sh" ]
     environment:
       ENTRYPOINT_MODE: ollama
-      OLLAMA_BOOT_MODEL: qwen2.5:1.5b
+      OLLAMA_BOOT_MODEL: qwen2.5:0.5b
       OLLAMA_HOST: "0.0.0.0"
     ports:
       - "11434:11434"

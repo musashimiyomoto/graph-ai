@@ -91,7 +91,7 @@ async function main() {
 // against Ollama + the ARQ worker, and screenshot the streamed LLM response.
 // Requires the full stack: ollama (model pulled) + worker running.
 async function runWorkflow(page) {
-  const model = process.env.MODEL ?? 'qwen2.5:1.5b'
+  const model = process.env.MODEL ?? 'qwen2.5:0.5b'
   const ollamaUrl = process.env.OLLAMA_URL ?? 'http://ollama:11434'
 
   console.log('→ build Input→LLM→Output graph via /api')
