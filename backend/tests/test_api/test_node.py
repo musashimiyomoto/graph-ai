@@ -176,13 +176,6 @@ class TestNodeCreate(BaseTestCase):
                 user_id=user["id"],
             )
             llm_provider_id = provider.id
-        target_workflow_id = None
-        if node_type is NodeType.CALL_WORKFLOW:
-            target = await WorkflowFactory.create_async(
-                session=self.session, owner_id=user["id"]
-            )
-            target_workflow_id = target.id
-
         response = await _create_node_with_scope(
             client=self.client,
             headers=headers,
@@ -220,6 +213,27 @@ class TestNodeCreate(BaseTestCase):
 
         if response.status_code != HTTPStatus.NOT_FOUND:
             pytest.fail(f"Expected {HTTPStatus.NOT_FOUND}, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_call_workflow_rejects_self_reference(self) -> None:
+        """A workflow cannot directly call itself."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "type": NodeType.CALL_WORKFLOW,
+                "data": build_node_data(
+                    NodeType.CALL_WORKFLOW, target_workflow_id=workflow.id
+                ),
+            },
+            headers=headers,
+        )
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail("A direct self-reference should be rejected")
 
     @pytest.mark.asyncio
     async def test_http_request_malformed_headers_rejected(self) -> None:
@@ -751,6 +765,12 @@ class TestNodeUpdate(BaseTestCase):
                 user_id=user["id"],
             )
             llm_provider_id = provider.id
+        target_workflow_id = None
+        if node_type is NodeType.CALL_WORKFLOW:
+            target = await WorkflowFactory.create_async(
+                session=self.session, owner_id=user["id"]
+            )
+            target_workflow_id = target.id
         parent_node_id = None
         if node_type in _LOOP_BODY_ONLY_TYPES:
             loop_node = await NodeFactory.create_async(

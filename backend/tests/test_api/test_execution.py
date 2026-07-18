@@ -1601,6 +1601,133 @@ class TestExecutionLoop(BaseTestCase):
             pytest.fail(f"Expected exactly 3 capped iterations, got {nodes}")
 
 
+class TestCallWorkflowExecution(BaseTestCase):
+    """Inline execution of a referenced workflow."""
+
+    url = "/executions"
+
+    async def _build_passthrough_graph(
+        self, workflow_id: int, middle: tuple[NodeType, dict] | None = None
+    ) -> tuple[int, int, int | None]:
+        """Build Input -> optional middle -> Output and return node IDs."""
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        middle_node = None
+        if middle is not None:
+            middle_node = await NodeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow_id,
+                type=middle[0],
+                data=middle[1],
+            )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            source_node_id=input_node.id,
+            target_node_id=(middle_node.id if middle_node else output_node.id),
+        )
+        if middle_node is not None:
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow_id,
+                source_node_id=middle_node.id,
+                target_node_id=output_node.id,
+            )
+        return input_node.id, output_node.id, middle_node.id if middle_node else None
+
+    @pytest.mark.asyncio
+    async def test_passes_input_through_called_workflow(self) -> None:
+        """The target graph receives parent text and returns its Output."""
+        user, headers = await self.create_user_and_get_token()
+        target = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await self._build_passthrough_graph(
+            target.id,
+            middle=(
+                NodeType.TEMPLATE,
+                {"label": "Wrap", "template": "called({{input}})"},
+            ),
+        )
+        parent = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        _, _, call_node_id = await self._build_passthrough_graph(
+            parent.id,
+            middle=(
+                NodeType.CALL_WORKFLOW,
+                {"label": "Reuse", "target_workflow_id": target.id},
+            ),
+        )
+
+        response = await self.client.post(
+            self.url,
+            json={"workflow_id": parent.id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=response)
+        execution = await run_execution(self.session, created["id"])
+
+        if execution.status is not ExecutionStatus.SUCCESS:
+            pytest.fail(f"Call Workflow execution failed: {execution.error}")
+        if execution.output_data != {"value": "called(hello)"}:
+            pytest.fail("Called workflow output was not returned to the parent")
+        results = await NodeExecutionRepository().get_all(
+            session=self.session, execution_id=execution.id
+        )
+        if call_node_id is None or not any(
+            result.node_id == call_node_id and result.output == "called(hello)"
+            for result in results
+        ):
+            pytest.fail("Call Workflow node result was not recorded")
+
+    @pytest.mark.asyncio
+    async def test_recursive_call_fails_with_clear_error(self) -> None:
+        """An indirect A -> B -> A cycle is stopped at runtime."""
+        user, headers = await self.create_user_and_get_token()
+        first = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        second = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await self._build_passthrough_graph(
+            first.id,
+            middle=(
+                NodeType.CALL_WORKFLOW,
+                {"label": "Call B", "target_workflow_id": second.id},
+            ),
+        )
+        await self._build_passthrough_graph(
+            second.id,
+            middle=(
+                NodeType.CALL_WORKFLOW,
+                {"label": "Call A", "target_workflow_id": first.id},
+            ),
+        )
+        response = await self.client.post(
+            self.url,
+            json={"workflow_id": first.id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=response)
+        execution = await run_execution(self.session, created["id"])
+        if execution.status is not ExecutionStatus.FAILED:
+            pytest.fail("Recursive workflow call should fail")
+        if "Recursive workflow call detected" not in (execution.error or ""):
+            pytest.fail(f"Cycle error was not clear: {execution.error}")
+
+
 class TestExecutionRetries(BaseTestCase):
     """Tests for node-level retries and timeouts."""
 
