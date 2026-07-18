@@ -28,6 +28,8 @@ from tests.factories import (
 from tests.test_api.base import BaseTestCase
 from usecases import ExecutionTrigger, ExecutionUsecase
 
+pytestmark = pytest.mark.committed_db
+
 _FAKE_CHAT_ID = 999
 _FAKE_UPDATE_ID = 501
 _PINNED_CHAT_ID = 555

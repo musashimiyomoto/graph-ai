@@ -2125,6 +2125,7 @@ class TestExecutionReaper(BaseTestCase):
             pytest.fail("Expected heartbeat_at to be set after nodes completed")
 
 
+@pytest.mark.committed_db
 class TestExecutionParallel(BaseTestCase):
     """Tests for concurrent execution of independent graph branches."""
 

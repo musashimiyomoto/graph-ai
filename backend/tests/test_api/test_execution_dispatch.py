@@ -25,6 +25,8 @@ from main import app
 from tests.factories import EdgeFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
+pytestmark = pytest.mark.committed_db
+
 
 class TestExecutionAsyncDispatch(BaseTestCase):
     """Validate the full enqueue -> worker -> DB round-trip over real Redis."""

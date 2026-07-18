@@ -3,8 +3,10 @@
 from collections.abc import AsyncGenerator
 from types import SimpleNamespace
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -52,11 +54,11 @@ async def postgres_container() -> AsyncGenerator[PostgresContainer, None]:
         yield postgres
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="session")
 async def test_engine(
     postgres_container: PostgresContainer,
 ) -> AsyncGenerator[AsyncEngine, None]:
-    """Create a fresh database engine for each test."""
+    """Create one database engine and schema for the entire test session."""
     engine = create_async_engine(
         url=postgres_container.get_connection_url(),
         echo=False,
@@ -65,28 +67,66 @@ async def test_engine(
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    yield engine
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-    await engine.dispose()
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
-    """Provide an async database session for tests."""
-    async_session = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
+async def test_session_factory(
+    test_engine: AsyncEngine,
+    request: pytest.FixtureRequest,
+) -> AsyncGenerator[async_sessionmaker[AsyncSession], None]:
+    """Provide isolated sessions using rollback for the common test path."""
+    if request.node.get_closest_marker("committed_db") is not None:
+        session_factory = async_sessionmaker(
+            test_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        try:
+            yield session_factory
+        finally:
+            tables = list(Base.metadata.sorted_tables)
+            if tables:
+                async with test_engine.begin() as connection:
+                    preparer = connection.dialect.identifier_preparer
+                    names = ", ".join(preparer.format_table(table) for table in tables)
+                    await connection.execute(
+                        text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE")
+                    )
+        return
 
-    async with async_session() as session:
+    async with test_engine.connect() as connection:
+        transaction = await connection.begin()
+        session_factory = async_sessionmaker(
+            connection,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
+        try:
+            yield session_factory
+        finally:
+            if transaction.is_active:
+                await transaction.rollback()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_session(
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
+    """Provide the primary database session for a test."""
+    session = test_session_factory()
+    try:
         yield session
+    finally:
+        await session.close()
 
 
 @pytest_asyncio.fixture(scope="function")
 async def test_client(
-    test_session: AsyncSession, test_engine: AsyncEngine
+    test_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncGenerator[AsyncClient, None]:
     """Provide an HTTP client with the test session injected."""
 
@@ -96,9 +136,7 @@ async def test_client(
 
     def override_get_session_factory() -> async_sessionmaker[AsyncSession]:
         """Return a session factory bound to the test engine."""
-        return async_sessionmaker(
-            test_engine, class_=AsyncSession, expire_on_commit=False
-        )
+        return test_session_factory
 
     def override_get_arq_pool() -> _NoopArqPool:
         """Return a no-op ARQ pool so tests need no Redis."""
