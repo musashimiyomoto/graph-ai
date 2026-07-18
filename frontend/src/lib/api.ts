@@ -18,6 +18,8 @@ import type {
   OllamaCatalogEntry,
   OllamaPullEvent,
   OllamaPullJob,
+  PostgresConnection,
+  PostgresConnectionCreatePayload,
   RunInputPayload,
   TelegramBot,
   TelegramBotCreatePayload,
@@ -449,6 +451,23 @@ export async function createEmailAccount(
 
 export async function deleteEmailAccount(accountId: number): Promise<void> {
   await request(`/email-accounts/${accountId}`, { method: 'DELETE' })
+}
+
+export async function getPostgresConnections(): Promise<PostgresConnection[]> {
+  return request<PostgresConnection[]>('/postgres-connections')
+}
+
+export async function createPostgresConnection(
+  payload: PostgresConnectionCreatePayload,
+): Promise<PostgresConnection> {
+  return request<PostgresConnection>('/postgres-connections', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deletePostgresConnection(connectionId: number): Promise<void> {
+  await request(`/postgres-connections/${connectionId}`, { method: 'DELETE' })
 }
 
 export async function getVectorCollections(): Promise<VectorCollection[]> {

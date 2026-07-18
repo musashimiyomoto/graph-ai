@@ -15,6 +15,7 @@ class NodeType(StrEnum):
     CODE_TRANSFORM = auto()
     VECTOR_INGEST = auto()
     VECTOR_SEARCH = auto()
+    TABLE = auto()
     LOOP = auto()
     LOOP_INPUT = auto()
     LOOP_OUTPUT = auto()
@@ -34,6 +35,14 @@ class HttpMethod(StrEnum):
     def allows_body(self) -> bool:
         """Whether this method sends a request body."""
         return self in {HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH}
+
+
+class TableSource(StrEnum):
+    """Sources supported by the Table node."""
+
+    GOOGLE_SHEETS = auto()
+    CSV = auto()
+    POSTGRES = auto()
 
 
 class PortType(StrEnum):

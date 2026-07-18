@@ -11,6 +11,7 @@ export const queryKeys = {
     ['llm-providers', providerId, 'models'] as const,
   telegramBots: () => ['telegram-bots'] as const,
   emailAccounts: () => ['email-accounts'] as const,
+  postgresConnections: () => ['postgres-connections'] as const,
   vectorCollections: () => ['vector-collections'] as const,
   vectorDocuments: (collection: string) =>
     ['vector-collections', collection, 'documents'] as const,

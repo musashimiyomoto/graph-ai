@@ -8,6 +8,7 @@ from db.repositories.llm_provider import LLMProviderRepository
 from db.repositories.node import NodeRepository
 from db.repositories.node_execution import NodeExecutionRepository
 from db.repositories.node_schedule import NodeScheduleRepository
+from db.repositories.postgres_connection import PostgresConnectionRepository
 from db.repositories.telegram_bot import TelegramBotRepository
 from db.repositories.usage_record import UsageRecordRepository
 from db.repositories.user import UserRepository
@@ -23,6 +24,7 @@ __all__ = [
     "NodeExecutionRepository",
     "NodeRepository",
     "NodeScheduleRepository",
+    "PostgresConnectionRepository",
     "TelegramBotRepository",
     "UsageRecordRepository",
     "UserRepository",

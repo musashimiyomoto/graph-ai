@@ -147,6 +147,19 @@ export function VectorSearchIcon(props: IconProps) {
   )
 }
 
+export function TableIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="1" y="2" width="14" height="2" fill="var(--accent-2)" />
+      <rect x="1" y="7" width="14" height="2" fill="var(--accent)" />
+      <rect x="1" y="12" width="14" height="2" fill="var(--accent-2)" />
+      <rect x="1" y="2" width="2" height="12" fill="var(--accent-2)" />
+      <rect x="7" y="2" width="2" height="12" fill="var(--accent)" />
+      <rect x="13" y="2" width="2" height="12" fill="var(--accent-2)" />
+    </svg>
+  )
+}
+
 export function LoopIcon(props: IconProps) {
   return (
     <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
@@ -200,6 +213,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'vector_search') {
     return <VectorSearchIcon />
+  }
+
+  if (iconKey === 'table') {
+    return <TableIcon />
   }
 
   if (iconKey === 'output') {

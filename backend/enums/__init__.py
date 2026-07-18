@@ -11,6 +11,7 @@ from enums.node import (
     NodeType,
     OutputNodeFormat,
     PortType,
+    TableSource,
 )
 from enums.validator import ValidatorType
 
@@ -26,5 +27,6 @@ __all__ = [
     "NodeType",
     "OutputNodeFormat",
     "PortType",
+    "TableSource",
     "ValidatorType",
 ]

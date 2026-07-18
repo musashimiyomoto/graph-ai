@@ -72,3 +72,48 @@ async def blocked_url_reason(url: str, *, allow_private: bool = False) -> str | 
         if reason is not None:
             return reason
     return None
+
+
+async def blocked_host_reason(
+    host: str, port: int, *, allow_private: bool = False
+) -> str | None:
+    """Check a non-HTTP host/port using the same SSRF address policy.
+
+    Args:
+        host: DNS name or IP address.
+        port: TCP port used for resolution.
+        allow_private: Whether private and loopback addresses are permitted.
+
+    Returns:
+        A human-readable block reason, or None when the host is allowed.
+
+    """
+    try:
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, host, port, proto=socket.IPPROTO_TCP
+        )
+    except socket.gaierror:
+        return None
+    for info in infos:
+        reason = _address_reason(str(info[4][0]), allow_private=allow_private)
+        if reason is not None:
+            return reason
+    return None
+
+
+async def blocked_postgres_dsn_reason(dsn: str) -> str | None:
+    """Validate a PostgreSQL DSN host using the non-HTTP address policy.
+
+    Args:
+        dsn: PostgreSQL connection string.
+
+    Returns:
+        A human-readable block reason, or None when the host is allowed.
+
+    """
+    parsed = urlparse(dsn)
+    if parsed.hostname is None:
+        return "PostgreSQL DSN must include a host"
+    return await blocked_host_reason(
+        parsed.hostname, parsed.port or 5432, allow_private=True
+    )

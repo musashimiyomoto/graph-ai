@@ -32,7 +32,12 @@ from exceptions.node import (
     HTTPRequestError,
     NodeDataValidationError,
     NodeNotFoundError,
+    TableSourceError,
     WebSearchConnectionError,
+)
+from exceptions.postgres_connection import (
+    PostgresConnectionAlreadyExistsError,
+    PostgresConnectionNotFoundError,
 )
 from exceptions.quota import QuotaExceededError
 from exceptions.rag import (
@@ -78,8 +83,11 @@ __all__ = [
     "NodeDataValidationError",
     "NodeExecutionTimeoutError",
     "NodeNotFoundError",
+    "PostgresConnectionAlreadyExistsError",
+    "PostgresConnectionNotFoundError",
     "QuotaExceededError",
     "RateLimitExceededError",
+    "TableSourceError",
     "TelegramAPIError",
     "TelegramBotNotFoundError",
     "UnsupportedDocumentTypeError",

@@ -192,6 +192,7 @@ export type NodeFieldWidget =
   | 'telegram_bot'
   | 'email_account'
   | 'vector_collection'
+  | 'postgres_connection'
 
 export type NodeFieldDataSourceKind =
   | 'llm_provider'
@@ -199,6 +200,7 @@ export type NodeFieldDataSourceKind =
   | 'telegram_bot'
   | 'email_account'
   | 'vector_collection'
+  | 'postgres_connection'
 
 export type PortType = 'text' | 'json' | 'file' | 'list'
 
@@ -332,6 +334,17 @@ export interface EmailAccountCreatePayload {
   smtp_port: number
   smtp_use_tls: boolean
   smtp_use_ssl: boolean
+}
+
+export interface PostgresConnection {
+  id: number
+  user_id: number
+  name: string
+}
+
+export interface PostgresConnectionCreatePayload {
+  name: string
+  dsn: string
 }
 
 export interface NodeExecutionResult {

@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useEmailAccounts } from '../hooks/useEmailAccounts'
 import { useLlmProviders } from '../hooks/useLlmProviders'
 import { useProviderModels } from '../hooks/useProviderModels'
+import { usePostgresConnections } from '../hooks/usePostgresConnections'
 import { useTelegramBots } from '../hooks/useTelegramBots'
 import { useVectorCollections } from '../hooks/useVectorCollections'
 import type {
@@ -10,6 +11,7 @@ import type {
   LlmModel,
   LlmProvider,
   NodeCatalogField,
+  PostgresConnection,
   TelegramBot,
   VectorCollection,
 } from '../lib/types'
@@ -250,6 +252,31 @@ function VectorCollectionField({
   )
 }
 
+function PostgresConnectionField({
+  connections,
+  value,
+  onChange,
+}: {
+  connections: PostgresConnection[]
+  value: unknown
+  onChange: (value: number) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      <option value="">-- select connection --</option>
+      {connections.map((connection) => (
+        <option key={connection.id} value={connection.id}>
+          {connection.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 interface NodeFieldsFormProps {
   fields: NodeCatalogField[]
   data: Record<string, unknown>
@@ -270,6 +297,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   )
   const hasVectorCollectionDatasource = fields.some(
     (field) => field.datasource?.kind === 'vector_collection',
+  )
+  const hasPostgresConnectionDatasource = fields.some(
+    (field) => field.datasource?.kind === 'postgres_connection',
   )
 
   const selectedProviderRaw = Number(data['llm_provider_id'] ?? 0)
@@ -293,6 +323,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   })
   const { collections } = useVectorCollections({
     enabled: hasVectorCollectionDatasource,
+  })
+  const { connections, loading: connectionsLoading } = usePostgresConnections({
+    enabled: hasPostgresConnectionDatasource,
   })
 
   // A saved id/name that no longer matches anything in its data source (the
@@ -321,6 +354,11 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
       return accounts.some((account) => account.id === Number(value))
         ? null
         : 'Selected email account no longer exists.'
+    }
+    if (field.ui.widget === 'postgres_connection' && !connectionsLoading) {
+      return connections.some((connection) => connection.id === Number(value))
+        ? null
+        : 'Selected PostgreSQL connection no longer exists.'
     }
     return null
   }
@@ -414,6 +452,16 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
           value={value}
           placeholder={field.ui.placeholder}
           onChange={(collection) => updateField(field.name, collection)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'postgres_connection') {
+      return (
+        <PostgresConnectionField
+          connections={connections}
+          value={value}
+          onChange={(connectionId) => updateField(field.name, connectionId)}
         />
       )
     }

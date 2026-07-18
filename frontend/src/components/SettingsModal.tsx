@@ -4,6 +4,7 @@ import type { ApiError } from '../lib/types'
 import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
 import { ProviderSettings } from './ProviderSettings'
+import { PostgresConnectionSettings } from './PostgresConnectionSettings'
 import { TelegramSettings } from './TelegramSettings'
 import { VectorCollectionSettings } from './VectorCollectionSettings'
 
@@ -24,6 +25,7 @@ const SECTIONS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
   { id: 'email', label: 'Email Accounts', Component: EmailSettings },
+  { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },
   { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
 

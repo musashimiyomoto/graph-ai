@@ -18,6 +18,7 @@ from nodes.loop import DEFINITION as LOOP_DEFINITION
 from nodes.loop_input import DEFINITION as LOOP_INPUT_DEFINITION
 from nodes.loop_output import DEFINITION as LOOP_OUTPUT_DEFINITION
 from nodes.output import DEFINITION as OUTPUT_DEFINITION
+from nodes.table import DEFINITION as TABLE_DEFINITION
 from nodes.template import DEFINITION as TEMPLATE_DEFINITION
 from nodes.vector_ingest import DEFINITION as VECTOR_INGEST_DEFINITION
 from nodes.vector_search import DEFINITION as VECTOR_SEARCH_DEFINITION
@@ -34,6 +35,7 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     CODE_TRANSFORM_DEFINITION,
     VECTOR_INGEST_DEFINITION,
     VECTOR_SEARCH_DEFINITION,
+    TABLE_DEFINITION,
     LOOP_DEFINITION,
     LOOP_INPUT_DEFINITION,
     LOOP_OUTPUT_DEFINITION,

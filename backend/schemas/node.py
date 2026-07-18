@@ -21,6 +21,7 @@ class NodeFieldWidget(StrEnum):
     TELEGRAM_BOT = "telegram_bot"
     EMAIL_ACCOUNT = "email_account"
     VECTOR_COLLECTION = "vector_collection"
+    POSTGRES_CONNECTION = "postgres_connection"
 
 
 class NodeFieldDataSourceKind(StrEnum):
@@ -31,6 +32,7 @@ class NodeFieldDataSourceKind(StrEnum):
     TELEGRAM_BOT = "telegram_bot"
     EMAIL_ACCOUNT = "email_account"
     VECTOR_COLLECTION = "vector_collection"
+    POSTGRES_CONNECTION = "postgres_connection"
 
 
 class NodeFieldUI(BaseModel):

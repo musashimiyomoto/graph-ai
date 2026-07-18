@@ -9,6 +9,7 @@ from db.models.llm_provider import LLMProvider
 from db.models.node import Node
 from db.models.node_execution import NodeExecution
 from db.models.node_schedule import NodeSchedule
+from db.models.postgres_connection import PostgresConnection
 from db.models.telegram_bot import TelegramBot
 from db.models.usage_record import UsageRecord
 from db.models.user import User
@@ -27,6 +28,7 @@ __all__ = [
     "Node",
     "NodeExecution",
     "NodeSchedule",
+    "PostgresConnection",
     "TelegramBot",
     "UsageRecord",
     "User",

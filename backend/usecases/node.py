@@ -12,6 +12,7 @@ from db.repositories import (
     LLMProviderRepository,
     NodeRepository,
     NodeScheduleRepository,
+    PostgresConnectionRepository,
     TelegramBotRepository,
     WorkflowRepository,
 )
@@ -21,6 +22,7 @@ from exceptions import (
     LLMProviderNotFoundError,
     NodeDataValidationError,
     NodeNotFoundError,
+    PostgresConnectionNotFoundError,
     TelegramBotNotFoundError,
     WorkflowNotFoundError,
 )
@@ -65,6 +67,7 @@ class NodeUsecase:
         self._telegram_bot_repository = TelegramBotRepository()
         self._email_account_repository = EmailAccountRepository()
         self._node_schedule_repository = NodeScheduleRepository()
+        self._postgres_connection_repository = PostgresConnectionRepository()
         self._node_catalog = build_node_catalog()
 
     def _get_node_spec(self, node_type: NodeType) -> NodeCatalogItem:
@@ -116,6 +119,7 @@ class NodeUsecase:
                     NodeFieldDataSourceKind.TELEGRAM_BOT,
                     NodeFieldDataSourceKind.EMAIL_ACCOUNT,
                     NodeFieldDataSourceKind.LLM_MODEL,
+                    NodeFieldDataSourceKind.POSTGRES_CONNECTION,
                 }
             )
         ):
@@ -350,6 +354,10 @@ class NodeUsecase:
                 await self._validate_email_reference(
                     session=session, user_id=user_id, field=field, value=value
                 )
+            elif field.datasource.kind is NodeFieldDataSourceKind.POSTGRES_CONNECTION:
+                await self._validate_postgres_connection_reference(
+                    session=session, user_id=user_id, field=field, value=value
+                )
 
     @staticmethod
     def _reference_id(field: NodeFieldSpec, value: object, label: str) -> int:
@@ -403,6 +411,21 @@ class NodeUsecase:
         )
         if account is None:
             raise EmailAccountNotFoundError
+
+    async def _validate_postgres_connection_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a referenced PostgreSQL connection belongs to the user."""
+        connection_id = self._reference_id(field, value, "PostgreSQL connection")
+        connection = await self._postgres_connection_repository.get_by(
+            session=session, id=connection_id, user_id=user_id
+        )
+        if connection is None:
+            raise PostgresConnectionNotFoundError
 
     async def _sync_node_schedule(
         self,

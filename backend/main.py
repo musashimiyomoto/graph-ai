@@ -20,6 +20,7 @@ from api.routers import (
     llm_provider,
     metrics,
     node,
+    postgres_connection,
     telegram_bot,
     usage,
     user,
@@ -127,6 +128,7 @@ app.include_router(router=user.router)
 app.include_router(router=workflow.router)
 app.include_router(router=workflow_template.router)
 app.include_router(router=node.router)
+app.include_router(router=postgres_connection.router)
 app.include_router(router=edge.router)
 app.include_router(router=email_account.router)
 app.include_router(router=execution.router)

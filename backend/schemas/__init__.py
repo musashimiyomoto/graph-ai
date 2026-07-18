@@ -50,6 +50,10 @@ from schemas.node import (
     NodeResponse,
     NodeUpdate,
 )
+from schemas.postgres_connection import (
+    PostgresConnectionCreate,
+    PostgresConnectionResponse,
+)
 from schemas.telegram_bot import (
     TelegramBotCreate,
     TelegramBotResponse,
@@ -130,6 +134,8 @@ __all__ = [
     "OllamaCatalogTag",
     "OllamaModelPullRequest",
     "OllamaModelPullResponse",
+    "PostgresConnectionCreate",
+    "PostgresConnectionResponse",
     "QuotaStatus",
     "ServiceHealthResponse",
     "TelegramBotCreate",

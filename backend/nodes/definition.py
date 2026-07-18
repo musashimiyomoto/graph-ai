@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from db.repositories import LLMProviderRepository
+from db.repositories import LLMProviderRepository, PostgresConnectionRepository
 from enums import NodeType, PortType
 from nodes.base import NodeHandler
 from schemas import NodeFieldSpec, NodeGraphSpec
@@ -14,6 +14,7 @@ class NodeHandlerDeps:
     """Dependencies available to node handler factories."""
 
     llm_provider_repository: LLMProviderRepository
+    postgres_connection_repository: PostgresConnectionRepository
 
 
 @dataclass(frozen=True)

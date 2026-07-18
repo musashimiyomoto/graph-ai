@@ -8,6 +8,7 @@ from usecases.execution import ExecutionListFilter, ExecutionTrigger, ExecutionU
 from usecases.health import HealthUsecase
 from usecases.llm_provider import LLMProviderUsecase
 from usecases.node import NodeUsecase
+from usecases.postgres_connection import PostgresConnectionUsecase
 from usecases.telegram_bot import TelegramBotUsecase
 from usecases.usage import UsageUsecase
 from usecases.user import UserUsecase
@@ -29,6 +30,7 @@ __all__ = [
     "HealthUsecase",
     "LLMProviderUsecase",
     "NodeUsecase",
+    "PostgresConnectionUsecase",
     "TelegramBotUsecase",
     "UsageUsecase",
     "UserUsecase",

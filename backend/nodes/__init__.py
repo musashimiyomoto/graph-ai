@@ -18,6 +18,7 @@ from nodes.registry import (
     check_edge_ports,
     get_node_definition,
 )
+from nodes.table import TableNodeHandler
 from nodes.template import TemplateNodeHandler
 from nodes.vector_ingest import VectorIngestNodeHandler
 from nodes.vector_search import VectorSearchNodeHandler
@@ -41,6 +42,7 @@ __all__ = [
     "NodeHandlerRegistry",
     "OnToken",
     "OutputNodeHandler",
+    "TableNodeHandler",
     "TemplateNodeHandler",
     "VectorIngestNodeHandler",
     "VectorSearchNodeHandler",

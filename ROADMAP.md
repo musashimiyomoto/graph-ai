@@ -763,10 +763,10 @@ useful workflow extensions next, and routine or post-MVP improvements last.
 
 - [x] **Embeddable web chat** — turn any workflow into a usable website chat
       widget with a public workflow-specific endpoint and streamed responses.
-- [ ] **LLM tool calling** — let an LLM call selected workflow tools, inspect their
-      results, and continue until it can produce a final answer.
-- [ ] **Google Sheets connector nodes** — read rows and append workflow results to
-      a spreadsheet, unlocking common lead, reporting, and operations workflows.
+- [x] **Table node** — one consistent read-only node for public Google Sheets,
+      CSV by URL, and PostgreSQL. It emits bounded `columns`/`rows` JSON for
+      downstream nodes; PostgreSQL DSNs are encrypted, write-only settings and
+      queries run in read-only transactions.
 - [ ] **Vision support for the LLM node** — accept images for OCR, document review,
       screenshot analysis, and other multimodal workflows.
 - [ ] **Call Workflow node** — reuse another saved workflow as a step inside the
@@ -777,8 +777,8 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       next step.
 - [ ] **Switch node** — route a value into one of several named branches instead
       of the Condition node's binary true/false split.
-- [ ] **MCP tool nodes** — connect workflows to tools exposed by MCP servers after
-      the core LLM tool-calling flow is established.
+- [ ] **MCP tool nodes** — connect workflows to capabilities exposed by MCP
+      servers through explicit, visible graph nodes.
 - [ ] **Session management** — keep users signed in with refresh tokens and let
       them securely log out or revoke active sessions.
 - [ ] **Email verification and password recovery** — verify new accounts, reset a
