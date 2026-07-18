@@ -16,7 +16,7 @@ back-typecheck:
 	cd backend && uv run ty check .
 
 back-test:
-	cd backend && uv run pytest tests/
+	cd backend && uv run pytest tests/ --cov --cov-report=term-missing:skip-covered
 
 back-migrate:
 	@set -euo pipefail; \
