@@ -57,6 +57,10 @@ asyncio_default_test_loop_scope = "session"
 markers = [
     "committed_db: use real commits and truncate cleanup for multi-connection tests",
 ]
+filterwarnings = [
+    "ignore:The @wait_container_is_ready decorator is deprecated.*:DeprecationWarning",
+    "ignore:Call to deprecated close.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true

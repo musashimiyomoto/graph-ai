@@ -1,8 +1,9 @@
 """Pytest fixtures for backend tests."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from types import SimpleNamespace
 
+import bcrypt
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -20,6 +21,24 @@ from api.dependencies import redis as redis_dependency
 from db.models import Base
 from main import app
 from settings import postgres_settings
+
+
+@pytest.fixture(scope="session", autouse=True)
+def fast_password_hashing() -> Generator[None, None, None]:
+    """Use bcrypt's minimum cost while preserving real hashing in tests."""
+    original_gensalt = bcrypt.gensalt
+
+    def fast_gensalt(rounds: int = 12, prefix: bytes = b"2b") -> bytes:
+        """Generate a valid low-cost salt regardless of the production default."""
+        del rounds
+        return original_gensalt(rounds=4, prefix=prefix)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(bcrypt, "gensalt", fast_gensalt)
+    try:
+        yield
+    finally:
+        monkeypatch.undo()
 
 
 class _NoopArqPool:
