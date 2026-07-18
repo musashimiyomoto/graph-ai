@@ -10,6 +10,7 @@ const NODE_CATEGORIES: { label: string; types: NodeType[] }[] = [
   { label: 'AI', types: ['llm'] },
   { label: 'Data', types: ['table', 'web_search', 'http_request'] },
   { label: 'Logic', types: ['template', 'condition', 'code_transform', 'loop'] },
+  { label: 'Composition', types: ['call_workflow'] },
   { label: 'Loop', types: ['loop_input', 'loop_output'] },
   { label: 'RAG', types: ['vector_ingest', 'vector_search'] },
 ]

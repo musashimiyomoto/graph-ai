@@ -193,6 +193,7 @@ export type NodeFieldWidget =
   | 'email_account'
   | 'vector_collection'
   | 'postgres_connection'
+  | 'workflow'
 
 export type NodeFieldDataSourceKind =
   | 'llm_provider'
@@ -201,6 +202,7 @@ export type NodeFieldDataSourceKind =
   | 'email_account'
   | 'vector_collection'
   | 'postgres_connection'
+  | 'workflow'
 
 export type PortType = 'text' | 'json' | 'file' | 'list'
 

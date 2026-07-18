@@ -45,6 +45,7 @@ interface GraphCanvasProps {
   onDropNode: (type: string, position: { x: number; y: number }) => void
   onDeleteNode: (id: string) => void
   onDrillIntoLoop: (nodeId: string) => void
+  onOpenCalledWorkflow: (workflowId: number) => void
 }
 
 interface ContextMenuState {
@@ -71,6 +72,7 @@ function GraphCanvasInner({
   onDropNode,
   onDeleteNode,
   onDrillIntoLoop,
+  onOpenCalledWorkflow,
 }: GraphCanvasProps) {
   const { screenToFlowPosition, fitView } = useReactFlow()
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
@@ -183,9 +185,14 @@ function GraphCanvasInner({
     (_event, node) => {
       if (node.type === 'loop') {
         onDrillIntoLoop(node.id)
+      } else if (node.type === 'call_workflow') {
+        const targetId = Number(node.data?.target_workflow_id)
+        if (Number.isInteger(targetId) && targetId > 0) {
+          onOpenCalledWorkflow(targetId)
+        }
       }
     },
-    [onDrillIntoLoop],
+    [onDrillIntoLoop, onOpenCalledWorkflow],
   )
 
   const handleNodeContextMenu: NodeMouseHandler = useCallback(

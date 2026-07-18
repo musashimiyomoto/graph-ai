@@ -30,3 +30,8 @@ MAX_NODE_OUTPUT_CHARS = 50_000
 # (list mode) or a stop condition that never matches (condition mode) both
 # stay bounded, same spirit as MAX_NODE_ATTEMPTS for per-node retries.
 MAX_LOOP_ITERATIONS = 50
+
+# Maximum number of workflows in one inline Call Workflow chain, including
+# the root workflow. Prevents deeply nested but technically acyclic graphs
+# from consuming a worker indefinitely.
+MAX_WORKFLOW_CALL_DEPTH = 5

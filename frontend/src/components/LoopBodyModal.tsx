@@ -30,6 +30,7 @@ interface LoopBodyModalProps {
   onDeleteNode: (id: string) => void
   onAddNode: (type: NodeType) => void
   onSaveNode: (id: string, data: Record<string, unknown>) => Promise<boolean>
+  onOpenCalledWorkflow: (workflowId: number) => void
   onClose: () => void
 }
 
@@ -62,6 +63,7 @@ export function LoopBodyModal({
   onDeleteNode,
   onAddNode,
   onSaveNode,
+  onOpenCalledWorkflow,
   onClose,
 }: LoopBodyModalProps) {
   const backdropRef = useRef<HTMLDivElement>(null)
@@ -143,6 +145,7 @@ export function LoopBodyModal({
           onDropNode={onDropNode}
           onDeleteNode={onDeleteNode}
           onDrillIntoLoop={() => {}}
+          onOpenCalledWorkflow={onOpenCalledWorkflow}
         />
         {selectedNode ? (
           <InspectorPanel node={selectedNode} nodeCatalog={nodeCatalog} onSaveNode={onSaveNode} />

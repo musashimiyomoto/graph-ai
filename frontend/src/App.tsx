@@ -36,6 +36,7 @@ export function App() {
   const [historyTab, setHistoryTab] = useState<HistoryTabId | null>(null)
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
   const [showNewFromTemplate, setShowNewFromTemplate] = useState<boolean>(false)
+  const [workflowNavigationIds, setWorkflowNavigationIds] = useState<number[]>([])
   // Which Loop node's body the canvas is currently showing, or null for the
   // top-level graph — set by double-clicking into a Loop node.
   const [activeParentNodeId, setActiveParentNodeId] = useState<number | null>(null)
@@ -77,7 +78,10 @@ export function App() {
     setLoading,
     setError,
     handleError,
-    onWorkflowCreated: (created) => setActiveWorkflowId(created.id),
+    onWorkflowCreated: (created) => {
+      setWorkflowNavigationIds([])
+      setActiveWorkflowId(created.id)
+    },
   })
 
   const {
@@ -159,6 +163,50 @@ export function App() {
   })
 
   const activeWorkflow = workflows.find((workflow) => workflow.id === activeWorkflowId) ?? null
+  const workflowBreadcrumbs = useMemo(() => {
+    const ids = [...workflowNavigationIds, ...(activeWorkflowId ? [activeWorkflowId] : [])]
+    return ids
+      .map((id) => workflows.find((workflow) => workflow.id === id))
+      .filter((workflow): workflow is Workflow => workflow !== undefined)
+  }, [activeWorkflowId, workflowNavigationIds, workflows])
+
+  const handleSelectWorkflow = useCallback(
+    (workflowId: number) => {
+      setWorkflowNavigationIds([])
+      setActiveWorkflowId(workflowId)
+    },
+    [setActiveWorkflowId],
+  )
+
+  const handleOpenCalledWorkflow = useCallback(
+    (targetWorkflowId: number) => {
+      if (activeWorkflowId === null || targetWorkflowId === activeWorkflowId) {
+        return
+      }
+      if (!workflows.some((workflow) => workflow.id === targetWorkflowId)) {
+        handleError({ message: 'Called workflow no longer exists.', status: 404 })
+        return
+      }
+      setWorkflowNavigationIds((previous) => [...previous, activeWorkflowId])
+      handleSelectionChange([], [])
+      setActiveWorkflowId(targetWorkflowId)
+    },
+    [activeWorkflowId, handleError, handleSelectionChange, setActiveWorkflowId, workflows],
+  )
+
+  const handleNavigateBreadcrumb = useCallback(
+    (index: number) => {
+      const path = [...workflowNavigationIds, ...(activeWorkflowId ? [activeWorkflowId] : [])]
+      const targetId = path[index]
+      if (targetId === undefined) {
+        return
+      }
+      setWorkflowNavigationIds(path.slice(0, index))
+      handleSelectionChange([], [])
+      setActiveWorkflowId(targetId)
+    },
+    [activeWorkflowId, handleSelectionChange, setActiveWorkflowId, workflowNavigationIds],
+  )
 
   const handleCopyWebhook = useCallback(
     async (workflow: Workflow): Promise<boolean> => {
@@ -312,6 +360,7 @@ export function App() {
     clearGraphState()
     clearWorkflowState()
     setNodeCreateDraft(null)
+    setWorkflowNavigationIds([])
     logoutAuth()
   }, [clearExecutions, clearGraphState, clearWorkflowState, logoutAuth])
 
@@ -321,6 +370,7 @@ export function App() {
     clearGraphState()
     clearWorkflowState()
     setNodeCreateDraft(null)
+    setWorkflowNavigationIds([])
   }, [clearExecutions, clearGraphState, clearWorkflowState, deleteAccountAuth])
 
   // App-wide graph-editor shortcuts. Skipped while focused in an editable
@@ -456,6 +506,8 @@ export function App() {
       <AppShell
         email={email}
         workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
+        workflowBreadcrumbs={workflowBreadcrumbs}
+        onNavigateBreadcrumb={handleNavigateBreadcrumb}
         showInspector={mainSelectedNode !== null}
         error={error}
         canUndo={canUndo}
@@ -475,10 +527,16 @@ export function App() {
           activeWorkflowId={activeWorkflowId}
           activeWorkflowStatus={lastExecution?.status ?? null}
           nodeCatalog={topLevelNodeCatalog}
-          onSelectWorkflow={setActiveWorkflowId}
-          onCreateWorkflow={handleCreateWorkflow}
+          onSelectWorkflow={handleSelectWorkflow}
+          onCreateWorkflow={(name) => {
+            setWorkflowNavigationIds([])
+            void handleCreateWorkflow(name)
+          }}
           onRenameWorkflow={handleRenameWorkflow}
-          onDeleteWorkflow={handleDeleteWorkflow}
+          onDeleteWorkflow={(id) => {
+            setWorkflowNavigationIds([])
+            void handleDeleteWorkflow(id)
+          }}
           onDuplicateWorkflow={(id) => void handleDuplicateWorkflow(id)}
           onExportWorkflow={(id) => void handleExportWorkflow(id)}
           onCopyWebhook={handleCopyWebhook}
@@ -506,6 +564,7 @@ export function App() {
             handleSelectionChange([], [])
             setActiveParentNodeId(Number(nodeId))
           }}
+          onOpenCalledWorkflow={handleOpenCalledWorkflow}
         />
         {mainSelectedNode ? (
           <InspectorPanel
@@ -542,6 +601,7 @@ export function App() {
           onDeleteNode={handleDeleteNode}
           onAddNode={handleAddLoopBodyNode}
           onSaveNode={handleUpdateNodeData}
+          onOpenCalledWorkflow={handleOpenCalledWorkflow}
           onClose={() => {
             handleSelectionChange([], [])
             setActiveParentNodeId(null)

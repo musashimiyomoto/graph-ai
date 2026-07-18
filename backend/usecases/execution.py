@@ -21,6 +21,7 @@ from constants import (
     MAX_LOOP_ITERATIONS,
     MAX_NODE_ATTEMPTS,
     MAX_NODE_OUTPUT_CHARS,
+    MAX_WORKFLOW_CALL_DEPTH,
     NODE_TIMEOUT_SECONDS,
     RETRY_BACKOFF_BASE_SECONDS,
     STREAM_MAX_ITERATIONS,
@@ -164,9 +165,11 @@ class _NodeRunContext:
     """Loop-invariant context shared across node executions in one run."""
 
     execution_id: int
+    workflow_id: int
     workflow_owner_id: int
     input_value: str
     graph_source: _GraphSource
+    workflow_call_stack: tuple[int, ...]
     token_publisher: TokenPublisher | None = None
     token_reset_publisher: TokenResetPublisher | None = None
 
@@ -1051,9 +1054,11 @@ class ExecutionUsecase:
         graph = loaded_graph.top_level
         run_context = _NodeRunContext(
             execution_id=execution_id,
+            workflow_id=workflow.id,
             workflow_owner_id=workflow.owner_id,
             input_value=self._extract_input_value(input_data=execution.input_data),
             graph_source=loaded_graph.source,
+            workflow_call_stack=(workflow.id,),
             token_publisher=token_publishers.delta,
             token_reset_publisher=token_publishers.reset,
         )
@@ -1602,6 +1607,14 @@ class ExecutionUsecase:
                 parent_values=parent_values,
             )
 
+        if node.type is NodeType.CALL_WORKFLOW:
+            return await self._run_call_workflow_node(
+                session=session,
+                run_context=run_context,
+                node=node,
+                parent_values=parent_values,
+            )
+
         try:
             async with asyncio.timeout(self._node_timeout_seconds):
                 return await self._node_registry.execute(
@@ -1619,6 +1632,73 @@ class ExecutionUsecase:
                 )
         except TimeoutError as exc:
             raise NodeExecutionTimeoutError from exc
+
+    async def _run_call_workflow_node(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        parent_values: list[str],
+    ) -> NodeExecutionResult:
+        """Run another owned workflow inline and return its Output value.
+
+        Args:
+            session: The Call Workflow node's isolated/shared session.
+            run_context: Context for the current workflow execution.
+            node: Configured Call Workflow node.
+            parent_values: Text values passed to the called workflow's Input.
+
+        Returns:
+            The called workflow's Output node value.
+
+        Raises:
+            ExecutionGraphValidationError: If the target is missing, foreign,
+                recursive, too deeply nested, or has an invalid graph.
+
+        """
+        target_id = node.data.get("target_workflow_id")
+        if not isinstance(target_id, int) or target_id <= 0:
+            raise ExecutionGraphValidationError(
+                message="Call Workflow node requires a target workflow"
+            )
+        if target_id in run_context.workflow_call_stack:
+            chain = " -> ".join(
+                str(item) for item in (*run_context.workflow_call_stack, target_id)
+            )
+            raise ExecutionGraphValidationError(
+                message=f"Recursive workflow call detected: {chain}"
+            )
+        if len(run_context.workflow_call_stack) >= MAX_WORKFLOW_CALL_DEPTH:
+            raise ExecutionGraphValidationError(
+                message=(
+                    "Call Workflow nesting exceeds the maximum depth of "
+                    f"{MAX_WORKFLOW_CALL_DEPTH}"
+                )
+            )
+        target = await self._workflow_repository.get_by(
+            session=session,
+            id=target_id,
+            owner_id=run_context.workflow_owner_id,
+        )
+        if target is None:
+            raise ExecutionGraphValidationError(
+                message="Referenced workflow does not exist"
+            )
+
+        loaded = await self._load_graph(session=session, workflow_id=target_id)
+        nested_context = replace(
+            run_context,
+            workflow_id=target_id,
+            input_value="\n".join(parent_values),
+            graph_source=loaded.source,
+            workflow_call_stack=(*run_context.workflow_call_stack, target_id),
+        )
+        outputs = await self._run_nodes_serial(
+            session=session,
+            run_context=nested_context,
+            graph=loaded.top_level,
+        )
+        return NodeExecutionResult(output=outputs[loaded.top_level.output_node_id])
 
     async def _run_loop_node(
         self,

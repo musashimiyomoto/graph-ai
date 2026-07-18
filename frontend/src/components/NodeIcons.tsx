@@ -160,6 +160,22 @@ export function TableIcon(props: IconProps) {
   )
 }
 
+export function CallWorkflowIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="1" y="3" width="6" height="2" fill="var(--accent-2)" />
+      <rect x="1" y="5" width="2" height="6" fill="var(--accent-2)" />
+      <rect x="1" y="11" width="6" height="2" fill="var(--accent-2)" />
+      <rect x="9" y="3" width="6" height="2" fill="var(--accent)" />
+      <rect x="13" y="5" width="2" height="6" fill="var(--accent)" />
+      <rect x="9" y="11" width="6" height="2" fill="var(--accent)" />
+      <rect x="5" y="7" width="6" height="2" fill="var(--accent)" />
+      <rect x="9" y="5" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="9" width="2" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function LoopIcon(props: IconProps) {
   return (
     <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
@@ -217,6 +233,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'table') {
     return <TableIcon />
+  }
+
+  if (iconKey === 'call_workflow') {
+    return <CallWorkflowIcon />
   }
 
   if (iconKey === 'output') {

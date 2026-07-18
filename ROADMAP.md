@@ -767,8 +767,6 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       CSV by URL, and PostgreSQL. It emits bounded `columns`/`rows` JSON for
       downstream nodes; PostgreSQL DSNs are encrypted, write-only settings and
       queries run in read-only transactions.
-- [ ] **Vision support for the LLM node** — accept images for OCR, document review,
-      screenshot analysis, and other multimodal workflows.
 - [ ] **Call Workflow node** — reuse another saved workflow as a step inside the
       current graph instead of duplicating common chains.
 - [ ] **Execution cancellation** — stop queued or running workflow executions from
@@ -787,6 +785,8 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       useful, but already achievable with the existing LLM node.
 - [ ] **Delay / Wait node** — pause a branch for a duration or until a timestamp;
       primarily useful for longer-running automation beyond the initial MVP.
+- [ ] **Vision support for the LLM node** — accept images for OCR, document review,
+      screenshot analysis, and other multimodal workflows.
 - [x] **Email channel** — incoming messages can trigger workflows through IMAP,
       and Email Output can deliver the result through SMTP.
 - [x] **Email Auto-Responder template** — a ready-made

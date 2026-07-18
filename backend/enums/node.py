@@ -16,6 +16,7 @@ class NodeType(StrEnum):
     VECTOR_INGEST = auto()
     VECTOR_SEARCH = auto()
     TABLE = auto()
+    CALL_WORKFLOW = auto()
     LOOP = auto()
     LOOP_INPUT = auto()
     LOOP_OUTPUT = auto()

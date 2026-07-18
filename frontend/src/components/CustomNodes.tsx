@@ -36,11 +36,17 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
   }, [id, outputHandles, updateNodeInternals])
 
   const isLoop = data.nodeType === 'loop'
+  const isCallWorkflow = data.nodeType === 'call_workflow'
+  const drilldownTitle = isLoop
+    ? 'Double-click to open this loop’s body'
+    : isCallWorkflow
+      ? 'Double-click to open the called workflow'
+      : undefined
 
   return (
     <div
       className={`pixel-node flex flex-col gap-1 ${isLoop ? 'border-dashed' : ''}`}
-      title={isLoop ? 'Double-click to open this loop’s body' : undefined}
+      title={drilldownTitle}
     >
       <div className="flex items-center gap-2">
         {data.graph.has_input ? <Handle type="target" position={Position.Top} /> : null}

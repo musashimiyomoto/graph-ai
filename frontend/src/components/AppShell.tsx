@@ -11,6 +11,8 @@ const ERROR_BANNER_TIMEOUT_MS = 8000
 interface AppShellProps {
   email: string
   workflowName: string
+  workflowBreadcrumbs: WorkflowBreadcrumb[]
+  onNavigateBreadcrumb: (index: number) => void
   // Whether the Inspector column is being rendered as a child — collapses
   // the grid to two columns instead of reserving blank space for it when
   // nothing is selected.
@@ -30,9 +32,16 @@ interface AppShellProps {
   children: ReactNode
 }
 
+interface WorkflowBreadcrumb {
+  id: number
+  name: string
+}
+
 export function AppShell({
   email,
   workflowName,
+  workflowBreadcrumbs,
+  onNavigateBreadcrumb,
   showInspector,
   error,
   canUndo,
@@ -65,7 +74,29 @@ export function AppShell({
           <div className="font-pixel text-sm uppercase text-[var(--accent)]">
             Graph AI
           </div>
-          <div className="truncate text-xs text-[var(--muted)]">/ {workflowName}</div>
+          <div className="flex min-w-0 items-center gap-1 text-xs text-[var(--muted)]">
+            <span>/</span>
+            {workflowBreadcrumbs.length > 1 ? (
+              workflowBreadcrumbs.map((workflow, index) => (
+                <span key={`${workflow.id}:${index}`} className="flex min-w-0 items-center gap-1">
+                  {index > 0 ? <span>/</span> : null}
+                  {index < workflowBreadcrumbs.length - 1 ? (
+                    <button
+                      type="button"
+                      className="max-w-40 truncate text-[var(--accent)] hover:underline"
+                      onClick={() => onNavigateBreadcrumb(index)}
+                    >
+                      {workflow.name}
+                    </button>
+                  ) : (
+                    <span className="max-w-48 truncate">{workflow.name}</span>
+                  )}
+                </span>
+              ))
+            ) : (
+              <span className="truncate">{workflowName}</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

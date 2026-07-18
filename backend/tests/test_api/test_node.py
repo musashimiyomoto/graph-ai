@@ -14,7 +14,12 @@ from tests.factories import LLMProviderFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
 
-def _extra_fields_by_type(node_type: NodeType, *, llm_provider_id: int | None) -> dict:
+def _extra_fields_by_type(
+    node_type: NodeType,
+    *,
+    llm_provider_id: int | None,
+    target_workflow_id: int | None,
+) -> dict:
     """Return the type-specific fields for a node data payload."""
     by_type: dict[NodeType, dict] = {
         NodeType.INPUT: {"format": InputNodeFormat.TXT},
@@ -42,6 +47,7 @@ def _extra_fields_by_type(node_type: NodeType, *, llm_provider_id: int | None) -
             "csv_url": "https://example.com/data.csv",
             "max_rows": 100,
         },
+        NodeType.CALL_WORKFLOW: {"target_workflow_id": target_workflow_id},
         NodeType.LOOP: {"mode": "list"},
         NodeType.LOOP_INPUT: {},
         NodeType.LOOP_OUTPUT: {},
@@ -50,11 +56,20 @@ def _extra_fields_by_type(node_type: NodeType, *, llm_provider_id: int | None) -
     return by_type[node_type]
 
 
-def build_node_data(node_type: NodeType, *, llm_provider_id: int | None = None) -> dict:
+def build_node_data(
+    node_type: NodeType,
+    *,
+    llm_provider_id: int | None = None,
+    target_workflow_id: int | None = None,
+) -> dict:
     """Build node data payloads for tests."""
     return {
         "label": f"node-{uuid.uuid4().hex[:8]}",
-        **_extra_fields_by_type(node_type, llm_provider_id=llm_provider_id),
+        **_extra_fields_by_type(
+            node_type,
+            llm_provider_id=llm_provider_id,
+            target_workflow_id=target_workflow_id,
+        ),
     }
 
 
@@ -77,6 +92,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
         "query",
         "max_rows",
     },
+    NodeType.CALL_WORKFLOW: {"label", "target_workflow_id"},
     NodeType.LOOP: {"label", "mode"},
     NodeType.LOOP_INPUT: {"label"},
     NodeType.LOOP_OUTPUT: {"label"},
@@ -106,6 +122,14 @@ async def _create_node_with_scope(
     creatable inside a Loop node's body.
     """
     parent_node_id = None
+    target_workflow_id = None
+    if node_type is NodeType.CALL_WORKFLOW:
+        target_response = await client.post(
+            url="/workflows",
+            json={"name": f"target-{uuid.uuid4().hex[:8]}"},
+            headers=headers,
+        )
+        target_workflow_id = target_response.json()["id"]
     if node_type in _LOOP_BODY_ONLY_TYPES:
         loop_response = await client.post(
             url="/nodes",
@@ -121,7 +145,11 @@ async def _create_node_with_scope(
     payload = {
         "workflow_id": workflow_id,
         "type": node_type,
-        "data": build_node_data(node_type, llm_provider_id=llm_provider_id),
+        "data": build_node_data(
+            node_type,
+            llm_provider_id=llm_provider_id,
+            target_workflow_id=target_workflow_id,
+        ),
         "parent_node_id": parent_node_id,
     }
     return await client.post(url="/nodes", json=payload, headers=headers)
@@ -148,6 +176,12 @@ class TestNodeCreate(BaseTestCase):
                 user_id=user["id"],
             )
             llm_provider_id = provider.id
+        target_workflow_id = None
+        if node_type is NodeType.CALL_WORKFLOW:
+            target = await WorkflowFactory.create_async(
+                session=self.session, owner_id=user["id"]
+            )
+            target_workflow_id = target.id
 
         response = await _create_node_with_scope(
             client=self.client,
@@ -730,7 +764,11 @@ class TestNodeUpdate(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=node_type,
-            data=build_node_data(node_type, llm_provider_id=llm_provider_id),
+            data=build_node_data(
+                node_type,
+                llm_provider_id=llm_provider_id,
+                target_workflow_id=target_workflow_id,
+            ),
             parent_node_id=parent_node_id,
         )
         new_x = 42.0
@@ -739,7 +777,11 @@ class TestNodeUpdate(BaseTestCase):
         response = await self.client.patch(
             url=f"{self.url}/{node.id}",
             json={
-                "data": build_node_data(node_type, llm_provider_id=llm_provider_id),
+                "data": build_node_data(
+                    node_type,
+                    llm_provider_id=llm_provider_id,
+                    target_workflow_id=target_workflow_id,
+                ),
                 "position_x": new_x,
                 "position_y": new_y,
             },

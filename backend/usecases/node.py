@@ -120,6 +120,7 @@ class NodeUsecase:
                     NodeFieldDataSourceKind.EMAIL_ACCOUNT,
                     NodeFieldDataSourceKind.LLM_MODEL,
                     NodeFieldDataSourceKind.POSTGRES_CONNECTION,
+                    NodeFieldDataSourceKind.WORKFLOW,
                 }
             )
         ):
@@ -313,6 +314,7 @@ class NodeUsecase:
         self,
         session: AsyncSession,
         user_id: int,
+        workflow_id: int,
         node_type: NodeType,
         data: dict[str, Any],
     ) -> None:
@@ -321,6 +323,7 @@ class NodeUsecase:
         Args:
             session: Database session.
             user_id: Owner user ID.
+            workflow_id: Workflow containing the configured node.
             node_type: Type of node being validated.
             data: Validated node data payload.
 
@@ -357,6 +360,14 @@ class NodeUsecase:
             elif field.datasource.kind is NodeFieldDataSourceKind.POSTGRES_CONNECTION:
                 await self._validate_postgres_connection_reference(
                     session=session, user_id=user_id, field=field, value=value
+                )
+            elif field.datasource.kind is NodeFieldDataSourceKind.WORKFLOW:
+                await self._validate_workflow_reference(
+                    session=session,
+                    user_id=user_id,
+                    workflow_id=workflow_id,
+                    field=field,
+                    value=value,
                 )
 
     @staticmethod
@@ -426,6 +437,26 @@ class NodeUsecase:
         )
         if connection is None:
             raise PostgresConnectionNotFoundError
+
+    async def _validate_workflow_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        workflow_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a called workflow is owned and is not the current workflow."""
+        target_id = self._reference_id(field, value, "workflow")
+        if target_id == workflow_id:
+            raise NodeDataValidationError(
+                message="Call Workflow node cannot call its own workflow"
+            )
+        target = await self._workflow_repository.get_by(
+            session=session, id=target_id, owner_id=user_id
+        )
+        if target is None:
+            raise WorkflowNotFoundError
 
     async def _sync_node_schedule(
         self,
@@ -601,6 +632,7 @@ class NodeUsecase:
         await self._validate_external_references(
             session=session,
             user_id=user_id,
+            workflow_id=data.workflow_id,
             node_type=data.type,
             data=validated_data,
         )
@@ -730,6 +762,7 @@ class NodeUsecase:
         await self._validate_external_references(
             session=session,
             user_id=user_id,
+            workflow_id=node.workflow_id,
             node_type=node.type,
             data=validated_data,
         )

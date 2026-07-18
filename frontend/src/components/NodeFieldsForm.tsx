@@ -6,6 +6,7 @@ import { useProviderModels } from '../hooks/useProviderModels'
 import { usePostgresConnections } from '../hooks/usePostgresConnections'
 import { useTelegramBots } from '../hooks/useTelegramBots'
 import { useVectorCollections } from '../hooks/useVectorCollections'
+import { useWorkflowOptions } from '../hooks/useWorkflowOptions'
 import type {
   EmailAccount,
   LlmModel,
@@ -14,6 +15,7 @@ import type {
   PostgresConnection,
   TelegramBot,
   VectorCollection,
+  Workflow,
 } from '../lib/types'
 import { matchesVisibility } from '../lib/validation'
 import { NumberInput } from './NumberInput'
@@ -277,6 +279,31 @@ function PostgresConnectionField({
   )
 }
 
+function WorkflowField({
+  workflows,
+  value,
+  onChange,
+}: {
+  workflows: Workflow[]
+  value: unknown
+  onChange: (value: number) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      <option value="">-- select workflow --</option>
+      {workflows.map((workflow) => (
+        <option key={workflow.id} value={workflow.id}>
+          {workflow.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 interface NodeFieldsFormProps {
   fields: NodeCatalogField[]
   data: Record<string, unknown>
@@ -300,6 +327,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   )
   const hasPostgresConnectionDatasource = fields.some(
     (field) => field.datasource?.kind === 'postgres_connection',
+  )
+  const hasWorkflowDatasource = fields.some(
+    (field) => field.datasource?.kind === 'workflow',
   )
 
   const selectedProviderRaw = Number(data['llm_provider_id'] ?? 0)
@@ -327,6 +357,9 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   const { connections, loading: connectionsLoading } = usePostgresConnections({
     enabled: hasPostgresConnectionDatasource,
   })
+  const { workflows, loading: workflowsLoading } = useWorkflowOptions(
+    hasWorkflowDatasource,
+  )
 
   // A saved id/name that no longer matches anything in its data source (the
   // provider/model/bot was deleted after the node was configured) would
@@ -359,6 +392,11 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
       return connections.some((connection) => connection.id === Number(value))
         ? null
         : 'Selected PostgreSQL connection no longer exists.'
+    }
+    if (field.ui.widget === 'workflow' && !workflowsLoading) {
+      return workflows.some((workflow) => workflow.id === Number(value))
+        ? null
+        : 'Selected workflow no longer exists.'
     }
     return null
   }
@@ -462,6 +500,16 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
           connections={connections}
           value={value}
           onChange={(connectionId) => updateField(field.name, connectionId)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'workflow') {
+      return (
+        <WorkflowField
+          workflows={workflows}
+          value={value}
+          onChange={(workflowId) => updateField(field.name, workflowId)}
         />
       )
     }

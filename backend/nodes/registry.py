@@ -8,6 +8,7 @@ this list (plus its ``NodeType`` enum member).
 from enums import NodeType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult, NodeHandler
+from nodes.call_workflow import DEFINITION as CALL_WORKFLOW_DEFINITION
 from nodes.code_transform import DEFINITION as CODE_TRANSFORM_DEFINITION
 from nodes.condition import DEFINITION as CONDITION_DEFINITION
 from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
@@ -33,6 +34,7 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     HTTP_REQUEST_DEFINITION,
     CONDITION_DEFINITION,
     CODE_TRANSFORM_DEFINITION,
+    CALL_WORKFLOW_DEFINITION,
     VECTOR_INGEST_DEFINITION,
     VECTOR_SEARCH_DEFINITION,
     TABLE_DEFINITION,

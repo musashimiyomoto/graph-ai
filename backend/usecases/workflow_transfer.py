@@ -43,6 +43,7 @@ _ACCOUNT_PRIVATE_DATASOURCE_KINDS = {
     NodeFieldDataSourceKind.LLM_PROVIDER,
     NodeFieldDataSourceKind.TELEGRAM_BOT,
     NodeFieldDataSourceKind.POSTGRES_CONNECTION,
+    NodeFieldDataSourceKind.WORKFLOW,
 }
 
 

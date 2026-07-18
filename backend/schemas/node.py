@@ -22,6 +22,7 @@ class NodeFieldWidget(StrEnum):
     EMAIL_ACCOUNT = "email_account"
     VECTOR_COLLECTION = "vector_collection"
     POSTGRES_CONNECTION = "postgres_connection"
+    WORKFLOW = "workflow"
 
 
 class NodeFieldDataSourceKind(StrEnum):
@@ -33,6 +34,7 @@ class NodeFieldDataSourceKind(StrEnum):
     EMAIL_ACCOUNT = "email_account"
     VECTOR_COLLECTION = "vector_collection"
     POSTGRES_CONNECTION = "postgres_connection"
+    WORKFLOW = "workflow"
 
 
 class NodeFieldUI(BaseModel):
