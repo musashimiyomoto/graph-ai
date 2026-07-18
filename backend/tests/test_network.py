@@ -36,6 +36,12 @@ class TestBlockedUrlReason:
             pytest.fail("Loopback should be allowed for providers")
 
     @pytest.mark.asyncio
+    async def test_ipv6_loopback_allowed_when_private_permitted(self) -> None:
+        """IPv6 localhost is allowed when private hosts are explicitly permitted."""
+        if await blocked_url_reason("http://[::1]", allow_private=True) is not None:
+            pytest.fail("IPv6 loopback should be allowed for providers")
+
+    @pytest.mark.asyncio
     async def test_metadata_blocked_even_when_private_permitted(self) -> None:
         """Cloud metadata (link-local) is blocked even in lenient mode."""
         reason = await blocked_url_reason(

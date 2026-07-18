@@ -11,10 +11,11 @@ _ALLOWED_SCHEMES = ("http", "https")
 def _address_reason(ip: str, *, allow_private: bool) -> str | None:
     """Return a block reason for a resolved IP, or None when it is allowed.
 
-    Link-local (incl. cloud metadata 169.254.169.254), multicast, reserved, and
-    unspecified addresses are always blocked. Loopback/private ranges are blocked
-    only in strict mode (``allow_private=False``); self-hosted providers such as
-    Ollama legitimately live on private/loopback hosts, so they use the lenient mode.
+    Link-local (incl. cloud metadata 169.254.169.254), multicast, non-loopback
+    reserved, and unspecified addresses are always blocked. Loopback/private ranges
+    are blocked only in strict mode (``allow_private=False``); self-hosted providers
+    such as Ollama legitimately live on private/loopback hosts, so they use the
+    lenient mode.
 
     Args:
         ip: Resolved IP address string.
@@ -25,14 +26,15 @@ def _address_reason(ip: str, *, allow_private: bool) -> str | None:
 
     """
     address = ipaddress.ip_address(ip)
-    if (
-        address.is_link_local
-        or address.is_multicast
-        or address.is_reserved
-        or address.is_unspecified
-    ):
+    if address.is_link_local or address.is_multicast or address.is_unspecified:
         return f"URL resolves to a disallowed address ({ip})"
-    if not allow_private and (address.is_loopback or address.is_private):
+    if address.is_loopback:
+        if not allow_private:
+            return f"URL resolves to a private or loopback address ({ip})"
+        return None
+    if address.is_reserved:
+        return f"URL resolves to a disallowed address ({ip})"
+    if address.is_private and not allow_private:
         return f"URL resolves to a private or loopback address ({ip})"
     return None
 
