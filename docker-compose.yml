@@ -80,6 +80,18 @@ services:
       timeout: 3s
       retries: 40
 
+  arq-ui:
+    image: antonk0/arq-ui
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
   ollama:
     image: ${OLLAMA_IMAGE}
     restart: always

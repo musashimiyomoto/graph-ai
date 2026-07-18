@@ -64,11 +64,11 @@ This copies `.env.example` → `.env` and runs `docker compose up --build`.
 | Frontend         | http://localhost:3000              |
 | Backend (Swagger)| http://localhost:5000/docs         |
 | Metrics          | http://localhost:5000/metrics      |
+| ARQ dashboard    | http://localhost:8000              |
 | Qdrant dashboard | http://localhost:6333/dashboard    |
 | Ollama           | http://localhost:11434             |
 
-Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling but have
-no browser UI.
+Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling.
 
 ## Local Development
 
