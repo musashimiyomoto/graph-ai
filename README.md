@@ -24,8 +24,9 @@ is executed in the background, versioned, streamed token-by-token, and observabl
   undo/redo, copy-paste, multi-select, auto-layout; workflow export/import,
   duplication, and a global template library (Simple/RAG Chatbot, Telegram Echo).
 - **Node types** — Input, LLM, Web Search, Template, HTTP Request, Condition
-  (if/else branching), Code/Transform (sandboxed Python), Vector Ingest/Search
-  (RAG), Loop (list-map & do-while), and Output.
+  (if/else branching), Code/Transform (sandboxed Python), Translate (free
+  Google/MyMemory endpoints), Vector Ingest/Search (RAG), Loop (list-map &
+  do-while), and Output.
 - **Async execution engine** — ARQ + Redis background runs, per-node retries with
   backoff, wave-parallel scheduling for independent branches, a stuck-run reaper,
   per-node result persistence, SSE token streaming with a polling fallback, and

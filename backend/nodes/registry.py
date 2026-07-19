@@ -25,6 +25,7 @@ from nodes.switch import DEFINITION as SWITCH_DEFINITION
 from nodes.switch import switch_output_handles
 from nodes.table import DEFINITION as TABLE_DEFINITION
 from nodes.template import DEFINITION as TEMPLATE_DEFINITION
+from nodes.translate import DEFINITION as TRANSLATE_DEFINITION
 from nodes.vector_ingest import DEFINITION as VECTOR_INGEST_DEFINITION
 from nodes.vector_search import DEFINITION as VECTOR_SEARCH_DEFINITION
 from nodes.web_search import DEFINITION as WEB_SEARCH_DEFINITION
@@ -33,6 +34,7 @@ from schemas import NodeCatalogItem
 NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     INPUT_DEFINITION,
     LLM_DEFINITION,
+    TRANSLATE_DEFINITION,
     WEB_SEARCH_DEFINITION,
     TEMPLATE_DEFINITION,
     HTTP_REQUEST_DEFINITION,

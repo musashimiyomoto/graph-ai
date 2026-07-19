@@ -8,6 +8,7 @@ class NodeType(StrEnum):
 
     INPUT = auto()
     LLM = auto()
+    TRANSLATE = auto()
     WEB_SEARCH = auto()
     TEMPLATE = auto()
     HTTP_REQUEST = auto()

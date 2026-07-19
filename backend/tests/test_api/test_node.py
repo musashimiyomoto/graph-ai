@@ -34,6 +34,10 @@ def _extra_fields_by_type(
             "model": "gpt-4",
             "system_prompt": "You are a helpful assistant.",
         },
+        NodeType.TRANSLATE: {
+            "service": "google",
+            "target_language": "Spanish",
+        },
         NodeType.WEB_SEARCH: {"max_results": 5},
         NodeType.TEMPLATE: {"template": "Summary: {{input}}"},
         NodeType.HTTP_REQUEST: {
@@ -97,6 +101,11 @@ def build_node_data(
 EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.INPUT: {"label", "format"},
     NodeType.LLM: {"label", "llm_provider_id", "model", "system_prompt"},
+    NodeType.TRANSLATE: {
+        "label",
+        "service",
+        "target_language",
+    },
     NodeType.WEB_SEARCH: {"label", "max_results"},
     NodeType.TEMPLATE: {"label", "template"},
     NodeType.HTTP_REQUEST: {"label", "url", "method"},

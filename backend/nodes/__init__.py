@@ -33,6 +33,7 @@ from nodes.switch import (
 )
 from nodes.table import TableNodeHandler
 from nodes.template import TemplateNodeHandler
+from nodes.translate import TranslateNodeHandler
 from nodes.vector_ingest import VectorIngestNodeHandler
 from nodes.vector_search import VectorSearchNodeHandler
 from nodes.web_search import WebSearchNodeHandler
@@ -63,6 +64,7 @@ __all__ = [
     "SwitchNodeHandler",
     "TableNodeHandler",
     "TemplateNodeHandler",
+    "TranslateNodeHandler",
     "VectorIngestNodeHandler",
     "VectorSearchNodeHandler",
     "WebSearchNodeHandler",

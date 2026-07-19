@@ -35,6 +35,22 @@ export function LlmIcon(props: IconProps) {
   )
 }
 
+export function TranslateIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="1" y="2" width="7" height="2" fill="var(--accent-2)" />
+      <rect x="4" y="4" width="2" height="2" fill="var(--accent-2)" />
+      <rect x="2" y="6" width="6" height="2" fill="var(--accent-2)" />
+      <rect x="5" y="8" width="2" height="2" fill="var(--accent-2)" />
+      <rect x="8" y="12" width="7" height="2" fill="var(--accent)" />
+      <rect x="10" y="6" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="8" width="2" height="4" fill="var(--accent)" />
+      <rect x="12" y="8" width="2" height="4" fill="var(--accent)" />
+      <rect x="11" y="9" width="2" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function OutputIcon(props: IconProps) {
   return (
     <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
@@ -243,6 +259,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'llm') {
     return <LlmIcon />
+  }
+
+  if (iconKey === 'translate') {
+    return <TranslateIcon />
   }
 
   if (iconKey === 'web_search') {

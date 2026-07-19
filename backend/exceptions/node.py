@@ -57,6 +57,20 @@ class HTTPRequestError(BaseError):
         super().__init__(message=message, status_code=status_code)
 
 
+class TranslationConnectionError(BaseError):
+    """Raised when a free translation service request fails."""
+
+    retryable = True
+
+    def __init__(
+        self,
+        message: str = "Translation service request failed",
+        status_code: HTTPStatus = HTTPStatus.BAD_GATEWAY,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
 class TableSourceError(BaseError):
     """Raised when a Table node cannot read its configured source."""
 

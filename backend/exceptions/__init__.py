@@ -47,6 +47,7 @@ from exceptions.node import (
     NodeDataValidationError,
     NodeNotFoundError,
     TableSourceError,
+    TranslationConnectionError,
     WebSearchConnectionError,
 )
 from exceptions.postgres_connection import (
@@ -114,6 +115,7 @@ __all__ = [
     "TableSourceError",
     "TelegramAPIError",
     "TelegramBotNotFoundError",
+    "TranslationConnectionError",
     "UnsupportedDocumentTypeError",
     "UnsupportedLLMProviderError",
     "UserAlreadyExistsError",

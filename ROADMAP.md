@@ -840,8 +840,14 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       Settings modal now has one Account Security section for password changes and
       active-session management. Migration `e5b7c9d1f3a6` adds the verified-email
       timestamp and one-time token storage.
-- [ ] **Translate node** — translate upstream text into a selected target language;
-      useful, but already achievable with the existing LLM node.
+- [x] **Translate node** — translate upstream text into one of 18 target
+      languages without consuming an LLM provider. The node auto-detects the
+      source language and offers two no-key external services: Google's free
+      (unofficial) web endpoint and MyMemory's public anonymous API. Each fixed
+      endpoint has local request-size validation, strict response parsing, and
+      retryable timeout/transport/provider failures; the inspector clearly
+      discloses that text is sent to the selected third party and that free
+      service limits apply. Migration `f7c9e1a3b5d8` adds the node enum value.
 - [ ] **Delay / Wait node** — pause a branch for a duration or until a timestamp;
       primarily useful for longer-running automation beyond the initial MVP.
 - [ ] **Vision support for the LLM node** — accept images for OCR, document review,

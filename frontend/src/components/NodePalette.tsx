@@ -7,7 +7,7 @@ import { NodeIcon } from './NodeIcons'
 // silently dropped from the palette.
 const NODE_CATEGORIES: { label: string; types: NodeType[] }[] = [
   { label: 'I/O', types: ['input', 'output'] },
-  { label: 'AI', types: ['llm'] },
+  { label: 'AI', types: ['llm', 'translate'] },
   { label: 'Data', types: ['table', 'web_search', 'http_request'] },
   {
     label: 'Logic',
