@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 
 import { useEmailAccounts } from '../hooks/useEmailAccounts'
 import { useLlmProviders } from '../hooks/useLlmProviders'
+import { useMCPServers } from '../hooks/useMCPServers'
+import { useMCPTools } from '../hooks/useMCPTools'
 import { useProviderModels } from '../hooks/useProviderModels'
 import { usePostgresConnections } from '../hooks/usePostgresConnections'
 import { useTelegramBots } from '../hooks/useTelegramBots'
@@ -11,6 +13,8 @@ import type {
   EmailAccount,
   LlmModel,
   LlmProvider,
+  MCPServer,
+  MCPTool,
   NodeCatalogField,
   PostgresConnection,
   TelegramBot,
@@ -305,6 +309,63 @@ function WorkflowField({
   )
 }
 
+function MCPServerField({
+  servers,
+  value,
+  onChange,
+}: {
+  servers: MCPServer[]
+  value: unknown
+  onChange: (value: number) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      <option value="">-- select MCP server --</option>
+      {servers.map((server) => (
+        <option key={server.id} value={server.id}>
+          {server.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function MCPToolField({
+  tools,
+  value,
+  loading,
+  disabled,
+  onChange,
+}: {
+  tools: MCPTool[]
+  value: unknown
+  loading: boolean
+  disabled: boolean
+  onChange: (value: string) => void
+}) {
+  return (
+    <select
+      className="pixel-input"
+      value={String(value ?? '')}
+      disabled={disabled || loading}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="">
+        {loading ? 'Loading tools...' : '-- select tool --'}
+      </option>
+      {tools.map((tool) => (
+        <option key={tool.name} value={tool.name}>
+          {tool.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 interface NodeFieldsFormProps {
   fields: NodeCatalogField[]
   data: Record<string, unknown>
@@ -339,11 +400,22 @@ export function NodeFieldsForm({
   const hasWorkflowDatasource = fields.some(
     (field) => field.datasource?.kind === 'workflow',
   )
+  const hasMCPServerDatasource = fields.some(
+    (field) => field.datasource?.kind === 'mcp_server',
+  )
+  const hasMCPToolDatasource = fields.some(
+    (field) => field.datasource?.kind === 'mcp_tool',
+  )
 
   const selectedProviderRaw = Number(data['llm_provider_id'] ?? 0)
   const selectedProviderId =
     Number.isInteger(selectedProviderRaw) && selectedProviderRaw > 0
       ? selectedProviderRaw
+      : null
+  const selectedMCPServerRaw = Number(data['mcp_server_id'] ?? 0)
+  const selectedMCPServerId =
+    Number.isInteger(selectedMCPServerRaw) && selectedMCPServerRaw > 0
+      ? selectedMCPServerRaw
       : null
 
   const { providers, loading: providersLoading } = useLlmProviders({
@@ -369,6 +441,14 @@ export function NodeFieldsForm({
     hasWorkflowDatasource,
     currentWorkflowId,
   )
+  const { servers: mcpServers, loading: mcpServersLoading } = useMCPServers({
+    enabled: hasMCPServerDatasource,
+  })
+  const {
+    tools: mcpTools,
+    loading: mcpToolsLoading,
+    error: mcpToolsError,
+  } = useMCPTools(selectedMCPServerId, hasMCPToolDatasource)
 
   // A saved id/name that no longer matches anything in its data source (the
   // provider/model/bot was deleted after the node was configured) would
@@ -406,6 +486,19 @@ export function NodeFieldsForm({
       return workflows.some((workflow) => workflow.id === Number(value))
         ? null
         : 'Selected workflow no longer exists.'
+    }
+    if (field.ui.widget === 'mcp_server' && !mcpServersLoading) {
+      return mcpServers.some((server) => server.id === Number(value))
+        ? null
+        : 'Selected MCP server no longer exists.'
+    }
+    if (field.ui.widget === 'mcp_tool' && mcpToolsError) {
+      return 'Could not load tools from the selected MCP server.'
+    }
+    if (field.ui.widget === 'mcp_tool' && !mcpToolsLoading) {
+      return mcpTools.some((tool) => tool.name === value)
+        ? null
+        : 'Selected tool is no longer exposed by this server.'
     }
     return null
   }
@@ -519,6 +612,28 @@ export function NodeFieldsForm({
           workflows={workflows}
           value={value}
           onChange={(workflowId) => updateField(field.name, workflowId)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'mcp_server') {
+      return (
+        <MCPServerField
+          servers={mcpServers}
+          value={value}
+          onChange={(serverId) => updateField(field.name, serverId)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'mcp_tool') {
+      return (
+        <MCPToolField
+          tools={mcpTools}
+          value={value}
+          loading={mcpToolsLoading}
+          disabled={selectedMCPServerId === null}
+          onChange={(toolName) => updateField(field.name, toolName)}
         />
       )
     }

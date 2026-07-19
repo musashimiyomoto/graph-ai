@@ -12,6 +12,8 @@ export const queryKeys = {
   telegramBots: () => ['telegram-bots'] as const,
   emailAccounts: () => ['email-accounts'] as const,
   postgresConnections: () => ['postgres-connections'] as const,
+  mcpServers: () => ['mcp-servers'] as const,
+  mcpTools: (serverId: number) => ['mcp-servers', serverId, 'tools'] as const,
   vectorCollections: () => ['vector-collections'] as const,
   vectorDocuments: (collection: string) =>
     ['vector-collections', collection, 'documents'] as const,

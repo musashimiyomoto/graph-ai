@@ -10,6 +10,9 @@ import type {
   LlmModel,
   LlmProvider,
   LlmProviderCreatePayload,
+  MCPServer,
+  MCPServerCreatePayload,
+  MCPTool,
   NodeCatalogItem,
   NodeCreatePayload,
   NodeExecutionResult,
@@ -486,6 +489,27 @@ export async function createPostgresConnection(
 
 export async function deletePostgresConnection(connectionId: number): Promise<void> {
   await request(`/postgres-connections/${connectionId}`, { method: 'DELETE' })
+}
+
+export async function getMCPServers(): Promise<MCPServer[]> {
+  return request<MCPServer[]>('/mcp-servers')
+}
+
+export async function createMCPServer(
+  payload: MCPServerCreatePayload,
+): Promise<MCPServer> {
+  return request<MCPServer>('/mcp-servers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteMCPServer(serverId: number): Promise<void> {
+  await request(`/mcp-servers/${serverId}`, { method: 'DELETE' })
+}
+
+export async function getMCPTools(serverId: number): Promise<MCPTool[]> {
+  return request<MCPTool[]>(`/mcp-servers/${serverId}/tools`)
 }
 
 export async function getVectorCollections(): Promise<VectorCollection[]> {

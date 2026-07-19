@@ -19,6 +19,7 @@ from nodes.llm import DEFINITION as LLM_DEFINITION
 from nodes.loop import DEFINITION as LOOP_DEFINITION
 from nodes.loop_input import DEFINITION as LOOP_INPUT_DEFINITION
 from nodes.loop_output import DEFINITION as LOOP_OUTPUT_DEFINITION
+from nodes.mcp_tool import DEFINITION as MCP_TOOL_DEFINITION
 from nodes.output import DEFINITION as OUTPUT_DEFINITION
 from nodes.switch import DEFINITION as SWITCH_DEFINITION
 from nodes.switch import switch_output_handles
@@ -37,6 +38,7 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     HTTP_REQUEST_DEFINITION,
     CONDITION_DEFINITION,
     SWITCH_DEFINITION,
+    MCP_TOOL_DEFINITION,
     CODE_TRANSFORM_DEFINITION,
     CALL_WORKFLOW_DEFINITION,
     APPROVAL_DEFINITION,

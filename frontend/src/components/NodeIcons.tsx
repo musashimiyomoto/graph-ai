@@ -221,6 +221,20 @@ export function SwitchIcon(props: IconProps) {
   )
 }
 
+export function MCPToolIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="2" y="3" width="4" height="2" fill="var(--accent-2)" />
+      <rect x="10" y="3" width="4" height="2" fill="var(--accent-2)" />
+      <rect x="5" y="4" width="2" height="4" fill="var(--accent-2)" />
+      <rect x="9" y="4" width="2" height="4" fill="var(--accent-2)" />
+      <rect x="6" y="7" width="4" height="2" fill="var(--accent)" />
+      <rect x="7" y="9" width="2" height="4" fill="var(--accent)" />
+      <rect x="5" y="12" width="6" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function NodeIcon({ iconKey }: { iconKey: string }) {
   if (iconKey === 'loop') {
     return <LoopIcon />
@@ -249,6 +263,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'switch') {
     return <SwitchIcon />
+  }
+
+  if (iconKey === 'mcp_tool') {
+    return <MCPToolIcon />
   }
 
   if (iconKey === 'code_transform') {

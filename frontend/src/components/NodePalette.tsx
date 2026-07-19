@@ -14,6 +14,7 @@ const NODE_CATEGORIES: { label: string; types: NodeType[] }[] = [
     types: ['template', 'condition', 'switch', 'code_transform', 'loop'],
   },
   { label: 'Composition', types: ['call_workflow'] },
+  { label: 'Tools', types: ['mcp_tool'] },
   { label: 'Loop', types: ['loop_input', 'loop_output'] },
   { label: 'RAG', types: ['vector_ingest', 'vector_search'] },
 ]

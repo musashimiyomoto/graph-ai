@@ -5,6 +5,7 @@ from db.repositories.edge import EdgeRepository
 from db.repositories.email_account import EmailAccountRepository
 from db.repositories.execution import ExecutionRepository
 from db.repositories.llm_provider import LLMProviderRepository
+from db.repositories.mcp_server import MCPServerRepository
 from db.repositories.node import NodeRepository
 from db.repositories.node_execution import NodeExecutionRepository
 from db.repositories.node_schedule import NodeScheduleRepository
@@ -21,6 +22,7 @@ __all__ = [
     "EmailAccountRepository",
     "ExecutionRepository",
     "LLMProviderRepository",
+    "MCPServerRepository",
     "NodeExecutionRepository",
     "NodeRepository",
     "NodeScheduleRepository",

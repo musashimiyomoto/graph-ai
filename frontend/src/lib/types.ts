@@ -210,6 +210,8 @@ export type NodeFieldWidget =
   | 'postgres_connection'
   | 'workflow'
   | 'switch_branches'
+  | 'mcp_server'
+  | 'mcp_tool'
 
 export type NodeFieldDataSourceKind =
   | 'llm_provider'
@@ -219,6 +221,8 @@ export type NodeFieldDataSourceKind =
   | 'vector_collection'
   | 'postgres_connection'
   | 'workflow'
+  | 'mcp_server'
+  | 'mcp_tool'
 
 export type PortType = 'text' | 'json' | 'file' | 'list'
 
@@ -363,6 +367,26 @@ export interface PostgresConnection {
 export interface PostgresConnectionCreatePayload {
   name: string
   dsn: string
+}
+
+export interface MCPServer {
+  id: number
+  user_id: number
+  name: string
+  url: string
+  has_headers: boolean
+}
+
+export interface MCPServerCreatePayload {
+  name: string
+  url: string
+  headers: Record<string, string>
+}
+
+export interface MCPTool {
+  name: string
+  description: string | null
+  input_schema: Record<string, unknown>
 }
 
 export interface NodeExecutionResult {

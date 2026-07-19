@@ -24,6 +24,8 @@ class NodeFieldWidget(StrEnum):
     POSTGRES_CONNECTION = "postgres_connection"
     WORKFLOW = "workflow"
     SWITCH_BRANCHES = "switch_branches"
+    MCP_SERVER = "mcp_server"
+    MCP_TOOL = "mcp_tool"
 
 
 class NodeFieldDataSourceKind(StrEnum):
@@ -36,6 +38,8 @@ class NodeFieldDataSourceKind(StrEnum):
     VECTOR_COLLECTION = "vector_collection"
     POSTGRES_CONNECTION = "postgres_connection"
     WORKFLOW = "workflow"
+    MCP_SERVER = "mcp_server"
+    MCP_TOOL = "mcp_tool"
 
 
 class NodeFieldUI(BaseModel):

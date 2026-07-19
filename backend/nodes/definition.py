@@ -3,7 +3,11 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from db.repositories import LLMProviderRepository, PostgresConnectionRepository
+from db.repositories import (
+    LLMProviderRepository,
+    MCPServerRepository,
+    PostgresConnectionRepository,
+)
 from enums import NodeType, PortType
 from nodes.base import NodeHandler
 from schemas import NodeFieldSpec, NodeGraphSpec
@@ -15,6 +19,7 @@ class NodeHandlerDeps:
 
     llm_provider_repository: LLMProviderRepository
     postgres_connection_repository: PostgresConnectionRepository
+    mcp_server_repository: MCPServerRepository
 
 
 @dataclass(frozen=True)

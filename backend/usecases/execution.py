@@ -34,6 +34,7 @@ from db.repositories import (
     EdgeRepository,
     ExecutionRepository,
     LLMProviderRepository,
+    MCPServerRepository,
     NodeExecutionRepository,
     NodeRepository,
     PostgresConnectionRepository,
@@ -262,11 +263,13 @@ class ExecutionUsecase:
         self._node_execution_repository = NodeExecutionRepository()
         self._llm_provider_repository = LLMProviderRepository()
         self._postgres_connection_repository = PostgresConnectionRepository()
+        self._mcp_server_repository = MCPServerRepository()
         self._workflow_version_repository = WorkflowVersionRepository()
         self._node_registry = NodeHandlerRegistry(
             NodeHandlerDeps(
                 llm_provider_repository=self._llm_provider_repository,
                 postgres_connection_repository=self._postgres_connection_repository,
+                mcp_server_repository=self._mcp_server_repository,
             )
         )
         self._usage_usecase = UsageUsecase()

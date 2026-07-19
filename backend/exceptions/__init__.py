@@ -29,6 +29,11 @@ from exceptions.llm_provider import (
     LLMProviderNotFoundError,
     UnsupportedLLMProviderError,
 )
+from exceptions.mcp import (
+    MCPConnectionError,
+    MCPServerAlreadyExistsError,
+    MCPServerNotFoundError,
+)
 from exceptions.network import BlockedURLError
 from exceptions.node import (
     HTTPRequestError,
@@ -84,6 +89,9 @@ __all__ = [
     "LLMProviderConfigError",
     "LLMProviderConnectionError",
     "LLMProviderNotFoundError",
+    "MCPConnectionError",
+    "MCPServerAlreadyExistsError",
+    "MCPServerNotFoundError",
     "NodeDataValidationError",
     "NodeExecutionTimeoutError",
     "NodeNotFoundError",

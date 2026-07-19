@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { ApiError } from '../lib/types'
 import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
+import { MCPServerSettings } from './MCPServerSettings'
 import { ProviderSettings } from './ProviderSettings'
 import { PostgresConnectionSettings } from './PostgresConnectionSettings'
 import { TelegramSettings } from './TelegramSettings'
@@ -26,6 +27,7 @@ const SECTIONS: SettingsSection[] = [
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
   { id: 'email', label: 'Email Accounts', Component: EmailSettings },
   { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },
+  { id: 'mcp', label: 'MCP Servers', Component: MCPServerSettings },
   { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
 

@@ -13,6 +13,7 @@ class NodeType(StrEnum):
     HTTP_REQUEST = auto()
     CONDITION = auto()
     SWITCH = auto()
+    MCP_TOOL = auto()
     CODE_TRANSFORM = auto()
     VECTOR_INGEST = auto()
     VECTOR_SEARCH = auto()

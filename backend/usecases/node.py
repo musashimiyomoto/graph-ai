@@ -11,6 +11,7 @@ from db.repositories import (
     EdgeRepository,
     EmailAccountRepository,
     LLMProviderRepository,
+    MCPServerRepository,
     NodeRepository,
     NodeScheduleRepository,
     PostgresConnectionRepository,
@@ -21,6 +22,7 @@ from enums import InputNodeFormat, NodeType, ValidatorType
 from exceptions import (
     EmailAccountNotFoundError,
     LLMProviderNotFoundError,
+    MCPServerNotFoundError,
     NodeDataValidationError,
     NodeNotFoundError,
     PostgresConnectionNotFoundError,
@@ -70,6 +72,7 @@ class NodeUsecase:
         self._edge_repository = EdgeRepository()
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
+        self._mcp_server_repository = MCPServerRepository()
         self._telegram_bot_repository = TelegramBotRepository()
         self._email_account_repository = EmailAccountRepository()
         self._node_schedule_repository = NodeScheduleRepository()
@@ -126,6 +129,7 @@ class NodeUsecase:
                     NodeFieldDataSourceKind.EMAIL_ACCOUNT,
                     NodeFieldDataSourceKind.LLM_MODEL,
                     NodeFieldDataSourceKind.POSTGRES_CONNECTION,
+                    NodeFieldDataSourceKind.MCP_SERVER,
                     NodeFieldDataSourceKind.WORKFLOW,
                 }
             )
@@ -373,6 +377,10 @@ class NodeUsecase:
                 await self._validate_postgres_connection_reference(
                     session=session, user_id=user_id, field=field, value=value
                 )
+            elif field.datasource.kind is NodeFieldDataSourceKind.MCP_SERVER:
+                await self._validate_mcp_server_reference(
+                    session=session, user_id=user_id, field=field, value=value
+                )
             elif field.datasource.kind is NodeFieldDataSourceKind.WORKFLOW:
                 await self._validate_workflow_reference(
                     session=session,
@@ -449,6 +457,23 @@ class NodeUsecase:
         )
         if connection is None:
             raise PostgresConnectionNotFoundError
+
+    async def _validate_mcp_server_reference(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        field: NodeFieldSpec,
+        value: object,
+    ) -> None:
+        """Ensure a referenced MCP server belongs to the user."""
+        server_id = self._reference_id(field, value, "MCP server")
+        server = await self._mcp_server_repository.get_by(
+            session=session,
+            id=server_id,
+            user_id=user_id,
+        )
+        if server is None:
+            raise MCPServerNotFoundError
 
     async def _validate_workflow_reference(
         self,

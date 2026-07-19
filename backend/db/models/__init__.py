@@ -6,6 +6,7 @@ from db.models.edge import Edge
 from db.models.email_account import EmailAccount
 from db.models.execution import Execution
 from db.models.llm_provider import LLMProvider
+from db.models.mcp_server import MCPServer
 from db.models.node import Node
 from db.models.node_execution import NodeExecution
 from db.models.node_schedule import NodeSchedule
@@ -25,6 +26,7 @@ __all__ = [
     "EmailAccount",
     "Execution",
     "LLMProvider",
+    "MCPServer",
     "Node",
     "NodeExecution",
     "NodeSchedule",

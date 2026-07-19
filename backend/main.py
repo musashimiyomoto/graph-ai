@@ -18,6 +18,7 @@ from api.routers import (
     execution,
     health,
     llm_provider,
+    mcp_server,
     metrics,
     node,
     postgres_connection,
@@ -133,6 +134,7 @@ app.include_router(router=edge.router)
 app.include_router(router=email_account.router)
 app.include_router(router=execution.router)
 app.include_router(router=llm_provider.router)
+app.include_router(router=mcp_server.router)
 app.include_router(router=telegram_bot.router)
 app.include_router(router=vector.router)
 app.include_router(router=usage.router)

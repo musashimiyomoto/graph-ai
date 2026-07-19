@@ -12,6 +12,7 @@ from nodes.llm import LLMNodeHandler
 from nodes.loop import LoopNodeHandler
 from nodes.loop_input import LoopInputNodeHandler
 from nodes.loop_output import LoopOutputNodeHandler
+from nodes.mcp_tool import MCPToolNodeHandler
 from nodes.output import OutputNodeHandler
 from nodes.registry import (
     NODE_DEFINITIONS,
@@ -48,6 +49,7 @@ __all__ = [
     "LoopInputNodeHandler",
     "LoopNodeHandler",
     "LoopOutputNodeHandler",
+    "MCPToolNodeHandler",
     "NodeDefinition",
     "NodeExecutionContext",
     "NodeExecutionResult",

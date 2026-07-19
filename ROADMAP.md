@@ -807,8 +807,15 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       deterministic route. The inspector provides a structured branch editor
       and the canvas derives its output handles from persisted node data.
       Migration `b8d1f3a5c7e9` adds the node enum value.
-- [ ] **MCP tool nodes** — connect workflows to capabilities exposed by MCP
-      servers through explicit, visible graph nodes.
+- [x] **MCP tool nodes** — user-owned remote Streamable HTTP MCP servers are
+      managed in Settings with SSRF-checked URLs and encrypted write-only HTTP
+      headers. The `MCP Tool` node discovers the selected server's live tool
+      catalog, accepts JSON arguments with `{{input}}`/`{{input[N]}}`
+      substitution, invokes the tool through the official Python MCP SDK, and
+      returns text or structured content to downstream nodes. Server references
+      are ownership-validated and scrubbed during cross-account workflow
+      transfer. Migration `c9e2a4f6b8d1` adds MCP server storage and the node
+      enum value.
 - [ ] **Session management** — keep users signed in with refresh tokens and let
       them securely log out or revoke active sessions.
 - [ ] **Email verification and password recovery** — verify new accounts, reset a

@@ -28,6 +28,7 @@ dependencies = [
     "croniter>=6.0.0",
     "prometheus-client>=0.21.0",
     "sentry-sdk[fastapi]>=2.20.0",
+    "mcp==1.28.1",
 ]
 
 [dependency-groups]

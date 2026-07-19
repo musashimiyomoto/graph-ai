@@ -24,6 +24,7 @@ def _extra_fields_by_type(
     *,
     llm_provider_id: int | None,
     target_workflow_id: int | None,
+    mcp_server_id: int | None,
 ) -> dict:
     """Return the type-specific fields for a node data payload."""
     by_type: dict[NodeType, dict] = {
@@ -51,6 +52,11 @@ def _extra_fields_by_type(
             ],
             "case_sensitive": "false",
         },
+        NodeType.MCP_TOOL: {
+            "mcp_server_id": mcp_server_id,
+            "tool_name": "search",
+            "arguments": '{"query": "{{input}}"}',
+        },
         NodeType.CODE_TRANSFORM: {"code": "output = input"},
         NodeType.VECTOR_INGEST: {"collection": "docs"},
         NodeType.VECTOR_SEARCH: {"collection": "docs", "top_k": 4},
@@ -74,6 +80,7 @@ def build_node_data(
     *,
     llm_provider_id: int | None = None,
     target_workflow_id: int | None = None,
+    mcp_server_id: int | None = None,
 ) -> dict:
     """Build node data payloads for tests."""
     return {
@@ -82,6 +89,7 @@ def build_node_data(
             node_type,
             llm_provider_id=llm_provider_id,
             target_workflow_id=target_workflow_id,
+            mcp_server_id=mcp_server_id,
         ),
     }
 
@@ -94,6 +102,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.HTTP_REQUEST: {"label", "url", "method"},
     NodeType.CONDITION: {"label", "condition_type", "value", "case_sensitive"},
     NodeType.SWITCH: {"label", "branches", "case_sensitive"},
+    NodeType.MCP_TOOL: {"label", "mcp_server_id", "tool_name", "arguments"},
     NodeType.CODE_TRANSFORM: {"label", "code"},
     NodeType.VECTOR_INGEST: {"label", "collection"},
     NodeType.VECTOR_SEARCH: {"label", "collection", "top_k"},
@@ -145,6 +154,18 @@ async def _create_node_with_scope(
             headers=headers,
         )
         target_workflow_id = target_response.json()["id"]
+    mcp_server_id = None
+    if node_type is NodeType.MCP_TOOL:
+        server_response = await client.post(
+            url="/mcp-servers",
+            json={
+                "name": f"mcp-{uuid.uuid4().hex[:8]}",
+                "url": "https://mcp.example.com/mcp",
+                "headers": {},
+            },
+            headers=headers,
+        )
+        mcp_server_id = server_response.json()["id"]
     if node_type in _LOOP_BODY_ONLY_TYPES:
         loop_response = await client.post(
             url="/nodes",
@@ -164,6 +185,7 @@ async def _create_node_with_scope(
             node_type,
             llm_provider_id=llm_provider_id,
             target_workflow_id=target_workflow_id,
+            mcp_server_id=mcp_server_id,
         ),
         "parent_node_id": parent_node_id,
     }
@@ -827,6 +849,18 @@ class TestNodeUpdate(BaseTestCase):
                 session=self.session, owner_id=user["id"]
             )
             target_workflow_id = target.id
+        mcp_server_id = None
+        if node_type is NodeType.MCP_TOOL:
+            server_response = await self.client.post(
+                url="/mcp-servers",
+                json={
+                    "name": f"mcp-{uuid.uuid4().hex[:8]}",
+                    "url": "https://mcp.example.com/mcp",
+                    "headers": {},
+                },
+                headers=headers,
+            )
+            mcp_server_id = server_response.json()["id"]
         parent_node_id = None
         if node_type in _LOOP_BODY_ONLY_TYPES:
             loop_node = await NodeFactory.create_async(
@@ -844,6 +878,7 @@ class TestNodeUpdate(BaseTestCase):
                 node_type,
                 llm_provider_id=llm_provider_id,
                 target_workflow_id=target_workflow_id,
+                mcp_server_id=mcp_server_id,
             ),
             parent_node_id=parent_node_id,
         )
@@ -857,6 +892,7 @@ class TestNodeUpdate(BaseTestCase):
                     node_type,
                     llm_provider_id=llm_provider_id,
                     target_workflow_id=target_workflow_id,
+                    mcp_server_id=mcp_server_id,
                 ),
                 "position_x": new_x,
                 "position_y": new_y,
