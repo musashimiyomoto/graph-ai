@@ -102,6 +102,8 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
             token_publisher=token_publisher,
             token_reset_publisher=token_reset_publisher,
         )
+        if result.status is ExecutionStatus.WAITING_APPROVAL:
+            return
         await _reply_via_telegram(session=session, execution_id=execution_id)
         await _reply_via_email(session=session, execution_id=execution_id)
         await _deliver_via_webhook(session=session, execution_id=execution_id)
@@ -843,11 +845,9 @@ async def reap_stuck_executions(
     del args, kwargs
     redis: ArqRedis = ctx["redis"]
 
-    async def re_enqueue(execution_id: int) -> None:
+    async def re_enqueue(execution_id: int, job_id: str) -> None:
         """Re-enqueue the execution job, deduplicated by execution ID."""
-        await redis.enqueue_job(
-            "run_execution_task", execution_id, _job_id=f"execution:{execution_id}"
-        )
+        await redis.enqueue_job("run_execution_task", execution_id, _job_id=job_id)
 
     async with async_session() as session:
         reaped = await ExecutionUsecase().reap_stuck_executions(

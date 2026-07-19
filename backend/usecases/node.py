@@ -560,6 +560,10 @@ class NodeUsecase:
             )
             raise NodeDataValidationError(message=message)
 
+        if node_type is NodeType.APPROVAL and parent_node_id is not None:
+            message = "Approval nodes can only be created at the top level"
+            raise NodeDataValidationError(message=message)
+
         if node_type in {NodeType.LOOP_INPUT, NodeType.LOOP_OUTPUT} and (
             parent_node_id is None
         ):

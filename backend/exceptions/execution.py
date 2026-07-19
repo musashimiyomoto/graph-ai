@@ -53,6 +53,18 @@ class ExecutionNotCancellableError(BaseError):
         super().__init__(message=message, status_code=status_code)
 
 
+class ExecutionApprovalNotPendingError(BaseError):
+    """Raised when an execution is not waiting for an approval decision."""
+
+    def __init__(
+        self,
+        message: str = "Execution is not waiting for approval",
+        status_code: HTTPStatus = HTTPStatus.CONFLICT,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
 class NodeExecutionTimeoutError(BaseError):
     """Raised when a single node exceeds its execution time budget."""
 

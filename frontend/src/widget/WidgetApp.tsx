@@ -28,6 +28,9 @@ function finalText(execution: Execution): string {
   if (execution.status === 'cancelled') {
     return 'Execution cancelled.'
   }
+  if (execution.status === 'rejected') {
+    return 'Execution rejected.'
+  }
   if (execution.status === 'failed') {
     return execution.error ?? 'The workflow failed.'
   }
@@ -72,7 +75,8 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
       if (
         execution.status === 'success' ||
         execution.status === 'failed' ||
-        execution.status === 'cancelled'
+        execution.status === 'cancelled' ||
+        execution.status === 'rejected'
       ) {
         return execution
       }
@@ -125,7 +129,8 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
               streamEvent.type === 'status' &&
               (streamEvent.execution.status === 'success' ||
                 streamEvent.execution.status === 'failed' ||
-                streamEvent.execution.status === 'cancelled')
+                streamEvent.execution.status === 'cancelled' ||
+                streamEvent.execution.status === 'rejected')
             ) {
               terminal = streamEvent.execution
             }

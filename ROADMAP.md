@@ -786,8 +786,19 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       as terminal, and Test Runs exposes a `Cancel run` action with a distinct
       cancelled result state. Migration `f6b8c1d4e7a9` extends the shared
       PostgreSQL execution-status enum.
-- [ ] **Approval node** — pause a workflow until a person approves or rejects the
-      next step.
+- [x] **Approval node** — a required-path `Approval` node durably checkpoints
+      completed node results, moves the execution to `WAITING_APPROVAL`, and
+      exposes its configured request plus upstream value in both Test Runs and
+      Activity Log. Authenticated approve/reject endpoints lock the execution
+      decision: approval marks the node successful and enqueues a continuation
+      under a fresh ARQ job ID, restoring success/skipped checkpoints so earlier
+      LLM/HTTP/side-effect nodes are not repeated; rejection finalizes the run as
+      `REJECTED`, records usage and audit metadata, and sends no channel output.
+      Pending approvals can also be cancelled. Approval nodes are top-level only
+      and graph validation requires each one to lie on every input-to-output
+      path, avoiding ambiguous concurrent pause/failure races. Migration
+      `a7c9e2f4b6d8` adds the node/status enum values and execution checkpoint
+      metadata.
 - [ ] **Switch node** — route a value into one of several named branches instead
       of the Condition node's binary true/false split.
 - [ ] **MCP tool nodes** — connect workflows to capabilities exposed by MCP

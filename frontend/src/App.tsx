@@ -142,11 +142,14 @@ export function App() {
   const {
     executions,
     cancelling,
+    decidingExecutionId,
     lastExecution,
     liveTokens,
     clearExecutions,
     handleRun,
     handleCancel,
+    handleApprove,
+    handleReject,
   } = useExecutions({
     token,
     activeWorkflowId,
@@ -158,6 +161,9 @@ export function App() {
   const {
     executions: activityLogExecutions,
     loading: activityLogLoading,
+    decidingExecutionId: activityDecidingExecutionId,
+    handleApprove: handleActivityApprove,
+    handleReject: handleActivityReject,
   } = useActivityLog({
     token,
     activeWorkflowId,
@@ -629,9 +635,12 @@ export function App() {
               runDisabledReason={runDisabledReason}
               loading={loading}
               cancelling={cancelling}
+              decidingExecutionId={decidingExecutionId}
               nodeMetaByNodeId={nodeMetaByNodeId}
               onRun={handleRun}
               onCancel={handleCancel}
+              onApprove={handleApprove}
+              onReject={handleReject}
             />
           ) : (
             <ActivityLog
@@ -639,7 +648,10 @@ export function App() {
               hasWorkflow={activeWorkflowId !== null}
               executions={activityLogExecutions}
               loading={activityLogLoading}
+              decidingExecutionId={activityDecidingExecutionId}
               nodeMetaByNodeId={nodeMetaByNodeId}
+              onApprove={handleActivityApprove}
+              onReject={handleActivityReject}
             />
           )}
         </HistoryOverlay>

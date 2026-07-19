@@ -15,6 +15,7 @@ from exceptions.email import (
     EmailConnectionError,
 )
 from exceptions.execution import (
+    ExecutionApprovalNotPendingError,
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
     ExecutionNotCancellableError,
@@ -73,6 +74,7 @@ __all__ = [
     "EmailAccountNotFoundError",
     "EmailConnectionError",
     "EmptyDocumentError",
+    "ExecutionApprovalNotPendingError",
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",
     "ExecutionNotCancellableError",

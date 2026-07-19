@@ -1,5 +1,6 @@
 """Execution node handlers package."""
 
+from nodes.approval import ApprovalNodeHandler
 from nodes.base import NodeExecutionContext, NodeExecutionResult, NodeHandler, OnToken
 from nodes.call_workflow import CallWorkflowNodeHandler
 from nodes.code_transform import CodeTransformNodeHandler
@@ -27,6 +28,7 @@ from nodes.web_search import WebSearchNodeHandler
 
 __all__ = [
     "NODE_DEFINITIONS",
+    "ApprovalNodeHandler",
     "CallWorkflowNodeHandler",
     "CodeTransformNodeHandler",
     "ConditionNodeHandler",

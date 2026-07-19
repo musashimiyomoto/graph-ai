@@ -10,6 +10,7 @@ import type {
   RunInputPayload,
 } from '../lib/types'
 import { ACTIVE_STATUSES } from '../lib/types'
+import { ApprovalActions } from './ApprovalActions'
 import { ExecutionDetails } from './ExecutionDetails'
 
 interface ChatPanelProps {
@@ -23,9 +24,12 @@ interface ChatPanelProps {
   runDisabledReason: string | null
   loading: boolean
   cancelling: boolean
+  decidingExecutionId: number | null
   nodeMetaByNodeId: Map<number, NodeMeta>
   onRun: (input: RunInputPayload) => void
   onCancel: () => void
+  onApprove: (executionId: number) => void
+  onReject: (executionId: number) => void
 }
 
 interface ChatTurn {
@@ -96,9 +100,12 @@ export function ChatPanel({
   runDisabledReason,
   loading,
   cancelling,
+  decidingExecutionId,
   nodeMetaByNodeId,
   onRun,
   onCancel,
+  onApprove,
+  onReject,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('')
   const [versionNumbers, setVersionNumbers] = useState<Record<number, number>>({})
@@ -113,6 +120,7 @@ export function ChatPanel({
     [lastExecution],
   )
   const isRunning = activeExecutionId !== null
+  const isWaitingApproval = lastExecution?.status === 'waiting_approval'
   const outputNodeId = useMemo(
     () => findOutputNodeId(nodeMetaByNodeId),
     [nodeMetaByNodeId],
@@ -187,8 +195,10 @@ export function ChatPanel({
         <div className="text-xs text-[var(--muted)]">{workflowName}</div>
         {isRunning ? (
           <div className="flex items-center gap-2">
-            <span className="live-dot" />
-            <span className="text-xs text-[var(--muted)]">running…</span>
+            {isWaitingApproval ? null : <span className="live-dot" />}
+            <span className="text-xs text-[var(--muted)]">
+              {isWaitingApproval ? 'approval required' : 'running…'}
+            </span>
             <button
               type="button"
               className="pixel-button ghost small"
@@ -220,6 +230,9 @@ export function ChatPanel({
                     : undefined
                 }
                 nodeMetaByNodeId={nodeMetaByNodeId}
+                deciding={decidingExecutionId === turn.id}
+                onApprove={onApprove}
+                onReject={onReject}
               />
             ))}
             <div ref={bottomRef} />
@@ -258,10 +271,16 @@ function ChatTurnView({
   turn,
   versionNumber,
   nodeMetaByNodeId,
+  deciding,
+  onApprove,
+  onReject,
 }: {
   turn: ChatTurn
   versionNumber: number | undefined
   nodeMetaByNodeId: Map<number, NodeMeta>
+  deciding: boolean
+  onApprove: (executionId: number) => void
+  onReject: (executionId: number) => void
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -271,7 +290,12 @@ function ChatTurnView({
         </div>
       </div>
       <div className="flex justify-start">
-        <ChatTurnResponse turn={turn} />
+        <ChatTurnResponse
+          turn={turn}
+          deciding={deciding}
+          onApprove={onApprove}
+          onReject={onReject}
+        />
       </div>
       <div className="flex items-center gap-2 pl-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
         <span className={STATUS_COLORS[turn.status]}>{turn.status}</span>
@@ -288,7 +312,36 @@ function ChatTurnView({
   )
 }
 
-function ChatTurnResponse({ turn }: { turn: ChatTurn }) {
+function ChatTurnResponse({
+  turn,
+  deciding,
+  onApprove,
+  onReject,
+}: {
+  turn: ChatTurn
+  deciding: boolean
+  onApprove: (executionId: number) => void
+  onReject: (executionId: number) => void
+}) {
+  if (turn.status === 'waiting_approval') {
+    return (
+      <ApprovalActions
+        execution={turn.execution}
+        deciding={deciding}
+        onApprove={onApprove}
+        onReject={onReject}
+      />
+    )
+  }
+
+  if (turn.status === 'rejected') {
+    return (
+      <div className="pixel-panel max-w-[80%] px-3 py-2 text-sm text-[var(--muted)]">
+        Execution rejected.
+      </div>
+    )
+  }
+
   if (turn.status === 'cancelled') {
     return (
       <div className="pixel-panel max-w-[80%] px-3 py-2 text-sm text-[var(--muted)]">

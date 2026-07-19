@@ -262,6 +262,18 @@ export async function cancelExecution(executionId: number): Promise<Execution> {
   })
 }
 
+export async function approveExecution(executionId: number): Promise<Execution> {
+  return request<Execution>(`/executions/${executionId}/approve`, {
+    method: 'POST',
+  })
+}
+
+export async function rejectExecution(executionId: number): Promise<Execution> {
+  return request<Execution>(`/executions/${executionId}/reject`, {
+    method: 'POST',
+  })
+}
+
 export async function streamExecution(
   executionId: number,
   onEvent: (event: ExecutionStreamEvent) => void,

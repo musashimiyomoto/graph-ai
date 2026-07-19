@@ -3,18 +3,22 @@ import type { ExecutionStatus } from './types'
 export const STATUS_COLORS: Record<ExecutionStatus, string> = {
   created: 'text-[var(--muted)]',
   running: 'text-[var(--accent-2)]',
+  waiting_approval: 'text-[var(--accent-2)]',
   success: 'text-[var(--accent)]',
   failed: 'text-[var(--danger)]',
   cancelled: 'text-[var(--muted)]',
+  rejected: 'text-[var(--danger)]',
 }
 
 // Background-color variant of STATUS_COLORS for dot/badge indicators.
 export const STATUS_DOT_COLORS: Record<ExecutionStatus, string> = {
   created: 'bg-[var(--muted)]',
   running: 'bg-[var(--accent-2)]',
+  waiting_approval: 'bg-[var(--accent-2)]',
   success: 'bg-[var(--accent)]',
   failed: 'bg-[var(--danger)]',
   cancelled: 'bg-[var(--muted)]',
+  rejected: 'bg-[var(--danger)]',
 }
 
 export function formatTime(iso: string): string {

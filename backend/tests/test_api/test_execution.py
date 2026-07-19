@@ -2079,7 +2079,9 @@ class TestExecutionReaper(BaseTestCase):
 
         re_enqueued: list[int] = []
 
-        async def re_enqueue(execution_id: int) -> None:
+        async def re_enqueue(execution_id: int, job_id: str) -> None:
+            if job_id != f"execution:{execution_id}":
+                pytest.fail("Initial execution should use its base ARQ job ID")
             re_enqueued.append(execution_id)
 
         reaped = await ExecutionUsecase().reap_stuck_executions(
@@ -2397,6 +2399,168 @@ class TestExecutionParallel(BaseTestCase):
             pytest.fail("Unreached Output node should be marked SKIPPED")
 
 
+@pytest.mark.committed_db
+class TestExecutionApproval(BaseTestCase):
+    """Tests for approval pause, decision, and checkpoint resume."""
+
+    async def _create_workflow(self, user_id: int) -> tuple[int, dict[str, int]]:
+        """Create a linear Input -> Approval -> Output workflow."""
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user_id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        approval_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.APPROVAL,
+            data={"label": "Review", "prompt": "Ship this value?"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        for source_id, target_id in (
+            (input_node.id, approval_node.id),
+            (approval_node.id, output_node.id),
+        ):
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source_id,
+                target_node_id=target_id,
+            )
+        return workflow.id, {
+            "input": input_node.id,
+            "approval": approval_node.id,
+            "output": output_node.id,
+        }
+
+    @pytest.mark.asyncio
+    async def test_approve_resumes_without_reexecuting_completed_nodes(
+        self, test_engine: AsyncEngine
+    ) -> None:
+        """Approve queues a continuation that consumes durable checkpoints."""
+        user, headers = await self.create_user_and_get_token()
+        workflow_id, node_ids = await self._create_workflow(user["id"])
+        created_response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow_id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=created_response)
+        factory = async_sessionmaker(bind=test_engine, expire_on_commit=False)
+
+        waiting = await ExecutionUsecase().run_execution(
+            session=self.session,
+            execution_id=created["id"],
+            session_factory=factory,
+        )
+
+        if waiting.status is not ExecutionStatus.WAITING_APPROVAL:
+            pytest.fail("Execution should pause at the Approval node")
+        if waiting.approval_node_id != node_ids["approval"]:
+            pytest.fail("Paused execution should identify its Approval node")
+        if waiting.approval_prompt != "Ship this value?":
+            pytest.fail("Paused execution should expose the configured prompt")
+        if waiting.approval_input != "hello":
+            pytest.fail("Paused execution should expose the upstream value")
+
+        approve_response = await self.client.post(
+            url=f"/executions/{created['id']}/approve",
+            headers=headers,
+        )
+        approved = await self.assert_response_dict(response=approve_response)
+        if approved["status"] != ExecutionStatus.CREATED:
+            pytest.fail("Approved execution should return to the queue")
+        if ":resume:" not in approved["queue_job_id"]:
+            pytest.fail("Approved execution should receive a fresh ARQ job ID")
+
+        finalized = await ExecutionUsecase().run_execution(
+            session=self.session,
+            execution_id=created["id"],
+            session_factory=factory,
+        )
+        if finalized.status is not ExecutionStatus.SUCCESS:
+            pytest.fail("Approved execution should continue to success")
+        if finalized.output_data != {"value": "hello"}:
+            pytest.fail("Approval should pass its upstream value through unchanged")
+
+        rows = await NodeExecutionRepository().get_all(
+            session=self.session,
+            execution_id=created["id"],
+        )
+        counts = {
+            node_id: sum(row.node_id == node_id for row in rows)
+            for node_id in node_ids.values()
+        }
+        if counts != dict.fromkeys(node_ids.values(), 1):
+            pytest.fail("Resume should not duplicate completed node executions")
+
+    @pytest.mark.asyncio
+    async def test_reject_finalizes_and_records_usage_once(self) -> None:
+        """Reject terminates the run and cannot be decided a second time."""
+        user, headers = await self.create_user_and_get_token()
+        workflow_id, _ = await self._create_workflow(user["id"])
+        created_response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow_id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=created_response)
+        await run_execution(self.session, created["id"])
+
+        response = await self.client.post(
+            url=f"/executions/{created['id']}/reject",
+            headers=headers,
+        )
+        rejected = await self.assert_response_dict(response=response)
+
+        if rejected["status"] != ExecutionStatus.REJECTED:
+            pytest.fail("Rejected approval should finalize the execution")
+        if rejected["finished_at"] is None:
+            pytest.fail("Rejected execution should have a finish timestamp")
+
+        repeated = await self.client.post(
+            url=f"/executions/{created['id']}/reject",
+            headers=headers,
+        )
+        if repeated.status_code != HTTPStatus.CONFLICT:
+            pytest.fail("A decided approval should return CONFLICT")
+
+        usage = await self.client.get(url="/usage", headers=headers)
+        usage_data = await self.assert_response_dict(response=usage)
+        if usage_data["executions"]["used"] != 1:
+            pytest.fail("Rejected execution should record usage exactly once")
+
+    @pytest.mark.asyncio
+    async def test_rejects_approval_node_on_bypassable_path(self) -> None:
+        """Every input-to-output path must pass through each Approval node."""
+        user, headers = await self.create_user_and_get_token()
+        workflow_id, node_ids = await self._create_workflow(user["id"])
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            source_node_id=node_ids["input"],
+            target_node_id=node_ids["output"],
+        )
+
+        response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow_id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail("Bypassable Approval node should fail graph validation")
+
+
 class TestExecutionCancel(BaseTestCase):
     """Tests for POST /executions/{execution_id}/cancel."""
 
@@ -2508,6 +2672,53 @@ class TestExecutionCancel(BaseTestCase):
             pytest.fail("Queued execution should transition to CANCELLED")
         if result.status != ExecutionStatus.CANCELLED:
             pytest.fail("Worker should not claim an already-cancelled execution")
+
+    @pytest.mark.asyncio
+    async def test_cancels_pending_approval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cancellation also closes an execution parked at an Approval node."""
+
+        async def fake_abort(job: Job, **kwargs: object) -> bool:
+            """Avoid requiring Redis for the cancellation signal."""
+            del job, kwargs
+            return True
+
+        monkeypatch.setattr(Job, "abort", fake_abort)
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.WAITING_APPROVAL,
+            approval_node_id=1,
+            approval_prompt="Review",
+            approval_input="value",
+        )
+        node_execution = await NodeExecutionFactory.create_async(
+            session=self.session,
+            execution_id=execution.id,
+            node_id=1,
+            node_type=NodeType.APPROVAL,
+            status=ExecutionStatus.WAITING_APPROVAL,
+        )
+        node_execution_id = node_execution.id
+
+        response = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+        data = await self.assert_response_dict(response=response)
+        self.session.expire_all()
+        updated_node = await NodeExecutionRepository().get_by(
+            session=self.session, id=node_execution_id
+        )
+
+        if data["status"] != ExecutionStatus.CANCELLED:
+            pytest.fail("Pending approval should be cancellable")
+        if updated_node is None or updated_node.status is not ExecutionStatus.CANCELLED:
+            pytest.fail("Pending Approval node result should also be cancelled")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

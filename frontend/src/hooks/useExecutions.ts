@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
+  approveExecution,
   cancelExecution,
   createExecution,
   getExecutions,
+  rejectExecution,
   streamExecution,
 } from '../lib/api'
 import type { ApiError, Execution, ExecutionSource, RunInputPayload } from '../lib/types'
@@ -30,12 +32,15 @@ interface UseExecutionsResult {
   executions: Execution[]
   executionsLoading: boolean
   cancelling: boolean
+  decidingExecutionId: number | null
   lastExecution: Execution | null
   liveTokens: LiveTokens
   runInput: RunInputPayload
   clearExecutions: () => void
   handleRun: (input: RunInputPayload) => Promise<void>
   handleCancel: () => Promise<void>
+  handleApprove: (executionId: number) => Promise<void>
+  handleReject: (executionId: number) => Promise<void>
   refreshExecutions: (workflowId: number) => Promise<void>
 }
 
@@ -50,6 +55,7 @@ export function useExecutions({
   const [executions, setExecutions] = useState<Execution[]>([])
   const [executionsLoading, setExecutionsLoading] = useState<boolean>(false)
   const [cancelling, setCancelling] = useState<boolean>(false)
+  const [decidingExecutionId, setDecidingExecutionId] = useState<number | null>(null)
   const [lastExecution, setLastExecution] = useState<Execution | null>(null)
   const [liveTokens, setLiveTokens] = useState<LiveTokens>({})
 
@@ -212,6 +218,43 @@ export function useExecutions({
     }
   }, [handleError, lastExecution, setError])
 
+  const decideApproval = useCallback(
+    async (executionId: number, approved: boolean): Promise<void> => {
+      setDecidingExecutionId(executionId)
+      try {
+        const execution = approved
+          ? await approveExecution(executionId)
+          : await rejectExecution(executionId)
+        setLastExecution(execution)
+        setExecutions((previous) =>
+          previous.map((item) =>
+            item.id === execution.id ? execution : item,
+          ),
+        )
+        setError(null)
+      } catch (error) {
+        handleError(error as ApiError)
+      } finally {
+        setDecidingExecutionId(null)
+      }
+    },
+    [handleError, setError],
+  )
+
+  const handleApprove = useCallback(
+    async (executionId: number): Promise<void> => {
+      await decideApproval(executionId, true)
+    },
+    [decideApproval],
+  )
+
+  const handleReject = useCallback(
+    async (executionId: number): Promise<void> => {
+      await decideApproval(executionId, false)
+    },
+    [decideApproval],
+  )
+
   const clearExecutions = useCallback(() => {
     setExecutions([])
     setLastExecution(null)
@@ -221,12 +264,15 @@ export function useExecutions({
     executions,
     executionsLoading,
     cancelling,
+    decidingExecutionId,
     lastExecution,
     liveTokens,
     runInput,
     clearExecutions,
     handleRun,
     handleCancel,
+    handleApprove,
+    handleReject,
     refreshExecutions,
   }
 }

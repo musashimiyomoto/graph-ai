@@ -99,7 +99,8 @@ async def cancel_execution(
     )
 
     try:
-        await Job(f"execution:{execution_id}", redis=pool).abort(timeout=0)
+        job_id = cancelled.queue_job_id or f"execution:{execution_id}"
+        await Job(job_id, redis=pool).abort(timeout=0)
     except TimeoutError:
         # The abort marker is already durable in Redis; timeout=0 deliberately
         # avoids holding the HTTP request open while the worker acknowledges it.
@@ -110,6 +111,52 @@ async def cancel_execution(
         logger.exception("Failed to signal cancellation for execution %s", execution_id)
 
     return cancelled
+
+
+@router.post(path="/{execution_id}/approve")
+async def approve_execution(
+    execution_id: Annotated[int, Path(gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        execution.ExecutionUsecase,
+        Depends(dependency=execution.get_execution_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+    pool: Annotated[ArqRedis, Depends(dependency=queue.get_arq_pool)],
+) -> ExecutionResponse:
+    """Approve a paused execution and enqueue its continuation."""
+    approved = await usecase.approve_execution(
+        session=session,
+        execution_id=execution_id,
+        user_id=current_user.id,
+    )
+    if approved.queue_job_id is None:
+        msg = "Approved execution is missing a queue job ID"
+        raise RuntimeError(msg)
+    await pool.enqueue_job(
+        "run_execution_task",
+        execution_id,
+        _job_id=approved.queue_job_id,
+    )
+    return approved
+
+
+@router.post(path="/{execution_id}/reject")
+async def reject_execution(
+    execution_id: Annotated[int, Path(gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        execution.ExecutionUsecase,
+        Depends(dependency=execution.get_execution_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> ExecutionResponse:
+    """Reject a paused execution and finalize it."""
+    return await usecase.reject_execution(
+        session=session,
+        execution_id=execution_id,
+        user_id=current_user.id,
+    )
 
 
 @router.get(path="/{execution_id}/nodes")

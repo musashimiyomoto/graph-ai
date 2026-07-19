@@ -3,11 +3,17 @@ export type NodeType = string
 export type ExecutionStatus =
   | 'created'
   | 'running'
+  | 'waiting_approval'
   | 'success'
   | 'failed'
   | 'cancelled'
+  | 'rejected'
 
-export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
+export const ACTIVE_STATUSES: ExecutionStatus[] = [
+  'created',
+  'running',
+  'waiting_approval',
+]
 
 // What triggered an execution: the owner testing the flow, or real inbound
 // traffic (channel messages or a cron schedule firing). Lets the UI split
@@ -84,6 +90,10 @@ export interface Execution {
   input_data: RunInputPayload | null
   output_data: Record<string, unknown> | null
   error: string | null
+  approval_node_id: number | null
+  approval_prompt: string | null
+  approval_input: string | null
+  queue_job_id: string | null
   prefect_flow_run_id: string | null
   started_at: string
   finished_at: string | null

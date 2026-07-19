@@ -78,6 +78,18 @@ class ExecutionResponse(BaseModel):
         default=None, description="Execution output"
     )
     error: str | None = Field(default=None, description="Error message")
+    approval_node_id: int | None = Field(
+        default=None, description="Node currently awaiting approval"
+    )
+    approval_prompt: str | None = Field(
+        default=None, description="Approval request shown to the owner"
+    )
+    approval_input: str | None = Field(
+        default=None, description="Upstream value awaiting approval"
+    )
+    queue_job_id: str | None = Field(
+        default=None, description="Current background job ID"
+    )
     prompt_tokens: int | None = Field(
         default=None, description="Total LLM prompt tokens across the run"
     )

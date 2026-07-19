@@ -176,6 +176,20 @@ export function CallWorkflowIcon(props: IconProps) {
   )
 }
 
+export function ApprovalIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="2" y="2" width="12" height="2" fill="var(--accent-2)" />
+      <rect x="2" y="12" width="12" height="2" fill="var(--accent-2)" />
+      <rect x="2" y="4" width="2" height="8" fill="var(--accent-2)" />
+      <rect x="12" y="4" width="2" height="8" fill="var(--accent-2)" />
+      <rect x="5" y="7" width="2" height="2" fill="var(--accent)" />
+      <rect x="7" y="9" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="5" width="2" height="4" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function LoopIcon(props: IconProps) {
   return (
     <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
@@ -237,6 +251,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'call_workflow') {
     return <CallWorkflowIcon />
+  }
+
+  if (iconKey === 'approval') {
+    return <ApprovalIcon />
   }
 
   if (iconKey === 'output') {

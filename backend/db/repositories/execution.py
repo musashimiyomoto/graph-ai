@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Execution
@@ -19,6 +19,17 @@ class ExecutionRepository(BaseRepository[Execution]):
     def __init__(self) -> None:
         """Initialize the repository with the Execution model."""
         super().__init__(model=Execution)
+
+    async def get_by_id_for_update(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+    ) -> Execution | None:
+        """Lock and return one execution for a multi-row state transition."""
+        result = await session.execute(
+            select(Execution).where(Execution.id == execution_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
 
     async def update_status_if(
         self,

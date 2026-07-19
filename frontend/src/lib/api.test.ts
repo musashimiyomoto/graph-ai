@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  approveExecution,
   cancelExecution,
   getWorkflows,
   login,
   publicWebhookUrl,
   setToken,
+  rejectExecution,
   webChatEmbedSnippet,
 } from './api'
 
@@ -108,6 +110,21 @@ describe('api request()', () => {
     await expect(cancelExecution(42)).resolves.toEqual(execution)
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/executions/42/cancel',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it.each([
+    ['approve', approveExecution],
+    ['reject', rejectExecution],
+  ])('submits an approval decision with POST /%s', async (action, decide) => {
+    const execution = { id: 42, status: action === 'approve' ? 'created' : 'rejected' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(execution))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(decide(42)).resolves.toEqual(execution)
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/executions/42/${action}`,
       expect.objectContaining({ method: 'POST' }),
     )
   })

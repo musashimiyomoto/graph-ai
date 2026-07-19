@@ -9,12 +9,13 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 if TYPE_CHECKING:
-    from db.models import Execution, WorkflowVersion
+    from db.models import Execution, NodeExecution, WorkflowVersion
 
 from constants import (
     DEFAULT_PAGE_SIZE,
@@ -42,6 +43,7 @@ from db.repositories import (
 from enums import ConditionType, ExecutionSource, ExecutionStatus, LoopMode, NodeType
 from exceptions import (
     BaseError,
+    ExecutionApprovalNotPendingError,
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
     ExecutionNotCancellableError,
@@ -81,6 +83,10 @@ TokenPublisher = Callable[[int, int, str], Awaitable[None]]
 # Signals (execution_id, node_id) that a node's stream is restarting (a retry)
 # and any previously streamed text for it should be discarded by the client.
 TokenResetPublisher = Callable[[int, int], Awaitable[None]]
+
+
+class _ExecutionPausedError(Exception):
+    """Internal control flow raised after an approval checkpoint is committed."""
 
 
 @dataclass(frozen=True)
@@ -188,6 +194,7 @@ class _WaveState:
     outputs_by_node: dict[int, str]
     live_by_node: dict[int, bool]
     selected_handle_by_node: dict[int, str | None]
+    resolved_by_node: dict[int, "NodeExecution"]
 
 
 @dataclass(frozen=True)
@@ -400,16 +407,9 @@ class ExecutionUsecase:
             raise WorkflowNotFoundError
         workflow_owner_id = workflow.owner_id
 
-        claim_time = datetime.now(tz=UTC)
-        claimed = await self._execution_repository.update_status_if(
+        claimed = await self._claim_execution(
             session=session,
-            execution_id=execution_id,
-            expected_status=ExecutionStatus.CREATED,
-            data={
-                "status": ExecutionStatus.RUNNING,
-                "started_at": claim_time,
-                "heartbeat_at": claim_time,
-            },
+            execution=execution,
         )
         if not claimed:
             # Already claimed or finalized (e.g. duplicate delivery); do not re-run.
@@ -434,6 +434,9 @@ class ExecutionUsecase:
                     delta=token_publisher, reset=token_reset_publisher
                 ),
             )
+        except _ExecutionPausedError:
+            logger.info("Execution %s paused for approval", execution_id)
+            await session.rollback()
         except BaseError as exc:
             logger.warning("Execution %s failed: %s", execution_id, exc.message)
             await session.rollback()
@@ -472,6 +475,26 @@ class ExecutionUsecase:
 
         return response
 
+    async def _claim_execution(
+        self,
+        session: AsyncSession,
+        execution: "Execution",
+    ) -> bool:
+        """Atomically claim a queued execution while preserving resume timing."""
+        claim_time = datetime.now(tz=UTC)
+        claim_data: dict[str, object] = {
+            "status": ExecutionStatus.RUNNING,
+            "heartbeat_at": claim_time,
+        }
+        if execution.heartbeat_at is None:
+            claim_data["started_at"] = claim_time
+        return await self._execution_repository.update_status_if(
+            session=session,
+            execution_id=execution.id,
+            expected_status=ExecutionStatus.CREATED,
+            data=claim_data,
+        )
+
     async def _record_finalized_usage(
         self,
         session: AsyncSession,
@@ -489,7 +512,11 @@ class ExecutionUsecase:
         # Cancellation records usage in the request that wins the terminal CAS.
         # If an ARQ abort arrives late and this coroutine continues, do not count
         # that same run a second time.
-        if execution.status is ExecutionStatus.CANCELLED:
+        if execution.status in {
+            ExecutionStatus.WAITING_APPROVAL,
+            ExecutionStatus.CANCELLED,
+            ExecutionStatus.REJECTED,
+        }:
             return
 
         try:
@@ -508,7 +535,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         older_than_seconds: int = STUCK_EXECUTION_TIMEOUT_SECONDS,
         created_older_than_seconds: int = STUCK_CREATED_TIMEOUT_SECONDS,
-        re_enqueue: Callable[[int], Awaitable[None]] | None = None,
+        re_enqueue: Callable[[int, str], Awaitable[None]] | None = None,
     ) -> int:
         """Mark executions stuck in RUNNING beyond the timeout as FAILED.
 
@@ -572,7 +599,10 @@ class ExecutionUsecase:
             ]
             for execution in stale_created:
                 logger.warning("Re-enqueuing stale CREATED execution %s", execution.id)
-                await re_enqueue(execution.id)
+                await re_enqueue(
+                    execution.id,
+                    execution.queue_job_id or f"execution:{execution.id}",
+                )
 
             reaped += len(stale_created)
 
@@ -994,7 +1024,11 @@ class ExecutionUsecase:
         )
         if current.status is ExecutionStatus.CANCELLED:
             return current
-        if current.status not in {ExecutionStatus.CREATED, ExecutionStatus.RUNNING}:
+        if current.status not in {
+            ExecutionStatus.CREATED,
+            ExecutionStatus.RUNNING,
+            ExecutionStatus.WAITING_APPROVAL,
+        }:
             raise ExecutionNotCancellableError
 
         (
@@ -1015,6 +1049,9 @@ class ExecutionUsecase:
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens,
                 "finished_at": datetime.now(tz=UTC),
+                "approval_node_id": None,
+                "approval_prompt": None,
+                "approval_input": None,
             },
         )
         if not won:
@@ -1026,6 +1063,21 @@ class ExecutionUsecase:
             raise ExecutionNotCancellableError
 
         try:
+            if (
+                current.status is ExecutionStatus.WAITING_APPROVAL
+                and current.approval_node_id is not None
+            ):
+                await self._node_execution_repository.update_by(
+                    session=session,
+                    execution_id=execution_id,
+                    node_id=current.approval_node_id,
+                    status=ExecutionStatus.WAITING_APPROVAL,
+                    data={
+                        "status": ExecutionStatus.CANCELLED,
+                        "error": None,
+                        "finished_at": datetime.now(tz=UTC),
+                    },
+                )
             await self._usage_usecase.record_run(
                 session=session,
                 user_id=user_id,
@@ -1051,6 +1103,142 @@ class ExecutionUsecase:
 
         return await self.get_execution(
             session=session, execution_id=execution_id, user_id=user_id
+        )
+
+    async def approve_execution(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        user_id: int,
+    ) -> ExecutionResponse:
+        """Approve the current checkpoint and make the execution queueable."""
+        return await self._decide_execution_approval(
+            session=session,
+            execution_id=execution_id,
+            user_id=user_id,
+            approved=True,
+        )
+
+    async def reject_execution(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        user_id: int,
+    ) -> ExecutionResponse:
+        """Reject the current checkpoint and finalize the execution."""
+        return await self._decide_execution_approval(
+            session=session,
+            execution_id=execution_id,
+            user_id=user_id,
+            approved=False,
+        )
+
+    async def _decide_execution_approval(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        user_id: int,
+        *,
+        approved: bool,
+    ) -> ExecutionResponse:
+        """Apply one owner decision to a locked approval checkpoint."""
+        execution = await self._execution_repository.get_by_id_for_update(
+            session=session, execution_id=execution_id
+        )
+        if execution is None:
+            raise ExecutionNotFoundError
+        workflow = await self._workflow_repository.get_by(
+            session=session,
+            id=execution.workflow_id,
+            owner_id=user_id,
+        )
+        if workflow is None:
+            raise WorkflowNotFoundError
+        if (
+            execution.status is not ExecutionStatus.WAITING_APPROVAL
+            or execution.approval_node_id is None
+        ):
+            raise ExecutionApprovalNotPendingError
+
+        node_id = execution.approval_node_id
+        approval_input = execution.approval_input or ""
+        node_execution = await self._node_execution_repository.update_by(
+            session=session,
+            execution_id=execution_id,
+            node_id=node_id,
+            status=ExecutionStatus.WAITING_APPROVAL,
+            data={
+                "status": (
+                    ExecutionStatus.SUCCESS if approved else ExecutionStatus.REJECTED
+                ),
+                "output": approval_input if approved else None,
+                "error": None if approved else "Rejected by workflow owner",
+                "finished_at": datetime.now(tz=UTC),
+            },
+        )
+        if node_execution is None:
+            raise ExecutionApprovalNotPendingError
+
+        action = "approve" if approved else "reject"
+        execution_data: dict[str, object] = {
+            "status": (
+                ExecutionStatus.CREATED if approved else ExecutionStatus.REJECTED
+            ),
+            "error": None,
+        }
+        if approved:
+            execution_data.update(
+                {
+                    "approval_node_id": None,
+                    "approval_prompt": None,
+                    "approval_input": None,
+                    "finished_at": None,
+                    "queue_job_id": (f"execution:{execution_id}:resume:{uuid4().hex}"),
+                }
+            )
+        else:
+            (
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            ) = await self._node_execution_repository.sum_tokens(
+                session=session, execution_id=execution_id
+            )
+            execution_data.update(
+                {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "finished_at": datetime.now(tz=UTC),
+                }
+            )
+            await self._usage_usecase.record_run(
+                session=session,
+                user_id=user_id,
+                total_tokens=total_tokens,
+            )
+
+        await self._execution_repository.update_by(
+            session=session,
+            id=execution_id,
+            data=execution_data,
+        )
+        await self._audit_usecase.record(
+            session=session,
+            event=AuditEvent(
+                user_id=user_id,
+                action=f"execution.{action}",
+                entity_type="execution",
+                entity_id=execution_id,
+                metadata={"node_id": node_id},
+            ),
+        )
+        await session.commit()
+
+        return await self.get_execution(
+            session=session,
+            execution_id=execution_id,
+            user_id=user_id,
         )
 
     async def get_node_executions(
@@ -1199,6 +1387,7 @@ class ExecutionUsecase:
             ExecutionStatus.SUCCESS,
             ExecutionStatus.FAILED,
             ExecutionStatus.CANCELLED,
+            ExecutionStatus.REJECTED,
         }
         reached_terminal = False
         for _ in range(STREAM_MAX_ITERATIONS):
@@ -1288,7 +1477,10 @@ class ExecutionUsecase:
             )
         else:
             outputs_by_node = await self._run_nodes_parallel(
-                run_context=run_context, graph=graph, session_factory=session_factory
+                session=session,
+                run_context=run_context,
+                graph=graph,
+                session_factory=session_factory,
             )
 
         return ExecutionOutputPayload(value=outputs_by_node[graph.output_node_id])
@@ -1390,6 +1582,50 @@ class ExecutionUsecase:
             message = "No live path reached the output node"
             raise ExecutionGraphValidationError(message=message)
 
+    async def _load_resolved_node_executions(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        graph: ExecutionGraphContext,
+        iteration: int | None,
+    ) -> dict[int, "NodeExecution"]:
+        """Load successful/skipped checkpoints for one graph scope."""
+        rows = await self._node_execution_repository.get_all(
+            session=session,
+            execution_id=execution_id,
+            iteration=iteration,
+            status=[ExecutionStatus.SUCCESS, ExecutionStatus.SKIPPED],
+        )
+        return {row.node_id: row for row in rows if row.node_id in graph.nodes_by_id}
+
+    def _restore_node_result(
+        self,
+        node: NodeResponse,
+        node_execution: "NodeExecution",
+    ) -> NodeExecutionResult:
+        """Rebuild an in-memory result from a durable successful checkpoint."""
+        output = node_execution.output or ""
+        selected_handle: str | None = None
+        if node.type is NodeType.CONDITION:
+            try:
+                condition_type = ConditionType(node.data.get("condition_type"))
+            except ValueError as exc:
+                raise ExecutionGraphValidationError(
+                    message="Condition node has an unsupported condition_type"
+                ) from exc
+            raw_value = node.data.get("value")
+            matched = evaluate_condition(
+                condition_type=condition_type,
+                text=output,
+                case_sensitive=node.data.get("case_sensitive") == "true",
+                value=raw_value if isinstance(raw_value, str) else None,
+            )
+            selected_handle = "true" if matched else "false"
+        return NodeExecutionResult(
+            output=output,
+            selected_handle=selected_handle,
+        )
+
     async def _run_nodes_serial(
         self,
         session: AsyncSession,
@@ -1416,9 +1652,28 @@ class ExecutionUsecase:
         outputs_by_node: dict[int, str] = {}
         live_by_node: dict[int, bool] = {}
         selected_handle_by_node: dict[int, str | None] = {}
+        resolved = await self._load_resolved_node_executions(
+            session=session,
+            execution_id=run_context.execution_id,
+            graph=graph,
+            iteration=iteration,
+        )
 
         for index, node_id in enumerate(graph.topological_order):
             node = graph.nodes_by_id[node_id]
+            existing = resolved.get(node_id)
+            if existing is not None:
+                if existing.status is ExecutionStatus.SKIPPED:
+                    live_by_node[node_id] = False
+                    selected_handle_by_node[node_id] = None
+                else:
+                    restored = self._restore_node_result(
+                        node=node, node_execution=existing
+                    )
+                    outputs_by_node[node_id] = restored.output
+                    live_by_node[node_id] = True
+                    selected_handle_by_node[node_id] = restored.selected_handle
+                continue
 
             if node_id == graph.input_node_id:
                 parent_values: list[str] = []
@@ -1495,6 +1750,21 @@ class ExecutionUsecase:
         runnable: list[int] = []
         parent_values_by_node: dict[int, list[str]] = {}
         for node_id in ready:
+            existing = state.resolved_by_node.get(node_id)
+            if existing is not None:
+                if existing.status is ExecutionStatus.SKIPPED:
+                    state.live_by_node[node_id] = False
+                    state.selected_handle_by_node[node_id] = None
+                else:
+                    restored = self._restore_node_result(
+                        node=graph.nodes_by_id[node_id],
+                        node_execution=existing,
+                    )
+                    state.outputs_by_node[node_id] = restored.output
+                    state.live_by_node[node_id] = True
+                    state.selected_handle_by_node[node_id] = restored.selected_handle
+                continue
+
             if node_id == graph.input_node_id:
                 parent_values_by_node[node_id] = []
                 runnable.append(node_id)
@@ -1523,6 +1793,7 @@ class ExecutionUsecase:
 
     async def _run_nodes_parallel(
         self,
+        session: AsyncSession,
         run_context: _NodeRunContext,
         graph: ExecutionGraphContext,
         session_factory: async_sessionmaker[AsyncSession],
@@ -1533,6 +1804,7 @@ class ExecutionUsecase:
         AsyncSession. A node becomes ready once all its parents have completed.
 
         Args:
+            session: Worker session used to load durable checkpoints.
             run_context: Loop-invariant run context.
             graph: Validated graph context.
             session_factory: Factory for per-node sessions.
@@ -1547,8 +1819,17 @@ class ExecutionUsecase:
         indegree = {
             node_id: len(graph.inbound[node_id]) for node_id in graph.nodes_by_id
         }
+        resolved = await self._load_resolved_node_executions(
+            session=session,
+            execution_id=run_context.execution_id,
+            graph=graph,
+            iteration=None,
+        )
         state = _WaveState(
-            outputs_by_node={}, live_by_node={}, selected_handle_by_node={}
+            outputs_by_node={},
+            live_by_node={},
+            selected_handle_by_node={},
+            resolved_by_node=resolved,
         )
         ready = [node_id for node_id, degree in indegree.items() if degree == 0]
 
@@ -1582,6 +1863,17 @@ class ExecutionUsecase:
                 state.outputs_by_node[node_id] = node_result.output
                 state.live_by_node[node_id] = True
                 state.selected_handle_by_node[node_id] = node_result.selected_handle
+
+            paused = next(
+                (
+                    failure
+                    for failure in failures
+                    if isinstance(failure, _ExecutionPausedError)
+                ),
+                None,
+            )
+            if paused is not None:
+                raise paused
 
             if failures:
                 reached = (
@@ -1834,6 +2126,14 @@ class ExecutionUsecase:
                 parent_values=parent_values,
             )
 
+        if node.type is NodeType.APPROVAL:
+            await self._pause_for_approval(
+                session=session,
+                run_context=run_context,
+                node=node,
+                parent_values=parent_values,
+            )
+
         try:
             async with asyncio.timeout(self._node_timeout_seconds):
                 return await self._node_registry.execute(
@@ -1851,6 +2151,61 @@ class ExecutionUsecase:
                 )
         except TimeoutError as exc:
             raise NodeExecutionTimeoutError from exc
+
+    async def _pause_for_approval(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        parent_values: list[str],
+    ) -> None:
+        """Persist an approval checkpoint and stop the current worker attempt."""
+        prompt = node.data.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ExecutionGraphValidationError(
+                message="Approval node requires a non-empty approval request"
+            )
+
+        execution = await self._execution_repository.get_by_id_for_update(
+            session=session,
+            execution_id=run_context.execution_id,
+        )
+        if execution is None:
+            raise ExecutionNotFoundError
+        if execution.status is not ExecutionStatus.RUNNING:
+            await session.rollback()
+            raise _ExecutionPausedError
+
+        now = datetime.now(tz=UTC)
+        approval_input = "\n".join(parent_values)
+        await self._node_execution_repository.create(
+            session=session,
+            data={
+                "execution_id": run_context.execution_id,
+                "node_id": node.id,
+                "node_type": node.type,
+                "node_label": node.data.get("label"),
+                "iteration": None,
+                "status": ExecutionStatus.WAITING_APPROVAL,
+                "output": None,
+                "error": None,
+                "started_at": now,
+                "finished_at": None,
+            },
+        )
+        await self._execution_repository.update_by(
+            session=session,
+            id=run_context.execution_id,
+            data={
+                "status": ExecutionStatus.WAITING_APPROVAL,
+                "approval_node_id": node.id,
+                "approval_prompt": prompt.strip(),
+                "approval_input": approval_input,
+                "heartbeat_at": now,
+            },
+        )
+        await session.commit()
+        raise _ExecutionPausedError
 
     async def _run_call_workflow_node(
         self,
@@ -2346,6 +2701,12 @@ class ExecutionUsecase:
             inbound=adjacency.inbound,
             nodes_by_id=nodes_by_id,
         )
+        self._validate_approval_nodes(
+            input_node_id=input_node_id,
+            output_node_id=output_node_id,
+            outbound=adjacency.outbound,
+            nodes_by_id=nodes_by_id,
+        )
 
         return ExecutionGraphContext(
             input_node_id=input_node_id,
@@ -2357,6 +2718,29 @@ class ExecutionUsecase:
             inbound_edges=adjacency.inbound_edges,
             topological_order=topological_order,
         )
+
+    def _validate_approval_nodes(
+        self,
+        input_node_id: int,
+        output_node_id: int,
+        outbound: dict[int, list[int]],
+        nodes_by_id: dict[int, NodeResponse],
+    ) -> None:
+        """Require every approval node to gate every input-to-output path."""
+        for node in nodes_by_id.values():
+            if node.type is not NodeType.APPROVAL:
+                continue
+            reachable = self._collect_reachable(
+                start_node_id=input_node_id,
+                adjacency={
+                    source_id: ([] if source_id == node.id else list(target_ids))
+                    for source_id, target_ids in outbound.items()
+                },
+            )
+            if output_node_id in reachable:
+                raise ExecutionGraphValidationError(
+                    message=("Approval node must be on every path from input to output")
+                )
 
     def _build_adjacency(
         self,

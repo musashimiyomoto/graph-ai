@@ -47,6 +47,18 @@ class Execution(BaseWithID):
         JSONB, comment="Output data from execution"
     )
     error: Mapped[str | None] = mapped_column(Text, comment="Error message if failed")
+    approval_node_id: Mapped[int | None] = mapped_column(
+        comment="Node awaiting an owner approval decision"
+    )
+    approval_prompt: Mapped[str | None] = mapped_column(
+        Text, comment="Human-readable approval request"
+    )
+    approval_input: Mapped[str | None] = mapped_column(
+        Text, comment="Upstream value awaiting approval"
+    )
+    queue_job_id: Mapped[str | None] = mapped_column(
+        String(255), comment="Current ARQ job ID for cancellation/resume"
+    )
     telegram_chat_id: Mapped[int | None] = mapped_column(
         BigInteger,
         comment="Telegram chat to reply to, if this run was triggered by a message",
