@@ -25,6 +25,11 @@ class AuthSettings(BaseSettings):
     access_token_expire_minutes: int = Field(
         default=30, title="Access token expire minutes"
     )
+    refresh_token_expire_days: int = Field(
+        default=30,
+        ge=1,
+        title="Refresh token expire days",
+    )
     token_type: str = Field(default="Bearer", title="Token type")
 
     @model_validator(mode="after")

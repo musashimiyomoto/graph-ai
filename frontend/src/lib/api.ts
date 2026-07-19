@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  AuthSession,
   EdgeCreatePayload,
   EdgeResponse,
   EmailAccount,
@@ -43,6 +44,7 @@ import type {
 const BASE = '/api'
 
 let currentToken: string | null = null
+let refreshPromise: Promise<TokenResponse | null> | null = null
 
 export function setToken(token: string | null): void {
   currentToken = token
@@ -61,6 +63,7 @@ export function webChatEmbedSnippet(webChatPath: string): string {
 async function request<T>(
   path: string,
   options: RequestInit = {},
+  retryAuth = true,
 ): Promise<T> {
   // A FormData body (file upload) must not get a forced JSON content type —
   // the browser sets its own multipart boundary.
@@ -76,7 +79,11 @@ async function request<T>(
 
   let response: Response
   try {
-    response = await fetch(`${BASE}${path}`, { ...options, headers })
+    response = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers,
+      credentials: 'same-origin',
+    })
   } catch {
     // fetch() throws a raw TypeError for network-level failures (dropped
     // connection, DNS, CORS, offline, ...) rather than an ApiError; normalize
@@ -89,6 +96,17 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      retryAuth &&
+      currentToken &&
+      !path.startsWith('/auth/')
+    ) {
+      const refreshed = await refreshSession()
+      if (refreshed) {
+        return request<T>(path, options, false)
+      }
+    }
     const body = await response.json().catch(() => ({}))
     const message =
       (body as { detail?: string }).detail ?? response.statusText
@@ -106,6 +124,41 @@ export async function login(
     method: 'POST',
     body: JSON.stringify({ email, password }),
   })
+}
+
+export async function refreshSession(): Promise<TokenResponse | null> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'same-origin',
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          currentToken = null
+          return null
+        }
+        const token = (await response.json()) as TokenResponse
+        currentToken = token.access_token
+        return token
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+export async function logoutSession(): Promise<void> {
+  await request('/auth/logout', { method: 'POST' }, false)
+  currentToken = null
+}
+
+export async function getAuthSessions(): Promise<AuthSession[]> {
+  return request<AuthSession[]>('/auth/sessions')
+}
+
+export async function revokeAuthSession(sessionId: number): Promise<void> {
+  await request(`/auth/sessions/${sessionId}`, { method: 'DELETE' })
 }
 
 export async function register(

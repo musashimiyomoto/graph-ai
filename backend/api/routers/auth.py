@@ -2,18 +2,42 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Cookie, Depends, Path, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import auth, db, rate_limit
-from schemas import LoginCreate, LoginResponse, UserCreate, UserResponse
+from schemas import (
+    AuthSessionResponse,
+    LoginCreate,
+    LoginResponse,
+    UserCreate,
+    UserResponse,
+)
+from settings import auth_settings
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+_REFRESH_COOKIE = "graph_ai_refresh"
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Set the rotated refresh token as an HttpOnly cookie."""
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=refresh_token,
+        max_age=auth_settings.refresh_token_expire_days * 24 * 60 * 60,
+        httponly=True,
+        secure=auth_settings.environment.lower() not in {"local", "test"},
+        samesite="lax",
+        path="/",
+    )
 
 
 @router.post(path="/login")
 async def login(
     data: Annotated[LoginCreate, Body(description="Data for login")],
+    request: Request,
+    response: Response,
     session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
     usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
     _rate_limit: Annotated[
@@ -21,7 +45,80 @@ async def login(
     ],
 ) -> LoginResponse:
     """Authenticate a user and return a token."""
-    return await usecase.login(session=session, data=data)
+    result, refresh_token = await usecase.login(
+        session=session,
+        data=data,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+    _set_refresh_cookie(response, refresh_token)
+    return result
+
+
+@router.post(path="/refresh")
+async def refresh(
+    response: Response,
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+) -> LoginResponse:
+    """Rotate the refresh session and return a new access token."""
+    result, rotated = await usecase.refresh(
+        session=session,
+        refresh_token=refresh_token,
+    )
+    _set_refresh_cookie(response, rotated)
+    return result
+
+
+@router.post(path="/logout")
+async def logout(
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+) -> JSONResponse:
+    """Revoke the current refresh session and clear its cookie."""
+    await usecase.logout(session=session, refresh_token=refresh_token)
+    response = JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": "Logged out"},
+    )
+    response.delete_cookie(key=_REFRESH_COOKIE, path="/")
+    return response
+
+
+@router.get(path="/sessions")
+async def list_sessions(
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+    refresh_token: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+) -> list[AuthSessionResponse]:
+    """List active refresh sessions for the current account."""
+    return await usecase.list_sessions(
+        session=session,
+        user_id=current_user.id,
+        refresh_token=refresh_token,
+    )
+
+
+@router.delete(path="/sessions/{auth_session_id}")
+async def revoke_session(
+    auth_session_id: Annotated[int, Path(gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> JSONResponse:
+    """Revoke one owned refresh session."""
+    await usecase.revoke_session(
+        session=session,
+        user_id=current_user.id,
+        auth_session_id=auth_session_id,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": "Authentication session revoked"},
+    )
 
 
 @router.post(path="/register")

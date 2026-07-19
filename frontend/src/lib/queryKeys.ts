@@ -5,6 +5,7 @@
 export const queryKeys = {
   nodeCatalog: () => ['node-catalog'] as const,
   workflows: () => ['workflows'] as const,
+  authSessions: () => ['auth-sessions'] as const,
   workflowTemplates: () => ['workflow-templates'] as const,
   llmProviders: () => ['llm-providers'] as const,
   llmProviderModels: (providerId: number) =>

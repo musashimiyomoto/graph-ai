@@ -1,6 +1,6 @@
 """Pydantic schemas for API inputs and outputs."""
 
-from schemas.auth import LoginCreate, LoginResponse
+from schemas.auth import AuthSessionResponse, LoginCreate, LoginResponse
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
 from schemas.email_account import (
     EmailAccountCreate,
@@ -96,6 +96,7 @@ from schemas.workflow_version import WorkflowVersionResponse
 
 __all__ = [
     "AuditLogResponse",
+    "AuthSessionResponse",
     "ChatMessage",
     "ChatResponse",
     "ChatStreamChunk",

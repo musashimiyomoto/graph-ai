@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { deleteMe, getMe, login, register, setToken } from '../lib/api'
+import {
+  deleteMe,
+  getMe,
+  login,
+  logoutSession,
+  refreshSession,
+  register,
+  setToken,
+} from '../lib/api'
 import type { ApiError } from '../lib/types'
-
-const TOKEN_KEY = 'graph_ai_token'
 
 interface UseAuthSessionParams {
   setLoading: (value: boolean) => void
@@ -24,13 +30,11 @@ export function useAuthSession({
   setLoading,
   setError,
 }: UseAuthSessionParams): UseAuthSessionResult {
-  const [token, setTokenState] = useState<string | null>(
-    () => localStorage.getItem(TOKEN_KEY),
-  )
+  const [token, setTokenState] = useState<string | null>(null)
   const [email, setEmail] = useState<string>('')
 
   const handleLogout = useCallback((): void => {
-    localStorage.removeItem(TOKEN_KEY)
+    void logoutSession().catch(() => undefined)
     setTokenState(null)
     setEmail('')
     setError(null)
@@ -52,6 +56,17 @@ export function useAuthSession({
   }, [token])
 
   useEffect(() => {
+    setLoading(true)
+    void refreshSession()
+      .then((response) => {
+        if (response) {
+          setTokenState(response.access_token)
+        }
+      })
+      .finally(() => setLoading(false))
+  }, [setLoading])
+
+  useEffect(() => {
     if (!token) {
       return
     }
@@ -68,7 +83,6 @@ export function useAuthSession({
       setLoading(true)
       try {
         const response = await login(emailValue, password)
-        localStorage.setItem(TOKEN_KEY, response.access_token)
         setTokenState(response.access_token)
         setError(null)
       } catch (error) {

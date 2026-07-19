@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { ApiError } from '../lib/types'
+import { AuthSessionSettings } from './AuthSessionSettings'
 import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
 import { MCPServerSettings } from './MCPServerSettings'
@@ -24,6 +25,7 @@ interface SettingsSection {
 // button, no new modal.
 const SECTIONS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
+  { id: 'sessions', label: 'Sessions', Component: AuthSessionSettings },
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
   { id: 'email', label: 'Email Accounts', Component: EmailSettings },
   { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },

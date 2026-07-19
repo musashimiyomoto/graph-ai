@@ -819,8 +819,15 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       entries expose a configure flow that resolves URL variables and
       secret headers before encrypted storage. Migration `c9e2a4f6b8d1` adds
       MCP server storage and the node enum value.
-- [ ] **Session management** — keep users signed in with refresh tokens and let
-      them securely log out or revoke active sessions.
+- [x] **Session management** — short-lived access JWTs now identify a
+      persistent browser session and are kept only in frontend memory. Opaque
+      refresh tokens live in rotating HttpOnly/SameSite cookies while only
+      their SHA-256 hashes are stored server-side. Refresh restores login after
+      reload and transparently retries an expired authenticated request;
+      logout revokes the current session, and Settings lists active clients
+      with last-used/IP metadata and per-session revocation that immediately
+      invalidates its access tokens. Migration `d1f3a5c7e9b2` adds durable
+      session storage.
 - [ ] **Email verification and password recovery** — verify new accounts, reset a
       forgotten password, and change the current password from account settings.
 - [ ] **Translate node** — translate upstream text into a selected target language;

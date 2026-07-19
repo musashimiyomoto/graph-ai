@@ -7,7 +7,7 @@ from http import HTTPStatus
 import pytest
 from jose import jwt
 
-from db.repositories import LLMProviderRepository
+from db.repositories import AuthSessionRepository, LLMProviderRepository
 from enums import LLMProviderType
 from settings import auth_settings
 from tests.factories import UserFactory
@@ -143,3 +143,102 @@ class TestAuthLogin(BaseTestCase):
             algorithms=[auth_settings.algorithm],
         )
         self.assert_has_keys(payload, {"exp", "iat", "jti", "sub"})
+
+    @pytest.mark.asyncio
+    async def test_refresh_rotates_cookie_and_database_hash(self) -> None:
+        """Refresh tokens are opaque, rotated, and stored only as hashes."""
+        password = secrets.token_urlsafe(16)
+        user = await UserFactory.create_async(
+            session=self.session,
+            email=f"refresh-{uuid.uuid4().hex[:8]}@example.com",
+            hashed_password=hash_password(password),
+        )
+        login_response = await self.client.post(
+            url=self.url,
+            json={"email": user.email, "password": password},
+        )
+        await self.assert_response_dict(response=login_response)
+        first_cookie = login_response.cookies.get("graph_ai_refresh")
+        if not first_cookie:
+            pytest.fail("Login should set an HttpOnly refresh cookie")
+        first_cookie_value = str(first_cookie)
+
+        refresh_response = await self.client.post("/auth/refresh")
+        await self.assert_response_dict(response=refresh_response)
+        second_cookie = refresh_response.cookies.get("graph_ai_refresh")
+        if not second_cookie or second_cookie == first_cookie:
+            pytest.fail("Refresh should rotate the cookie value")
+
+        sessions = await AuthSessionRepository().get_all(
+            session=self.session,
+            user_id=user.id,
+        )
+        if len(sessions) != 1 or first_cookie_value in sessions[0].token_hash:
+            pytest.fail("Database should contain one hashed rotated token")
+
+    @pytest.mark.asyncio
+    async def test_logout_revokes_refresh_session(self) -> None:
+        """Logout invalidates the current refresh token."""
+        password = secrets.token_urlsafe(16)
+        user = await UserFactory.create_async(
+            session=self.session,
+            email=f"logout-{uuid.uuid4().hex[:8]}@example.com",
+            hashed_password=hash_password(password),
+        )
+        await self.client.post(
+            url=self.url,
+            json={"email": user.email, "password": password},
+        )
+
+        logout_response = await self.client.post("/auth/logout")
+        await self.assert_response_ok(response=logout_response)
+        refresh_response = await self.client.post("/auth/refresh")
+        if refresh_response.status_code != HTTPStatus.UNAUTHORIZED:
+            pytest.fail("Logged-out refresh token should be rejected")
+
+    @pytest.mark.asyncio
+    async def test_sessions_can_be_listed_and_revoked(self) -> None:
+        """Users can inspect and revoke their active browser sessions."""
+        password = secrets.token_urlsafe(16)
+        user = await UserFactory.create_async(
+            session=self.session,
+            email=f"sessions-{uuid.uuid4().hex[:8]}@example.com",
+            hashed_password=hash_password(password),
+        )
+        first = await self.client.post(
+            url=self.url,
+            json={"email": user.email, "password": password},
+        )
+        first_data = await self.assert_response_dict(response=first)
+        second = await self.client.post(
+            url=self.url,
+            json={"email": user.email, "password": password},
+        )
+        second_data = await self.assert_response_dict(response=second)
+        response = await self.client.get(
+            "/auth/sessions",
+            headers={"Authorization": f"Bearer {second_data['access_token']}"},
+        )
+        sessions = await self.assert_response_list(response=response)
+        expected_session_count = 2
+        if (
+            len(sessions) != expected_session_count
+            or sum(item["current"] for item in sessions) != 1
+        ):
+            pytest.fail(
+                "Session list should identify both sessions and the current one"
+            )
+        old_session = next(item for item in sessions if not item["current"])
+        revoke_response = await self.client.delete(
+            f"/auth/sessions/{old_session['id']}",
+            headers={"Authorization": f"Bearer {first_data['access_token']}"},
+        )
+        await self.assert_response_ok(response=revoke_response)
+        rejected = await self.client.get(
+            "/auth/sessions",
+            headers={"Authorization": f"Bearer {first_data['access_token']}"},
+        )
+        if rejected.status_code != HTTPStatus.UNAUTHORIZED:
+            pytest.fail(
+                "Revoking a session should immediately invalidate its access token"
+            )

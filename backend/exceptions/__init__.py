@@ -1,6 +1,6 @@
 """Custom exception types for the API."""
 
-from exceptions.auth import AuthCredentialsError
+from exceptions.auth import AuthCredentialsError, AuthSessionNotFoundError
 from exceptions.base import BaseError
 from exceptions.edge import (
     EdgeAlreadyExistsError,
@@ -67,6 +67,7 @@ from exceptions.workflow import (
 
 __all__ = [
     "AuthCredentialsError",
+    "AuthSessionNotFoundError",
     "BaseError",
     "BlockedURLError",
     "DocumentTooLargeError",

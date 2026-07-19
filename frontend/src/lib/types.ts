@@ -188,6 +188,16 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface AuthSession {
+  id: number
+  created_at: string
+  last_used_at: string
+  expires_at: string
+  user_agent: string | null
+  ip_address: string | null
+  current: boolean
+}
+
 export interface NodeFieldValidator {
   min_length?: number
   select?: string[]

@@ -1,6 +1,7 @@
 """Model exports for the backend."""
 
 from db.models.audit_log import AuditLog
+from db.models.auth_session import AuthSession
 from db.models.base import Base, BaseWithDate, BaseWithID
 from db.models.edge import Edge
 from db.models.email_account import EmailAccount
@@ -19,6 +20,7 @@ from db.models.workflow_version import WorkflowVersion
 
 __all__ = [
     "AuditLog",
+    "AuthSession",
     "Base",
     "BaseWithDate",
     "BaseWithID",
