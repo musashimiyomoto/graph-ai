@@ -24,7 +24,7 @@ class TestLLMProviderCreate(BaseTestCase):
         payload = {
             "name": f"provider-{uuid.uuid4().hex[:8]}",
             "type": LLMProviderType.OLLAMA,
-            "base_url": "https://example.com",
+            "base_url": "http://localhost:11434",
             "config": {"timeout": 5},
         }
 
@@ -52,7 +52,7 @@ class TestLLMProviderCreate(BaseTestCase):
         payload = {
             "name": f"provider-{uuid.uuid4().hex[:8]}",
             "type": LLMProviderType.OLLAMA,
-            "base_url": "https://example.com",
+            "base_url": "http://localhost:11434",
             "api_key": plaintext,
         }
 
@@ -79,7 +79,7 @@ class TestLLMProviderCreate(BaseTestCase):
         payload = {
             "name": f"provider-{uuid.uuid4().hex[:8]}",
             "type": LLMProviderType.OLLAMA,
-            "base_url": "https://example.com",
+            "base_url": "http://localhost:11434",
             "config": {"blob": "x" * 10_000},
         }
 
@@ -95,7 +95,7 @@ class TestLLMProviderCreate(BaseTestCase):
         payload = {
             "name": f"provider-{uuid.uuid4().hex[:8]}",
             "type": LLMProviderType.OLLAMA,
-            "base_url": "https://example.com",
+            "base_url": "http://localhost:11434",
         }
 
         first_response = await self.client.post(

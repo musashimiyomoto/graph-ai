@@ -1,6 +1,14 @@
 """Pydantic schemas for API inputs and outputs."""
 
-from schemas.auth import AuthSessionResponse, LoginCreate, LoginResponse
+from schemas.auth import (
+    AuthSessionResponse,
+    EmailActionRequest,
+    LoginCreate,
+    LoginResponse,
+    PasswordChangeRequest,
+    PasswordResetRequest,
+    TokenActionRequest,
+)
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
 from schemas.email_account import (
     EmailAccountCreate,
@@ -106,6 +114,7 @@ __all__ = [
     "EmailAccountCreate",
     "EmailAccountResponse",
     "EmailAccountUpdate",
+    "EmailActionRequest",
     "ExecutionCreate",
     "ExecutionGraphContext",
     "ExecutionInputPayload",
@@ -147,6 +156,8 @@ __all__ = [
     "OllamaCatalogTag",
     "OllamaModelPullRequest",
     "OllamaModelPullResponse",
+    "PasswordChangeRequest",
+    "PasswordResetRequest",
     "PostgresConnectionCreate",
     "PostgresConnectionResponse",
     "QuotaStatus",
@@ -154,6 +165,7 @@ __all__ = [
     "TelegramBotCreate",
     "TelegramBotResponse",
     "TelegramBotUpdate",
+    "TokenActionRequest",
     "TokenUsage",
     "UsageSummaryResponse",
     "UserCreate",

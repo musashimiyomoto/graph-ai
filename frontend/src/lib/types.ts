@@ -179,6 +179,7 @@ export type ExecutionStreamEvent =
 export interface UserProfile {
   id: number
   email: string
+  email_verified_at: string | null
   created_at: string
   updated_at: string
 }
@@ -186,6 +187,10 @@ export interface UserProfile {
 export interface TokenResponse {
   access_token: string
   token_type: string
+}
+
+export interface MessageResponse {
+  detail: string
 }
 
 export interface AuthSession {

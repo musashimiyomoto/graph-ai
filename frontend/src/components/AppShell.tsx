@@ -28,6 +28,7 @@ interface AppShellProps {
   onDismissError: () => void
   onLogout: () => void
   onDeleteAccount: () => void
+  onPasswordChanged: () => void
   onError: (err: ApiError) => void
   children: ReactNode
 }
@@ -54,6 +55,7 @@ export function AppShell({
   onDismissError,
   onLogout,
   onDeleteAccount,
+  onPasswordChanged,
   onError,
   children,
 }: AppShellProps) {
@@ -155,6 +157,7 @@ export function AppShell({
         <SettingsModal
           onClose={() => setShowSettings(false)}
           onError={onError}
+          onPasswordChanged={onPasswordChanged}
         />
       ) : null}
       {error ? (

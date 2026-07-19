@@ -188,6 +188,9 @@ async def test_client(
     app.dependency_overrides[rate_limit.enforce_register_rate_limit] = (
         override_rate_limit
     )
+    app.dependency_overrides[rate_limit.enforce_email_action_rate_limit] = (
+        override_rate_limit
+    )
     app.dependency_overrides[quota.enforce_execution_quota] = override_quota
 
     async with AsyncClient(

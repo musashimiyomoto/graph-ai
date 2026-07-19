@@ -11,6 +11,7 @@ import type {
   LlmModel,
   LlmProvider,
   LlmProviderCreatePayload,
+  MessageResponse,
   MCPServer,
   MCPServerCreatePayload,
   MCPRegistryServer,
@@ -168,6 +169,54 @@ export async function register(
   return request<UserProfile>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function resendEmailVerification(
+  email: string,
+): Promise<MessageResponse> {
+  return request<MessageResponse>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function verifyEmail(token: string): Promise<MessageResponse> {
+  return request<MessageResponse>('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<MessageResponse> {
+  return request<MessageResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<MessageResponse> {
+  return request<MessageResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, new_password: newPassword }),
+  })
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<MessageResponse> {
+  return request<MessageResponse>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
   })
 }
 

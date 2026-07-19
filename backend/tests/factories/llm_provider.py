@@ -19,4 +19,6 @@ class LLMProviderFactory(AsyncSQLAlchemyModelFactory):
     name = LazyAttribute(lambda _obj: f"provider-{fake.word()}")
     type = LLMProviderType.OLLAMA
     config = LazyAttribute(lambda _obj: {})
-    base_url = LazyAttribute(lambda _obj: fake.url())
+    # Provider URLs allow private/loopback hosts; keeping this deterministic
+    # avoids test behavior depending on how a generated public domain resolves.
+    base_url = "http://localhost:11434"

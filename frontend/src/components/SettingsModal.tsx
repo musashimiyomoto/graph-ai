@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import type { ApiError } from '../lib/types'
-import { AuthSessionSettings } from './AuthSessionSettings'
+import { AccountSecuritySettings } from './AccountSecuritySettings'
 import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
 import { MCPServerSettings } from './MCPServerSettings'
@@ -13,19 +13,23 @@ import { VectorCollectionSettings } from './VectorCollectionSettings'
 interface SettingsModalProps {
   onClose: () => void
   onError: (err: ApiError) => void
+  onPasswordChanged: () => void
 }
 
 interface SettingsSection {
   id: string
   label: string
-  Component: (props: { onError: (err: ApiError) => void }) => React.JSX.Element
+  Component: (props: {
+    onError: (err: ApiError) => void
+    onPasswordChanged: () => void
+  }) => React.JSX.Element
 }
 
 // Adding a future integration means adding one entry here — no new header
 // button, no new modal.
 const SECTIONS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
-  { id: 'sessions', label: 'Sessions', Component: AuthSessionSettings },
+  { id: 'account', label: 'Account Security', Component: AccountSecuritySettings },
   { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
   { id: 'email', label: 'Email Accounts', Component: EmailSettings },
   { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },
@@ -33,7 +37,11 @@ const SECTIONS: SettingsSection[] = [
   { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
 
-export function SettingsModal({ onClose, onError }: SettingsModalProps) {
+export function SettingsModal({
+  onClose,
+  onError,
+  onPasswordChanged,
+}: SettingsModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string>(SECTIONS[0].id)
 
   return (
@@ -71,7 +79,10 @@ export function SettingsModal({ onClose, onError }: SettingsModalProps) {
               the first load. */}
           {SECTIONS.map((section) => (
             <div key={section.id} className={section.id === activeSectionId ? '' : 'hidden'}>
-              <section.Component onError={onError} />
+              <section.Component
+                onError={onError}
+                onPasswordChanged={onPasswordChanged}
+              />
             </div>
           ))}
         </div>

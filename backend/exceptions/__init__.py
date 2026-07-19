@@ -1,6 +1,13 @@
 """Custom exception types for the API."""
 
-from exceptions.auth import AuthCredentialsError, AuthSessionNotFoundError
+from exceptions.auth import (
+    AuthActionTokenError,
+    AuthCredentialsError,
+    AuthSessionNotFoundError,
+    CurrentPasswordError,
+    EmailNotVerifiedError,
+    PasswordUnchangedError,
+)
 from exceptions.base import BaseError
 from exceptions.edge import (
     EdgeAlreadyExistsError,
@@ -66,10 +73,12 @@ from exceptions.workflow import (
 )
 
 __all__ = [
+    "AuthActionTokenError",
     "AuthCredentialsError",
     "AuthSessionNotFoundError",
     "BaseError",
     "BlockedURLError",
+    "CurrentPasswordError",
     "DocumentTooLargeError",
     "EdgeAlreadyExistsError",
     "EdgeHandleMismatchError",
@@ -79,6 +88,7 @@ __all__ = [
     "EmailAccountConfigError",
     "EmailAccountNotFoundError",
     "EmailConnectionError",
+    "EmailNotVerifiedError",
     "EmptyDocumentError",
     "ExecutionApprovalNotPendingError",
     "ExecutionGraphValidationError",
@@ -96,6 +106,7 @@ __all__ = [
     "NodeDataValidationError",
     "NodeExecutionTimeoutError",
     "NodeNotFoundError",
+    "PasswordUnchangedError",
     "PostgresConnectionAlreadyExistsError",
     "PostgresConnectionNotFoundError",
     "QuotaExceededError",

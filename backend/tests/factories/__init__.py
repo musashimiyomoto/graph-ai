@@ -1,5 +1,6 @@
 """Test model factories."""
 
+from tests.factories.auth_action_token import AuthActionTokenFactory
 from tests.factories.edge import EdgeFactory
 from tests.factories.email_account import EmailAccountFactory
 from tests.factories.execution import ExecutionFactory
@@ -12,6 +13,7 @@ from tests.factories.user import UserFactory
 from tests.factories.workflow import WorkflowFactory
 
 __all__ = [
+    "AuthActionTokenFactory",
     "EdgeFactory",
     "EmailAccountFactory",
     "ExecutionFactory",

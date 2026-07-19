@@ -12,6 +12,8 @@ _LOGIN_MAX_ATTEMPTS = 10
 _LOGIN_WINDOW_SECONDS = 60
 _REGISTER_MAX_ATTEMPTS = 5
 _REGISTER_WINDOW_SECONDS = 60
+_EMAIL_ACTION_MAX_ATTEMPTS = 5
+_EMAIL_ACTION_WINDOW_SECONDS = 60
 
 
 def _client_ip(request: Request) -> str:
@@ -68,4 +70,17 @@ async def enforce_register_rate_limit(
         f"ratelimit:register:{_client_ip(request)}",
         max_attempts=_REGISTER_MAX_ATTEMPTS,
         window_seconds=_REGISTER_WINDOW_SECONDS,
+    )
+
+
+async def enforce_email_action_rate_limit(
+    request: Request,
+    redis: Annotated[Redis, Depends(get_redis_client)],
+) -> None:
+    """Rate-limit verification and recovery email requests per client IP."""
+    await _enforce(
+        redis,
+        f"ratelimit:email-action:{_client_ip(request)}",
+        max_attempts=_EMAIL_ACTION_MAX_ATTEMPTS,
+        window_seconds=_EMAIL_ACTION_WINDOW_SECONDS,
     )

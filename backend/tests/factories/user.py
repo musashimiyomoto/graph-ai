@@ -1,6 +1,8 @@
 """User model factory."""
 
-from factory.declarations import LazyAttribute
+from datetime import UTC, datetime
+
+from factory.declarations import LazyAttribute, LazyFunction
 from factory.helpers import post_generation
 
 from db.models.user import User
@@ -18,6 +20,7 @@ class UserFactory(AsyncSQLAlchemyModelFactory):
     email = LazyAttribute(lambda _obj: fake.email())
 
     hashed_password = LazyAttribute(lambda _obj: fake.password())
+    email_verified_at = LazyFunction(lambda: datetime.now(tz=UTC))
 
     @post_generation
     def set_hashed_password(

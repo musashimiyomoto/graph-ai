@@ -44,10 +44,18 @@ export function App() {
   const {
     token,
     email,
+    authNotice,
+    pendingVerificationEmail,
+    resetPasswordToken,
     handleError,
     handleLogin,
     handleRegister,
+    handleResendVerification,
+    handleRequestPasswordReset,
+    handleResetPassword,
+    clearAuthNotice,
     handleLogout: logoutAuth,
+    handlePasswordChanged,
     handleDeleteAccount: deleteAccountAuth,
   } = useAuthSession({
     setLoading,
@@ -503,8 +511,17 @@ export function App() {
       <AuthScreen
         loading={loading}
         error={error}
+        notice={authNotice}
+        pendingVerificationEmail={pendingVerificationEmail}
+        resetPasswordToken={resetPasswordToken}
         onLogin={handleLogin}
         onRegister={handleRegister}
+        onResendVerification={(emailValue) => void handleResendVerification(emailValue)}
+        onRequestPasswordReset={(emailValue) =>
+          void handleRequestPasswordReset(emailValue)
+        }
+        onResetPassword={(password) => void handleResetPassword(password)}
+        onClearNotice={clearAuthNotice}
       />
     )
   }
@@ -528,6 +545,7 @@ export function App() {
         onDismissError={() => setError(null)}
         onLogout={handleLogout}
         onDeleteAccount={handleDeleteAccount}
+        onPasswordChanged={handlePasswordChanged}
         onError={handleError}
       >
         <WorkflowSidebar

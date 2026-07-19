@@ -37,9 +37,10 @@ is executed in the background, versioned, streamed token-by-token, and observabl
   `.pdf`/`.docx`/`.txt`/`.md` documents and search them from a workflow.
 - **Channels & triggers** — chat, Telegram bots (per-user, encrypted token,
   trigger-and-reply), and cron-scheduled runs.
-- **Multi-tenant hardening** — JWT auth, Fernet-encrypted secrets, per-user
-  quotas (executions & tokens/day), an append-only audit log, and cost
-  observability (tokens/latency per run).
+- **Multi-tenant hardening** — verified-email accounts, rotating refresh sessions,
+  password recovery, Fernet-encrypted secrets, per-user quotas (executions &
+  tokens/day), an append-only audit log, and cost observability
+  (tokens/latency per run).
 - **Observability** — Prometheus metrics (`/metrics`) and optional Sentry error
   tracking across both the API and the worker.
 

@@ -9,8 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.dependencies import auth, db, rate_limit
 from schemas import (
     AuthSessionResponse,
+    EmailActionRequest,
     LoginCreate,
     LoginResponse,
+    PasswordChangeRequest,
+    PasswordResetRequest,
+    TokenActionRequest,
     UserCreate,
     UserResponse,
 )
@@ -18,6 +22,7 @@ from settings import auth_settings
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 _REFRESH_COOKIE = "graph_ai_refresh"
+_EMAIL_ACTION_DETAIL = "If the account is eligible, an email has been sent"
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -132,3 +137,87 @@ async def register(
 ) -> UserResponse:
     """Register a new user."""
     return await usecase.register(session=session, data=data)
+
+
+@router.post(path="/resend-verification")
+async def resend_verification(
+    data: Annotated[EmailActionRequest, Body()],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    _rate_limit: Annotated[
+        None, Depends(dependency=rate_limit.enforce_email_action_rate_limit)
+    ],
+) -> JSONResponse:
+    """Send a fresh verification link without exposing account existence."""
+    await usecase.request_email_verification(session=session, email=str(data.email))
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": _EMAIL_ACTION_DETAIL},
+    )
+
+
+@router.post(path="/verify-email")
+async def verify_email(
+    data: Annotated[TokenActionRequest, Body()],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+) -> JSONResponse:
+    """Consume an email verification token."""
+    await usecase.verify_email(session=session, token=data.token)
+    return JSONResponse(content={"detail": "Email verified successfully"})
+
+
+@router.post(path="/forgot-password")
+async def forgot_password(
+    data: Annotated[EmailActionRequest, Body()],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    _rate_limit: Annotated[
+        None, Depends(dependency=rate_limit.enforce_email_action_rate_limit)
+    ],
+) -> JSONResponse:
+    """Send a password recovery link without exposing account existence."""
+    await usecase.request_password_reset(session=session, email=str(data.email))
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": _EMAIL_ACTION_DETAIL},
+    )
+
+
+@router.post(path="/reset-password")
+async def reset_password(
+    data: Annotated[PasswordResetRequest, Body()],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+) -> JSONResponse:
+    """Choose a new password with a one-time recovery token."""
+    await usecase.reset_password(
+        session=session,
+        token=data.token,
+        new_password=data.new_password,
+    )
+    response = JSONResponse(content={"detail": "Password reset successfully"})
+    response.delete_cookie(key=_REFRESH_COOKIE, path="/")
+    return response
+
+
+@router.post(path="/change-password")
+async def change_password(
+    data: Annotated[PasswordChangeRequest, Body()],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[auth.AuthUsecase, Depends(dependency=auth.get_auth_usecase)],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+) -> JSONResponse:
+    """Change the current password and revoke every login session."""
+    await usecase.change_password(
+        session=session,
+        user_id=current_user.id,
+        current_password=data.current_password,
+        new_password=data.new_password,
+    )
+    response = JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"detail": "Password changed; sign in again"},
+    )
+    response.delete_cookie(key=_REFRESH_COOKIE, path="/")
+    return response

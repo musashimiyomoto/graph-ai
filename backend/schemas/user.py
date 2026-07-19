@@ -28,6 +28,10 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(default=..., description="ID of the user", gt=0)
+    email_verified_at: datetime | None = Field(
+        default=None,
+        description="When the email address was verified",
+    )
 
     created_at: datetime = Field(default=..., description="Created at")
     updated_at: datetime = Field(default=..., description="Updated at")

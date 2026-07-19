@@ -828,8 +828,18 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       with last-used/IP metadata and per-session revocation that immediately
       invalidates its access tokens. Migration `d1f3a5c7e9b2` adds durable
       session storage.
-- [ ] **Email verification and password recovery** — verify new accounts, reset a
-      forgotten password, and change the current password from account settings.
+- [x] **Email verification and password recovery** — new registrations now stay
+      inactive until a one-time email link is consumed; only SHA-256 token hashes
+      are stored in the new `auth_action_tokens` table, links expire, resends
+      replace older links, and existing accounts are marked verified by migration
+      to avoid lockout. Forgot-password and resend endpoints return the same
+      generic response whether an account exists or not, while password reset and
+      authenticated password change both revoke every browser session. Account
+      mail is delivered through configurable SMTP (log-only in local/test), the
+      auth screen handles verification/recovery links and resend flows, and the
+      Settings modal now has one Account Security section for password changes and
+      active-session management. Migration `e5b7c9d1f3a6` adds the verified-email
+      timestamp and one-time token storage.
 - [ ] **Translate node** — translate upstream text into a selected target language;
       useful, but already achievable with the existing LLM node.
 - [ ] **Delay / Wait node** — pause a branch for a duration or until a timestamp;
