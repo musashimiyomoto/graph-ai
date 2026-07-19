@@ -207,6 +207,20 @@ export function LoopIcon(props: IconProps) {
   )
 }
 
+export function SwitchIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="2" y="7" width="4" height="2" fill="var(--accent)" />
+      <rect x="5" y="4" width="2" height="8" fill="var(--accent)" />
+      <rect x="7" y="3" width="4" height="2" fill="var(--accent-2)" />
+      <rect x="7" y="7" width="6" height="2" fill="var(--accent-2)" />
+      <rect x="7" y="11" width="4" height="2" fill="var(--accent-2)" />
+      <rect x="11" y="2" width="2" height="4" fill="var(--accent-2)" />
+      <rect x="11" y="10" width="2" height="4" fill="var(--accent-2)" />
+    </svg>
+  )
+}
+
 export function NodeIcon({ iconKey }: { iconKey: string }) {
   if (iconKey === 'loop') {
     return <LoopIcon />
@@ -231,6 +245,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'condition') {
     return <ConditionIcon />
+  }
+
+  if (iconKey === 'switch') {
+    return <SwitchIcon />
   }
 
   if (iconKey === 'code_transform') {

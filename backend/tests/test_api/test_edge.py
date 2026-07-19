@@ -120,6 +120,87 @@ class TestEdgeCreate(BaseTestCase):
                 f"Expected 409 for a duplicate edge, got {second_response.status_code}"
             )
 
+    @pytest.mark.asyncio
+    async def test_switch_accepts_configured_and_default_handles(self) -> None:
+        """Switch edges may use configured branch names or the default fallback."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.SWITCH,
+            data={
+                "label": "Switch",
+                "branches": [{"name": "billing", "value": "billing"}],
+                "case_sensitive": "false",
+            },
+        )
+        targets = [
+            await NodeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                type=NodeType.OUTPUT,
+            )
+            for _ in range(2)
+        ]
+
+        for target, source_handle in zip(
+            targets,
+            ("billing", "default"),
+            strict=True,
+        ):
+            response = await self.client.post(
+                url=self.url,
+                json={
+                    "workflow_id": workflow.id,
+                    "source_node_id": source.id,
+                    "target_node_id": target.id,
+                    "source_handle": source_handle,
+                },
+                headers=headers,
+            )
+            await self.assert_response_dict(response=response)
+
+    @pytest.mark.asyncio
+    async def test_switch_rejects_unknown_handle(self) -> None:
+        """Switch edges cannot reference a branch absent from node data."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.SWITCH,
+            data={
+                "label": "Switch",
+                "branches": [{"name": "billing", "value": "billing"}],
+                "case_sensitive": "false",
+            },
+        )
+        target = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+        )
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "source_node_id": source.id,
+                "target_node_id": target.id,
+                "source_handle": "support",
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail(
+                f"Expected 400 for unknown Switch handle, got {response.status_code}"
+            )
+
 
 class TestEdgeList(BaseTestCase):
     """Tests for GET /edges."""

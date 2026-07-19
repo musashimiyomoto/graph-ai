@@ -18,7 +18,17 @@ from nodes.registry import (
     NodeHandlerRegistry,
     build_node_catalog,
     check_edge_ports,
+    check_source_handle,
     get_node_definition,
+    get_node_output_handles,
+)
+from nodes.switch import (
+    SwitchBranch,
+    SwitchConfigurationError,
+    SwitchNodeHandler,
+    parse_switch_branches,
+    select_switch_handle,
+    switch_output_handles,
 )
 from nodes.table import TableNodeHandler
 from nodes.template import TemplateNodeHandler
@@ -46,6 +56,9 @@ __all__ = [
     "NodeHandlerRegistry",
     "OnToken",
     "OutputNodeHandler",
+    "SwitchBranch",
+    "SwitchConfigurationError",
+    "SwitchNodeHandler",
     "TableNodeHandler",
     "TemplateNodeHandler",
     "VectorIngestNodeHandler",
@@ -53,7 +66,12 @@ __all__ = [
     "WebSearchNodeHandler",
     "build_node_catalog",
     "check_edge_ports",
+    "check_source_handle",
     "evaluate_condition",
     "get_node_definition",
+    "get_node_output_handles",
+    "parse_switch_branches",
     "ports_compatible",
+    "select_switch_handle",
+    "switch_output_handles",
 ]

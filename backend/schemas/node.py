@@ -23,6 +23,7 @@ class NodeFieldWidget(StrEnum):
     VECTOR_COLLECTION = "vector_collection"
     POSTGRES_CONNECTION = "postgres_connection"
     WORKFLOW = "workflow"
+    SWITCH_BRANCHES = "switch_branches"
 
 
 class NodeFieldDataSourceKind(StrEnum):

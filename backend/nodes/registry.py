@@ -20,6 +20,8 @@ from nodes.loop import DEFINITION as LOOP_DEFINITION
 from nodes.loop_input import DEFINITION as LOOP_INPUT_DEFINITION
 from nodes.loop_output import DEFINITION as LOOP_OUTPUT_DEFINITION
 from nodes.output import DEFINITION as OUTPUT_DEFINITION
+from nodes.switch import DEFINITION as SWITCH_DEFINITION
+from nodes.switch import switch_output_handles
 from nodes.table import DEFINITION as TABLE_DEFINITION
 from nodes.template import DEFINITION as TEMPLATE_DEFINITION
 from nodes.vector_ingest import DEFINITION as VECTOR_INGEST_DEFINITION
@@ -34,6 +36,7 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     TEMPLATE_DEFINITION,
     HTTP_REQUEST_DEFINITION,
     CONDITION_DEFINITION,
+    SWITCH_DEFINITION,
     CODE_TRANSFORM_DEFINITION,
     CALL_WORKFLOW_DEFINITION,
     APPROVAL_DEFINITION,
@@ -83,6 +86,38 @@ def build_node_catalog() -> dict[NodeType, NodeCatalogItem]:
         )
         for definition in NODE_DEFINITIONS
     }
+
+
+def get_node_output_handles(
+    node_type: NodeType,
+    node_data: dict[str, object],
+) -> tuple[str, ...] | None:
+    """Return static or node-configured output handles for one node."""
+    if node_type is NodeType.SWITCH:
+        return switch_output_handles(node_data)
+    return get_node_definition(node_type).graph.output_handles
+
+
+def check_source_handle(
+    node_type: NodeType,
+    node_data: dict[str, object],
+    source_handle: str | None,
+) -> str | None:
+    """Return a validation error when an edge uses an invalid source handle."""
+    output_handles = get_node_output_handles(node_type, node_data)
+    if output_handles is None:
+        if source_handle is None:
+            return None
+        return (
+            f"Node type '{node_type.value}' has a single default output handle; "
+            "source_handle must be omitted"
+        )
+    if source_handle in output_handles:
+        return None
+    options = ", ".join(output_handles)
+    return (
+        f"Node type '{node_type.value}' requires source_handle to be one of: {options}"
+    )
 
 
 def check_edge_ports(source_type: NodeType, target_type: NodeType) -> str | None:

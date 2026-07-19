@@ -15,7 +15,11 @@ from exceptions import (
     NodeNotFoundError,
     WorkflowNotFoundError,
 )
-from nodes import check_edge_ports, get_node_definition
+from nodes import (
+    SwitchConfigurationError,
+    check_edge_ports,
+    check_source_handle,
+)
 from schemas import EdgeCreate, EdgeResponse, EdgeUpdate
 
 
@@ -41,25 +45,16 @@ class EdgeUsecase:
             EdgeHandleMismatchError: If the handle doesn't match the node type.
 
         """
-        output_handles = get_node_definition(
-            NodeType(source_node.type)
-        ).graph.output_handles
-        if output_handles is None:
-            if source_handle is not None:
-                message = (
-                    f"Node type '{source_node.type}' has a single default output "
-                    "handle; source_handle must be omitted"
-                )
-                raise EdgeHandleMismatchError(message=message)
-            return
-
-        if source_handle not in output_handles:
-            options = ", ".join(output_handles)
-            message = (
-                f"Node type '{source_node.type}' requires source_handle to be "
-                f"one of: {options}"
+        try:
+            handle_error = check_source_handle(
+                NodeType(source_node.type),
+                source_node.data,
+                source_handle,
             )
-            raise EdgeHandleMismatchError(message=message)
+        except SwitchConfigurationError as exc:
+            raise EdgeHandleMismatchError(message=str(exc)) from exc
+        if handle_error is not None:
+            raise EdgeHandleMismatchError(message=handle_error)
 
     async def create_edge(
         self,

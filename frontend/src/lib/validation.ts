@@ -1,4 +1,5 @@
 import type { NodeCatalogField, NodeCatalogFieldVisibility } from './types'
+import { validateSwitchBranches } from './switchBranches'
 
 /**
  * Evaluate a field's declarative `visible_when` rule against its controlling
@@ -43,6 +44,10 @@ function requiredError(field: NodeCatalogField, value: unknown): string | null {
 function valueError(field: NodeCatalogField, value: unknown): string | null {
   const label = field.ui.label
   const { min_length: minLength, ge, le, select, url } = field.validators
+
+  if (field.ui.widget === 'switch_branches') {
+    return validateSwitchBranches(value)
+  }
 
   if (minLength !== undefined && typeof value === 'string') {
     if (value.length < minLength) {

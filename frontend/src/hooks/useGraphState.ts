@@ -20,6 +20,7 @@ import type {
   NodeResponse,
   NodeType,
 } from '../lib/types'
+import { switchOutputHandles } from '../lib/switchBranches'
 import { type UndoableCommand, useUndoRedo } from './useUndoRedo'
 
 interface UseGraphStateParams {
@@ -110,6 +111,11 @@ function toFlowNode(
   nodeCatalogByType: Record<string, NodeCatalogItem>,
 ): FlowNode {
   const catalogNode = nodeCatalogByType[node.type]
+  const graph = catalogNode?.graph ?? { has_input: true, has_output: true }
+  const resolvedGraph =
+    node.type === 'switch'
+      ? { ...graph, output_handles: switchOutputHandles(node.data?.branches) }
+      : graph
 
   return {
     id: String(node.id),
@@ -120,7 +126,7 @@ function toFlowNode(
       label: node.data?.label ?? `${node.type} node`,
       nodeType: node.type,
       iconKey: catalogNode?.icon_key ?? 'input',
-      graph: catalogNode?.graph ?? { has_input: true, has_output: true },
+      graph: resolvedGraph,
       parentNodeId: node.parent_node_id,
     },
   }

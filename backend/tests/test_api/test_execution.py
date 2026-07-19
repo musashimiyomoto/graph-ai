@@ -1298,6 +1298,91 @@ class TestExecutionCondition(BaseTestCase):
             pytest.fail("True branch should have been skipped")
 
 
+class TestExecutionSwitch(BaseTestCase):
+    """Tests for named Switch branches and the default fallback."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("input_value", "expected_output"),
+        [
+            ("billing", "BILLING:billing"),
+            ("unknown", "DEFAULT:unknown"),
+        ],
+    )
+    async def test_switch_runs_only_selected_branch(
+        self,
+        input_value: str,
+        expected_output: str,
+    ) -> None:
+        """Only the matching named branch, or default, reaches the output."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        switch_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.SWITCH,
+            data={
+                "label": "Switch",
+                "branches": [{"name": "billing", "value": "billing"}],
+                "case_sensitive": "false",
+            },
+        )
+        billing_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.TEMPLATE,
+            data={"label": "Billing", "template": "BILLING:{{input}}"},
+        )
+        default_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.TEMPLATE,
+            data={"label": "Default", "template": "DEFAULT:{{input}}"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        edges = (
+            (input_node.id, switch_node.id, None),
+            (switch_node.id, billing_node.id, "billing"),
+            (switch_node.id, default_node.id, "default"),
+            (billing_node.id, output_node.id, None),
+            (default_node.id, output_node.id, None),
+        )
+        for source_id, target_id, source_handle in edges:
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source_id,
+                target_node_id=target_id,
+                source_handle=source_handle,
+            )
+
+        response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow.id, "input_data": {"value": input_value}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=response)
+        execution = await run_execution(self.session, created["id"])
+
+        if execution.status is not ExecutionStatus.SUCCESS:
+            pytest.fail("Switch workflow should succeed")
+        if execution.output_data != {"value": expected_output}:
+            pytest.fail("Switch workflow returned the wrong branch output")
+
+
 class TestExecutionLoop(BaseTestCase):
     """Tests for the Loop node's recursive body execution."""
 

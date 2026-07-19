@@ -11,6 +11,7 @@ from nodes import (
     CodeTransformNodeHandler,
     ConditionNodeHandler,
     HTTPRequestNodeHandler,
+    SwitchNodeHandler,
     TemplateNodeHandler,
     VectorIngestNodeHandler,
     VectorSearchNodeHandler,
@@ -531,6 +532,70 @@ class TestConditionNode:
         with pytest.raises(ExecutionGraphValidationError):
             await handler.execute(
                 _context({"condition_type": "bogus", "value": "x"}, parent_values=["x"])
+            )
+
+
+class TestSwitchNode:
+    """Tests for ordered named Switch routing."""
+
+    @pytest.mark.asyncio
+    async def test_first_matching_branch_is_selected(self) -> None:
+        """The first exact match wins and leaves upstream text unchanged."""
+        handler = SwitchNodeHandler()
+        result = await handler.execute(
+            _context(
+                {
+                    "branches": [
+                        {"name": "first", "value": "hello"},
+                        {"name": "second", "value": "hello"},
+                    ],
+                    "case_sensitive": "false",
+                },
+                parent_values=["HELLO"],
+            )
+        )
+        if result.selected_handle != "first" or result.output != "HELLO":
+            pytest.fail("Switch should select its first case-insensitive match")
+
+    @pytest.mark.asyncio
+    async def test_unmatched_value_selects_default(self) -> None:
+        """An unmatched value routes through the reserved default handle."""
+        handler = SwitchNodeHandler()
+        result = await handler.execute(
+            _context(
+                {"branches": [{"name": "billing", "value": "billing"}]},
+                parent_values=["support"],
+            )
+        )
+        if result.selected_handle != "default":
+            pytest.fail("Unmatched Switch input should select default")
+
+    @pytest.mark.asyncio
+    async def test_case_sensitive_match_respects_case(self) -> None:
+        """Case-sensitive mode does not fold the input or comparison value."""
+        handler = SwitchNodeHandler()
+        result = await handler.execute(
+            _context(
+                {
+                    "branches": [{"name": "billing", "value": "Billing"}],
+                    "case_sensitive": "true",
+                },
+                parent_values=["billing"],
+            )
+        )
+        if result.selected_handle != "default":
+            pytest.fail("Case-sensitive Switch match should respect case")
+
+    @pytest.mark.asyncio
+    async def test_invalid_configuration_is_rejected(self) -> None:
+        """Runtime validation protects executions using old invalid snapshots."""
+        handler = SwitchNodeHandler()
+        with pytest.raises(ExecutionGraphValidationError):
+            await handler.execute(
+                _context(
+                    {"branches": [{"name": "default", "value": "x"}]},
+                    parent_values=["x"],
+                )
             )
 
 

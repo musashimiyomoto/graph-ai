@@ -799,8 +799,14 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       path, avoiding ambiguous concurrent pause/failure races. Migration
       `a7c9e2f4b6d8` adds the node/status enum values and execution checkpoint
       metadata.
-- [ ] **Switch node** — route a value into one of several named branches instead
-      of the Condition node's binary true/false split.
+- [x] **Switch node** — route upstream text by exact value into the first of
+      1–8 ordered, named branches, with optional case sensitivity and a
+      reserved `default` fallback. Branch names are validated as stable edge
+      handles, node updates cannot remove or rename a handle while an edge is
+      attached, and execution snapshots/checkpoint resumes preserve the same
+      deterministic route. The inspector provides a structured branch editor
+      and the canvas derives its output handles from persisted node data.
+      Migration `b8d1f3a5c7e9` adds the node enum value.
 - [ ] **MCP tool nodes** — connect workflows to capabilities exposed by MCP
       servers through explicit, visible graph nodes.
 - [ ] **Session management** — keep users signed in with refresh tokens and let

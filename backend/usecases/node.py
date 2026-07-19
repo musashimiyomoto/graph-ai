@@ -8,6 +8,7 @@ from croniter import croniter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repositories import (
+    EdgeRepository,
     EmailAccountRepository,
     LLMProviderRepository,
     NodeRepository,
@@ -26,7 +27,11 @@ from exceptions import (
     TelegramBotNotFoundError,
     WorkflowNotFoundError,
 )
-from nodes import build_node_catalog
+from nodes import (
+    SwitchConfigurationError,
+    build_node_catalog,
+    switch_output_handles,
+)
 from schemas import (
     NodeCatalogItem,
     NodeCatalogItemResponse,
@@ -62,6 +67,7 @@ class NodeUsecase:
     def __init__(self) -> None:
         """Initialize the usecase."""
         self._node_repository = NodeRepository()
+        self._edge_repository = EdgeRepository()
         self._workflow_repository = WorkflowRepository()
         self._llm_provider_repository = LLMProviderRepository()
         self._telegram_bot_repository = TelegramBotRepository()
@@ -292,6 +298,12 @@ class NodeUsecase:
                 errors=errors,
                 allow_unset_references=allow_unset_references,
             )
+
+        if node_type is NodeType.SWITCH:
+            try:
+                switch_output_handles(data)
+            except SwitchConfigurationError as exc:
+                errors.append(str(exc))
 
         if errors:
             raise NodeDataValidationError(message="; ".join(errors))
@@ -763,6 +775,29 @@ class NodeUsecase:
             node_type=node.type,
             data=node.data | incoming_data,
         )
+        if node.type is NodeType.SWITCH:
+            old_handles = set(switch_output_handles(node.data))
+            new_handles = set(switch_output_handles(validated_data))
+            removed_handles = old_handles - new_handles
+            if removed_handles:
+                connected_edges = await self._edge_repository.get_all(
+                    session=session,
+                    source_node_id=node.id,
+                )
+                connected_removed = sorted(
+                    {
+                        edge.source_handle
+                        for edge in connected_edges
+                        if edge.source_handle in removed_handles
+                    }
+                )
+                if connected_removed:
+                    handles = ", ".join(connected_removed)
+                    message = (
+                        "Cannot remove or rename connected Switch branches: "
+                        f"{handles}. Delete their edges first."
+                    )
+                    raise NodeDataValidationError(message=message)
         await self._validate_external_references(
             session=session,
             user_id=user_id,

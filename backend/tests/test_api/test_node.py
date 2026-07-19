@@ -10,7 +10,12 @@ from db.models import NodeSchedule
 from db.repositories import NodeScheduleRepository
 from enums import NodeType
 from enums.node import InputNodeFormat, OutputNodeFormat
-from tests.factories import LLMProviderFactory, NodeFactory, WorkflowFactory
+from tests.factories import (
+    EdgeFactory,
+    LLMProviderFactory,
+    NodeFactory,
+    WorkflowFactory,
+)
 from tests.test_api.base import BaseTestCase
 
 
@@ -37,6 +42,13 @@ def _extra_fields_by_type(
         NodeType.CONDITION: {
             "condition_type": "contains",
             "value": "hello",
+            "case_sensitive": "false",
+        },
+        NodeType.SWITCH: {
+            "branches": [
+                {"name": "billing", "value": "billing"},
+                {"name": "support", "value": "support"},
+            ],
             "case_sensitive": "false",
         },
         NodeType.CODE_TRANSFORM: {"code": "output = input"},
@@ -81,6 +93,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.TEMPLATE: {"label", "template"},
     NodeType.HTTP_REQUEST: {"label", "url", "method"},
     NodeType.CONDITION: {"label", "condition_type", "value", "case_sensitive"},
+    NodeType.SWITCH: {"label", "branches", "case_sensitive"},
     NodeType.CODE_TRANSFORM: {"label", "code"},
     NodeType.VECTOR_INGEST: {"label", "collection"},
     NodeType.VECTOR_SEARCH: {"label", "collection", "top_k"},
@@ -215,6 +228,47 @@ class TestNodeCreate(BaseTestCase):
 
         if response.status_code != HTTPStatus.NOT_FOUND:
             pytest.fail(f"Expected {HTTPStatus.NOT_FOUND}, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "branches",
+        [
+            [],
+            [{"name": "default", "value": "x"}],
+            [{"name": "Bad Name", "value": "x"}],
+            [
+                {"name": "same", "value": "x"},
+                {"name": "same", "value": "y"},
+            ],
+            [{"name": "valid", "value": " "}],
+        ],
+    )
+    async def test_switch_rejects_invalid_branches(self, branches: list[dict]) -> None:
+        """Switch branch names and values are strictly validated."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session,
+            owner_id=user["id"],
+        )
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "type": NodeType.SWITCH,
+                "data": {
+                    "label": "Switch",
+                    "branches": branches,
+                    "case_sensitive": "false",
+                },
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail(
+                f"Expected invalid Switch branches to return 422, got "
+                f"{response.status_code}"
+            )
 
     @pytest.mark.asyncio
     async def test_call_workflow_rejects_self_reference(self) -> None:
@@ -813,6 +867,54 @@ class TestNodeUpdate(BaseTestCase):
         data = await self.assert_response_dict(response=response)
         if data["position_x"] != new_x or data["position_y"] != new_y:
             pytest.fail("Node positions were not updated")
+
+    @pytest.mark.asyncio
+    async def test_switch_cannot_remove_a_connected_branch(self) -> None:
+        """Renaming/removing a Switch handle requires deleting its edge first."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session,
+            owner_id=user["id"],
+        )
+        switch_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.SWITCH,
+            data={
+                "label": "Switch",
+                "branches": [{"name": "billing", "value": "billing"}],
+                "case_sensitive": "false",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data=build_node_data(NodeType.OUTPUT),
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=switch_node.id,
+            target_node_id=output_node.id,
+            source_handle="billing",
+        )
+
+        response = await self.client.patch(
+            url=f"{self.url}/{switch_node.id}",
+            json={
+                "data": {
+                    "branches": [{"name": "support", "value": "support"}],
+                }
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail(
+                f"Expected 422 when removing a connected Switch branch, got "
+                f"{response.status_code}"
+            )
 
 
 class TestNodeDelete(BaseTestCase):

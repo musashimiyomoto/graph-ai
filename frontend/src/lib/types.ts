@@ -209,6 +209,7 @@ export type NodeFieldWidget =
   | 'vector_collection'
   | 'postgres_connection'
   | 'workflow'
+  | 'switch_branches'
 
 export type NodeFieldDataSourceKind =
   | 'llm_provider'

@@ -19,6 +19,7 @@ import type {
 } from '../lib/types'
 import { matchesVisibility } from '../lib/validation'
 import { NumberInput } from './NumberInput'
+import { SwitchBranchesField } from './SwitchBranchesField'
 import { VectorCollectionInput } from './VectorCollectionInput'
 
 function TextField({
@@ -425,7 +426,7 @@ export function NodeFieldsForm({
     [fields, data],
   )
 
-  function updateField(name: string, value: string | number | null) {
+  function updateField(name: string, value: unknown) {
     const next = { ...data, [name]: value }
     // Generic clear-on-hide: any sibling field whose visibility depends on
     // this one gets reset once it's no longer visible, so a hidden field's
@@ -528,6 +529,15 @@ export function NodeFieldsForm({
           value={value}
           options={field.validators.select ?? []}
           onChange={(selected) => updateField(field.name, selected)}
+        />
+      )
+    }
+
+    if (field.ui.widget === 'switch_branches') {
+      return (
+        <SwitchBranchesField
+          value={value}
+          onChange={(branches) => updateField(field.name, branches)}
         />
       )
     }

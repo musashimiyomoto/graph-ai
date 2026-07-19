@@ -59,7 +59,9 @@ from nodes import (
     NodeHandlerRegistry,
     OnToken,
     check_edge_ports,
+    check_source_handle,
     evaluate_condition,
+    select_switch_handle,
 )
 from schemas import (
     EdgeResponse,
@@ -1621,6 +1623,11 @@ class ExecutionUsecase:
                 value=raw_value if isinstance(raw_value, str) else None,
             )
             selected_handle = "true" if matched else "false"
+        elif node.type is NodeType.SWITCH:
+            try:
+                selected_handle = select_switch_handle(node.data, output)
+            except ValueError as exc:
+                raise ExecutionGraphValidationError(message=str(exc)) from exc
         return NodeExecutionResult(
             output=output,
             selected_handle=selected_handle,
@@ -2784,6 +2791,16 @@ class ExecutionUsecase:
             )
             if port_error is not None:
                 raise ExecutionGraphValidationError(message=port_error)
+            try:
+                handle_error = check_source_handle(
+                    nodes_by_id[source_id].type,
+                    nodes_by_id[source_id].data,
+                    edge.source_handle,
+                )
+            except ValueError as exc:
+                raise ExecutionGraphValidationError(message=str(exc)) from exc
+            if handle_error is not None:
+                raise ExecutionGraphValidationError(message=handle_error)
 
             outbound[source_id].append(target_id)
             inbound[target_id].append(source_id)
