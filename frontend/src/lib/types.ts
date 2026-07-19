@@ -389,6 +389,26 @@ export interface MCPTool {
   input_schema: Record<string, unknown>
 }
 
+export interface MCPRegistryInput {
+  key: string
+  description: string | null
+  placeholder: string | null
+  default: string | null
+  required: boolean
+  secret: boolean
+}
+
+export interface MCPRegistryServer {
+  registry_name: string
+  name: string
+  description: string | null
+  version: string
+  url_template: string
+  header_templates: Record<string, string>
+  inputs: MCPRegistryInput[]
+  repository_url: string | null
+}
+
 export interface NodeExecutionResult {
   id: number
   execution_id: number

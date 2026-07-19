@@ -12,6 +12,7 @@ import type {
   LlmProviderCreatePayload,
   MCPServer,
   MCPServerCreatePayload,
+  MCPRegistryServer,
   MCPTool,
   NodeCatalogItem,
   NodeCreatePayload,
@@ -510,6 +511,13 @@ export async function deleteMCPServer(serverId: number): Promise<void> {
 
 export async function getMCPTools(serverId: number): Promise<MCPTool[]> {
   return request<MCPTool[]>(`/mcp-servers/${serverId}/tools`)
+}
+
+export async function searchMCPRegistry(
+  search: string,
+): Promise<MCPRegistryServer[]> {
+  const query = new URLSearchParams({ search, limit: '20' })
+  return request<MCPRegistryServer[]>(`/mcp-servers/catalog?${query}`)
 }
 
 export async function getVectorCollections(): Promise<VectorCollection[]> {

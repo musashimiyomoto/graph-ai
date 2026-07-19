@@ -814,8 +814,11 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       substitution, invokes the tool through the official Python MCP SDK, and
       returns text or structured content to downstream nodes. Server references
       are ownership-validated and scrubbed during cross-account workflow
-      transfer. Migration `c9e2a4f6b8d1` adds MCP server storage and the node
-      enum value.
+      transfer. Settings also includes a searchable official MCP Registry
+      catalog with one-hour backend caching; active/latest Streamable HTTP
+      entries expose a configure flow that resolves URL variables and
+      secret headers before encrypted storage. Migration `c9e2a4f6b8d1` adds
+      MCP server storage and the node enum value.
 - [ ] **Session management** — keep users signed in with refresh tokens and let
       them securely log out or revoke active sessions.
 - [ ] **Email verification and password recovery** — verify new accounts, reset a

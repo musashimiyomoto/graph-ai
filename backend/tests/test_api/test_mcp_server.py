@@ -80,3 +80,29 @@ class TestMCPServerApi(BaseTestCase):
         data = await self.assert_response_list(response=response)
         if data[0]["name"] != "search":
             pytest.fail("MCP tool discovery returned the wrong tool")
+
+    async def test_catalog_returns_normalized_registry_results(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The catalog endpoint proxies normalized official registry entries."""
+
+        async def fake_search(**_kwargs: object) -> list[dict[str, object]]:
+            return [
+                {
+                    "registry_name": "example/search",
+                    "name": "search",
+                    "description": "Search docs",
+                    "version": "1.0.0",
+                    "url_template": "https://mcp.example.com/mcp",
+                    "header_templates": {},
+                    "inputs": [],
+                    "repository_url": None,
+                }
+            ]
+
+        monkeypatch.setattr("usecases.mcp_server.search_mcp_registry", fake_search)
+        response = await self.client.get(f"{self.url}/catalog?search=search")
+        data = await self.assert_response_list(response=response)
+        if data[0]["registry_name"] != "example/search":
+            pytest.fail("MCP catalog returned the wrong normalized server")

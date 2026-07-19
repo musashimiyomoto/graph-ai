@@ -13,7 +13,13 @@ from exceptions import (
     MCPServerNotFoundError,
 )
 from integrations.mcp import list_mcp_tools
-from schemas import MCPServerCreate, MCPServerResponse, MCPToolResponse
+from integrations.mcp_registry import search_mcp_registry
+from schemas import (
+    MCPRegistryServerResponse,
+    MCPServerCreate,
+    MCPServerResponse,
+    MCPToolResponse,
+)
 from usecases.audit import AuditEvent, AuditUsecase
 from utils.encryption import decrypt, encrypt
 from utils.network import blocked_url_reason
@@ -74,6 +80,14 @@ class MCPServerUsecase:
         )
         await session.commit()
         return mcp_server_response(created)
+
+    async def search_catalog(
+        self,
+        search: str,
+        limit: int,
+    ) -> list[MCPRegistryServerResponse]:
+        """Search usable remote servers in the official registry."""
+        return await search_mcp_registry(search=search, limit=limit)
 
     async def list_servers(
         self,

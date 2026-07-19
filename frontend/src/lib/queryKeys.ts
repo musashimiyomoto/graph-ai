@@ -14,6 +14,7 @@ export const queryKeys = {
   postgresConnections: () => ['postgres-connections'] as const,
   mcpServers: () => ['mcp-servers'] as const,
   mcpTools: (serverId: number) => ['mcp-servers', serverId, 'tools'] as const,
+  mcpRegistry: (search: string) => ['mcp-registry', search] as const,
   vectorCollections: () => ['vector-collections'] as const,
   vectorDocuments: (collection: string) =>
     ['vector-collections', collection, 'documents'] as const,

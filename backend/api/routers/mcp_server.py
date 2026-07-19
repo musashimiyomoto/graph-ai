@@ -2,12 +2,13 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Path, status
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import auth, db, mcp_server
 from schemas import (
+    MCPRegistryServerResponse,
     MCPServerCreate,
     MCPServerResponse,
     MCPToolResponse,
@@ -15,6 +16,19 @@ from schemas import (
 )
 
 router = APIRouter(prefix="/mcp-servers", tags=["MCP Servers"])
+
+
+@router.get(path="/catalog")
+async def search_catalog(
+    usecase: Annotated[
+        mcp_server.MCPServerUsecase,
+        Depends(dependency=mcp_server.get_mcp_server_usecase),
+    ],
+    search: Annotated[str, Query(max_length=128)] = "",
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> list[MCPRegistryServerResponse]:
+    """Search remote Streamable HTTP servers in the official registry."""
+    return await usecase.search_catalog(search=search.strip(), limit=limit)
 
 
 @router.post(path="")

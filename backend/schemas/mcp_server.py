@@ -40,3 +40,27 @@ class MCPToolResponse(BaseModel):
     name: str
     description: str | None = None
     input_schema: dict[str, Any] = Field(default_factory=dict)
+
+
+class MCPRegistryInputResponse(BaseModel):
+    """One value required to configure a registry remote transport."""
+
+    key: str
+    description: str | None = None
+    placeholder: str | None = None
+    default: str | None = None
+    required: bool = True
+    secret: bool = False
+
+
+class MCPRegistryServerResponse(BaseModel):
+    """Normalized remote server entry from the official MCP Registry."""
+
+    registry_name: str
+    name: str
+    description: str | None = None
+    version: str
+    url_template: str
+    header_templates: dict[str, str] = Field(default_factory=dict)
+    inputs: list[MCPRegistryInputResponse] = Field(default_factory=list)
+    repository_url: str | None = None

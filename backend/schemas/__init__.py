@@ -31,7 +31,13 @@ from schemas.llm_provider import (
     OllamaModelPullResponse,
     TokenUsage,
 )
-from schemas.mcp_server import MCPServerCreate, MCPServerResponse, MCPToolResponse
+from schemas.mcp_server import (
+    MCPRegistryInputResponse,
+    MCPRegistryServerResponse,
+    MCPServerCreate,
+    MCPServerResponse,
+    MCPToolResponse,
+)
 from schemas.node import (
     NodeCatalogDataSourceResponse,
     NodeCatalogFieldResponse,
@@ -113,6 +119,8 @@ __all__ = [
     "LLMProviderUpdate",
     "LoginCreate",
     "LoginResponse",
+    "MCPRegistryInputResponse",
+    "MCPRegistryServerResponse",
     "MCPServerCreate",
     "MCPServerResponse",
     "MCPToolResponse",
