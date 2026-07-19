@@ -158,6 +158,7 @@ class _LoadedGraph:
 
     top_level: ExecutionGraphContext
     source: _GraphSource
+    called_graphs: dict[int, "_LoadedGraph"]
 
 
 @dataclass(frozen=True)
@@ -169,6 +170,7 @@ class _NodeRunContext:
     workflow_owner_id: int
     input_value: str
     graph_source: _GraphSource
+    called_graphs: dict[int, _LoadedGraph]
     workflow_call_stack: tuple[int, ...]
     token_publisher: TokenPublisher | None = None
     token_reset_publisher: TokenResetPublisher | None = None
@@ -312,7 +314,9 @@ class ExecutionUsecase:
                 raise WorkflowVersionNotFoundError
         else:
             version = await self._snapshot_workflow(
-                session=session, workflow_id=data.workflow_id
+                session=session,
+                workflow_id=data.workflow_id,
+                owner_id=user_id,
             )
 
         # Validate the snapshot up front (fail-fast); the worker reuses it at run time.
@@ -589,7 +593,11 @@ class ExecutionUsecase:
         top_level = self._build_scoped_graph_context(
             graph_source=graph_source, parent_node_id=None
         )
-        return _LoadedGraph(top_level=top_level, source=graph_source)
+        return _LoadedGraph(
+            top_level=top_level,
+            source=graph_source,
+            called_graphs={},
+        )
 
     async def _load_execution_graph(
         self, session: AsyncSession, execution: "Execution"
@@ -638,8 +646,12 @@ class ExecutionUsecase:
         """
         raw_nodes = graph.get("nodes", [])
         raw_edges = graph.get("edges", [])
+        raw_called_workflows = graph.get("called_workflows", {})
         nodes = list(raw_nodes) if isinstance(raw_nodes, list) else []
         edges = list(raw_edges) if isinstance(raw_edges, list) else []
+        called_workflows = (
+            dict(raw_called_workflows) if isinstance(raw_called_workflows, dict) else {}
+        )
         graph_source = _GraphSource(
             all_nodes=[NodeResponse.model_validate(node) for node in nodes],
             all_edges=[EdgeResponse.model_validate(edge) for edge in edges],
@@ -647,7 +659,22 @@ class ExecutionUsecase:
         top_level = self._build_scoped_graph_context(
             graph_source=graph_source, parent_node_id=None
         )
-        return _LoadedGraph(top_level=top_level, source=graph_source)
+        called_graphs: dict[int, _LoadedGraph] = {}
+        for raw_workflow_id, called_graph in called_workflows.items():
+            if not isinstance(called_graph, dict):
+                continue
+            try:
+                workflow_id = int(raw_workflow_id)
+            except (TypeError, ValueError):
+                continue
+            if workflow_id <= 0:
+                continue
+            called_graphs[workflow_id] = self._build_graph_from_snapshot(called_graph)
+        return _LoadedGraph(
+            top_level=top_level,
+            source=graph_source,
+            called_graphs=called_graphs,
+        )
 
     def _build_scoped_graph_context(
         self, graph_source: _GraphSource, parent_node_id: int | None
@@ -684,34 +711,28 @@ class ExecutionUsecase:
         )
 
     async def _snapshot_workflow(
-        self, session: AsyncSession, workflow_id: int
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        owner_id: int,
     ) -> "WorkflowVersion":
-        """Snapshot the live graph into a version, reusing the latest if unchanged.
+        """Snapshot the live graph and its called workflows.
 
         Args:
             session: The session.
             workflow_id: The workflow ID.
+            owner_id: Owner of every workflow allowed in the call chain.
 
         Returns:
             The new or reused workflow version.
 
         """
-        nodes = await self._node_repository.get_all(
-            session=session, workflow_id=workflow_id
+        graph = await self._snapshot_graph(
+            session=session,
+            workflow_id=workflow_id,
+            owner_id=owner_id,
+            call_stack=(workflow_id,),
         )
-        edges = await self._edge_repository.get_all(
-            session=session, workflow_id=workflow_id
-        )
-        graph = {
-            "nodes": [
-                NodeResponse.model_validate(node).model_dump(mode="json")
-                for node in nodes
-            ],
-            "edges": [
-                EdgeResponse.model_validate(edge).model_dump(mode="json")
-                for edge in edges
-            ],
-        }
 
         latest_versions = await self._workflow_version_repository.get_all(
             session=session, limit=1, descending=True, workflow_id=workflow_id
@@ -729,6 +750,90 @@ class ExecutionUsecase:
                 "graph": graph,
             },
         )
+
+    async def _snapshot_graph(
+        self,
+        session: AsyncSession,
+        workflow_id: int,
+        owner_id: int,
+        call_stack: tuple[int, ...],
+    ) -> dict[str, object]:
+        """Build one immutable graph snapshot with its dependency closure.
+
+        Call Workflow nodes are execution dependencies, so the parent version
+        embeds each target graph recursively. This keeps queued and pinned
+        executions reproducible if a target workflow is edited or deleted
+        before the worker runs.
+
+        Args:
+            session: Database session.
+            workflow_id: Workflow being snapshotted.
+            owner_id: Owner required for every referenced workflow.
+            call_stack: Workflow IDs from the root through this workflow.
+
+        Returns:
+            JSON-serializable graph data.
+
+        Raises:
+            ExecutionGraphValidationError: If a target is invalid, missing,
+                recursive, foreign, or exceeds the nesting cap.
+
+        """
+        nodes = await self._node_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
+        edges = await self._edge_repository.get_all(
+            session=session, workflow_id=workflow_id
+        )
+        node_responses = [NodeResponse.model_validate(node) for node in nodes]
+        called_workflows: dict[str, dict[str, object]] = {}
+
+        for node in node_responses:
+            if node.type is not NodeType.CALL_WORKFLOW:
+                continue
+            target_id = node.data.get("target_workflow_id")
+            if not isinstance(target_id, int) or target_id <= 0:
+                raise ExecutionGraphValidationError(
+                    message="Call Workflow node requires a target workflow"
+                )
+            if target_id in call_stack:
+                chain = " -> ".join(str(item) for item in (*call_stack, target_id))
+                raise ExecutionGraphValidationError(
+                    message=f"Recursive workflow call detected: {chain}"
+                )
+            if len(call_stack) >= MAX_WORKFLOW_CALL_DEPTH:
+                raise ExecutionGraphValidationError(
+                    message=(
+                        "Call Workflow nesting exceeds the maximum depth of "
+                        f"{MAX_WORKFLOW_CALL_DEPTH}"
+                    )
+                )
+            target = await self._workflow_repository.get_by(
+                session=session,
+                id=target_id,
+                owner_id=owner_id,
+            )
+            if target is None:
+                raise ExecutionGraphValidationError(
+                    message="Referenced workflow does not exist"
+                )
+            key = str(target_id)
+            if key not in called_workflows:
+                called_workflows[key] = await self._snapshot_graph(
+                    session=session,
+                    workflow_id=target_id,
+                    owner_id=owner_id,
+                    call_stack=(*call_stack, target_id),
+                )
+
+        return {
+            "nodes": [node.model_dump(mode="json") for node in node_responses],
+            "edges": [
+                EdgeResponse.model_validate(edge).model_dump(mode="json")
+                for edge in edges
+            ],
+            "called_workflows": called_workflows,
+        }
 
     async def get_workflow_versions(
         self, session: AsyncSession, workflow_id: int, user_id: int
@@ -1058,6 +1163,7 @@ class ExecutionUsecase:
             workflow_owner_id=workflow.owner_id,
             input_value=self._extract_input_value(input_data=execution.input_data),
             graph_source=loaded_graph.source,
+            called_graphs=loaded_graph.called_graphs,
             workflow_call_stack=(workflow.id,),
             token_publisher=token_publishers.delta,
             token_reset_publisher=token_publishers.reset,
@@ -1675,22 +1781,26 @@ class ExecutionUsecase:
                     f"{MAX_WORKFLOW_CALL_DEPTH}"
                 )
             )
-        target = await self._workflow_repository.get_by(
-            session=session,
-            id=target_id,
-            owner_id=run_context.workflow_owner_id,
-        )
-        if target is None:
-            raise ExecutionGraphValidationError(
-                message="Referenced workflow does not exist"
+        loaded = run_context.called_graphs.get(target_id)
+        if loaded is None:
+            # Backward-compatible fallback for legacy workflow versions that
+            # predate embedded Call Workflow dependency snapshots.
+            target = await self._workflow_repository.get_by(
+                session=session,
+                id=target_id,
+                owner_id=run_context.workflow_owner_id,
             )
-
-        loaded = await self._load_graph(session=session, workflow_id=target_id)
+            if target is None:
+                raise ExecutionGraphValidationError(
+                    message="Referenced workflow does not exist"
+                )
+            loaded = await self._load_graph(session=session, workflow_id=target_id)
         nested_context = replace(
             run_context,
             workflow_id=target_id,
             input_value="\n".join(parent_values),
             graph_source=loaded.source,
+            called_graphs=loaded.called_graphs,
             workflow_call_stack=(*run_context.workflow_call_stack, target_id),
         )
         outputs = await self._run_nodes_serial(

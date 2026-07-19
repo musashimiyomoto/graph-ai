@@ -14,6 +14,7 @@ from db.repositories import (
     ExecutionRepository,
     NodeExecutionRepository,
     NodeRepository,
+    WorkflowRepository,
 )
 from enums import ExecutionSource, ExecutionStatus, NodeType
 from exceptions import ExecutionGraphValidationError, LLMProviderConnectionError
@@ -1692,8 +1693,54 @@ class TestCallWorkflowExecution(BaseTestCase):
             pytest.fail("Call Workflow node result was not recorded")
 
     @pytest.mark.asyncio
+    async def test_queued_run_pins_called_workflow_graph(self) -> None:
+        """A queued run keeps the target graph captured at creation time."""
+        user, headers = await self.create_user_and_get_token()
+        target = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        _, _, template_node_id = await self._build_passthrough_graph(
+            target.id,
+            middle=(
+                NodeType.TEMPLATE,
+                {"label": "Wrap", "template": "v1({{input}})"},
+            ),
+        )
+        parent = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        await self._build_passthrough_graph(
+            parent.id,
+            middle=(
+                NodeType.CALL_WORKFLOW,
+                {"label": "Reuse", "target_workflow_id": target.id},
+            ),
+        )
+
+        response = await self.client.post(
+            self.url,
+            json={"workflow_id": parent.id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=response)
+        if template_node_id is None:
+            pytest.fail("Expected the target workflow to contain a template node")
+        await NodeRepository().update_by(
+            session=self.session,
+            data={"data": {"label": "Wrap", "template": "v2({{input}})"}},
+            id=template_node_id,
+        )
+        await WorkflowRepository().delete_by(session=self.session, id=target.id)
+
+        execution = await run_execution(self.session, created["id"])
+        if execution.status is not ExecutionStatus.SUCCESS:
+            pytest.fail(f"Pinned Call Workflow execution failed: {execution.error}")
+        if execution.output_data != {"value": "v1(hello)"}:
+            pytest.fail("Queued run did not use the snapshotted target graph")
+
+    @pytest.mark.asyncio
     async def test_recursive_call_fails_with_clear_error(self) -> None:
-        """An indirect A -> B -> A cycle is stopped at runtime."""
+        """An indirect A -> B -> A cycle is rejected before enqueueing."""
         user, headers = await self.create_user_and_get_token()
         first = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
@@ -1720,12 +1767,11 @@ class TestCallWorkflowExecution(BaseTestCase):
             json={"workflow_id": first.id, "input_data": {"value": "hello"}},
             headers=headers,
         )
-        created = await self.assert_response_dict(response=response)
-        execution = await run_execution(self.session, created["id"])
-        if execution.status is not ExecutionStatus.FAILED:
-            pytest.fail("Recursive workflow call should fail")
-        if "Recursive workflow call detected" not in (execution.error or ""):
-            pytest.fail(f"Cycle error was not clear: {execution.error}")
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail("Recursive workflow call should be rejected")
+        detail = str(response.json().get("detail", ""))
+        if "Recursive workflow call detected" not in detail:
+            pytest.fail(f"Cycle error was not clear: {detail}")
 
 
 class TestExecutionRetries(BaseTestCase):

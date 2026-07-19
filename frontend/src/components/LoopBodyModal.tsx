@@ -148,7 +148,12 @@ export function LoopBodyModal({
           onOpenCalledWorkflow={onOpenCalledWorkflow}
         />
         {selectedNode ? (
-          <InspectorPanel node={selectedNode} nodeCatalog={nodeCatalog} onSaveNode={onSaveNode} />
+          <InspectorPanel
+            node={selectedNode}
+            nodeCatalog={nodeCatalog}
+            currentWorkflowId={activeWorkflowId}
+            onSaveNode={onSaveNode}
+          />
         ) : null}
       </div>
     </div>

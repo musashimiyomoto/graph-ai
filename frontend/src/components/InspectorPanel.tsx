@@ -8,6 +8,7 @@ import { NodeFieldsForm } from './NodeFieldsForm'
 interface InspectorPanelProps {
   node: FlowNode | null
   nodeCatalog: NodeCatalogItem[]
+  currentWorkflowId: number | null
   onSaveNode: (id: string, data: Record<string, unknown>) => Promise<boolean>
 }
 
@@ -41,6 +42,7 @@ function SaveIndicator({
 export function InspectorPanel({
   node,
   nodeCatalog,
+  currentWorkflowId,
   onSaveNode,
 }: InspectorPanelProps) {
   const nodeType = (node?.data?.nodeType as NodeType | undefined) ?? null
@@ -185,6 +187,7 @@ export function InspectorPanel({
               fields={fields}
               data={draftData}
               errors={validationErrors}
+              currentWorkflowId={currentWorkflowId}
               onFieldChange={(_, next) => setDraftData(next)}
             />
           </div>

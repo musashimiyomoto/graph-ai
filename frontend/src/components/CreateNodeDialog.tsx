@@ -8,6 +8,7 @@ import { NodeFieldsForm } from './NodeFieldsForm'
 interface CreateNodeDialogProps {
   nodeSpec: NodeCatalogItem | null
   initialData: Record<string, unknown>
+  currentWorkflowId: number | null
   onCancel: () => void
   onConfirm: (data: Record<string, unknown>) => Promise<void>
 }
@@ -15,6 +16,7 @@ interface CreateNodeDialogProps {
 export function CreateNodeDialog({
   nodeSpec,
   initialData,
+  currentWorkflowId,
   onCancel,
   onConfirm,
 }: CreateNodeDialogProps) {
@@ -55,6 +57,7 @@ export function CreateNodeDialog({
           fields={fields}
           data={data}
           errors={errors}
+          currentWorkflowId={currentWorkflowId}
           onFieldChange={(name, next) => {
             setData(next)
             setErrors((previous) => {

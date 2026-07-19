@@ -570,6 +570,7 @@ export function App() {
           <InspectorPanel
             node={mainSelectedNode}
             nodeCatalog={nodeCatalog}
+            currentWorkflowId={activeWorkflowId}
             onSaveNode={handleUpdateNodeData}
           />
         ) : null}
@@ -648,6 +649,7 @@ export function App() {
         }
         nodeSpec={createNodeSpec}
         initialData={createNodeInitialData}
+        currentWorkflowId={activeWorkflowId}
         onCancel={() => setNodeCreateDraft(null)}
         onConfirm={confirmCreateNode}
       />

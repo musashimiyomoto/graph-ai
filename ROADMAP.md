@@ -767,8 +767,15 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       CSV by URL, and PostgreSQL. It emits bounded `columns`/`rows` JSON for
       downstream nodes; PostgreSQL DSNs are encrypted, write-only settings and
       queries run in read-only transactions.
-- [ ] **Call Workflow node** — reuse another saved workflow as a step inside the
-      current graph instead of duplicating common chains.
+- [x] **Call Workflow node** — `NodeType.CALL_WORKFLOW` passes its upstream text
+      into another workflow owned by the same user and returns that workflow's
+      Output value inline, with direct/indirect recursion detection and a
+      five-workflow nesting cap. The node catalog exposes a workflow picker
+      (excluding the current workflow), and double-click navigation opens the
+      called graph with breadcrumbs back to the caller. Execution versions now
+      recursively embed the full called-workflow dependency graph, so queued and
+      pinned runs remain reproducible if a called workflow is edited or deleted;
+      legacy snapshots without embedded dependencies retain a live-graph fallback.
 - [ ] **Execution cancellation** — stop queued or running workflow executions from
       the UI before they waste more time or tokens.
 - [ ] **Approval node** — pause a workflow until a person approves or rejects the

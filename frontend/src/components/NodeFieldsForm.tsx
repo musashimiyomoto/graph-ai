@@ -308,10 +308,17 @@ interface NodeFieldsFormProps {
   fields: NodeCatalogField[]
   data: Record<string, unknown>
   errors: Record<string, string>
+  currentWorkflowId: number | null
   onFieldChange: (name: string, nextData: Record<string, unknown>) => void
 }
 
-export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFieldsFormProps) {
+export function NodeFieldsForm({
+  fields,
+  data,
+  errors,
+  currentWorkflowId,
+  onFieldChange,
+}: NodeFieldsFormProps) {
   const hasProviderDatasource = fields.some(
     (field) => field.datasource?.kind === 'llm_provider',
   )
@@ -359,6 +366,7 @@ export function NodeFieldsForm({ fields, data, errors, onFieldChange }: NodeFiel
   })
   const { workflows, loading: workflowsLoading } = useWorkflowOptions(
     hasWorkflowDatasource,
+    currentWorkflowId,
   )
 
   // A saved id/name that no longer matches anything in its data source (the
