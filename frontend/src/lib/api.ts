@@ -256,6 +256,12 @@ export async function getExecutionNodeResults(
   return request<NodeExecutionResult[]>(`/executions/${executionId}/nodes`)
 }
 
+export async function cancelExecution(executionId: number): Promise<Execution> {
+  return request<Execution>(`/executions/${executionId}/cancel`, {
+    method: 'POST',
+  })
+}
+
 export async function streamExecution(
   executionId: number,
   onEvent: (event: ExecutionStreamEvent) => void,

@@ -22,8 +22,10 @@ interface ChatPanelProps {
   runEnabled: boolean
   runDisabledReason: string | null
   loading: boolean
+  cancelling: boolean
   nodeMetaByNodeId: Map<number, NodeMeta>
   onRun: (input: RunInputPayload) => void
+  onCancel: () => void
 }
 
 interface ChatTurn {
@@ -93,8 +95,10 @@ export function ChatPanel({
   runEnabled,
   runDisabledReason,
   loading,
+  cancelling,
   nodeMetaByNodeId,
   onRun,
+  onCancel,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('')
   const [versionNumbers, setVersionNumbers] = useState<Record<number, number>>({})
@@ -185,6 +189,14 @@ export function ChatPanel({
           <div className="flex items-center gap-2">
             <span className="live-dot" />
             <span className="text-xs text-[var(--muted)]">running…</span>
+            <button
+              type="button"
+              className="pixel-button ghost small"
+              disabled={cancelling}
+              onClick={onCancel}
+            >
+              {cancelling ? 'Cancelling…' : 'Cancel run'}
+            </button>
           </div>
         ) : null}
       </div>
@@ -277,6 +289,14 @@ function ChatTurnView({
 }
 
 function ChatTurnResponse({ turn }: { turn: ChatTurn }) {
+  if (turn.status === 'cancelled') {
+    return (
+      <div className="pixel-panel max-w-[80%] px-3 py-2 text-sm text-[var(--muted)]">
+        Execution cancelled.
+      </div>
+    )
+  }
+
   if (turn.status === 'failed') {
     return (
       <div className="pixel-error max-w-[80%] whitespace-pre-wrap text-sm">

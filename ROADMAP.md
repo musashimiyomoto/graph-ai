@@ -776,8 +776,16 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       recursively embed the full called-workflow dependency graph, so queued and
       pinned runs remain reproducible if a called workflow is edited or deleted;
       legacy snapshots without embedded dependencies retain a live-graph fallback.
-- [ ] **Execution cancellation** — stop queued or running workflow executions from
-      the UI before they waste more time or tokens.
+- [x] **Execution cancellation** — authenticated
+      `POST /executions/{execution_id}/cancel` atomically moves only queued or
+      running executions to the new terminal `CANCELLED` status (idempotent when
+      already cancelled, `409` after success/failure), records completed-node
+      token usage and an audit event once, then signals the matching ARQ job;
+      workers have abort support enabled and cannot overwrite the durable
+      cancelled state if cancellation races completion. SSE treats cancellation
+      as terminal, and Test Runs exposes a `Cancel run` action with a distinct
+      cancelled result state. Migration `f6b8c1d4e7a9` extends the shared
+      PostgreSQL execution-status enum.
 - [ ] **Approval node** — pause a workflow until a person approves or rejects the
       next step.
 - [ ] **Switch node** — route a value into one of several named branches instead

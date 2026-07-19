@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Self, cast
 
 import httpx
 import pytest
+from arq.jobs import Job
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from db.repositories import (
@@ -27,6 +28,7 @@ from tests.factories import (
     EdgeFactory,
     ExecutionFactory,
     LLMProviderFactory,
+    NodeExecutionFactory,
     NodeFactory,
     WorkflowFactory,
 )
@@ -35,6 +37,7 @@ from usecases import ExecutionUsecase
 
 # The mocked Ollama LLM node reports 12 prompt + 4 completion tokens.
 _EXPECTED_LLM_TOTAL_TOKENS = 16
+_CANCELLED_TOKEN_TOTAL = 7
 
 
 async def run_execution(session: AsyncSession, execution_id: int) -> ExecutionResponse:
@@ -2394,6 +2397,163 @@ class TestExecutionParallel(BaseTestCase):
             pytest.fail("Unreached Output node should be marked SKIPPED")
 
 
+class TestExecutionCancel(BaseTestCase):
+    """Tests for POST /executions/{execution_id}/cancel."""
+
+    @pytest.mark.asyncio
+    async def test_cancels_running_execution_and_records_usage_once(self) -> None:
+        """A running execution is finalized with completed-node token totals."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.RUNNING,
+        )
+        await NodeExecutionFactory.create_async(
+            session=self.session,
+            execution_id=execution.id,
+            node_id=1,
+            prompt_tokens=5,
+            completion_tokens=2,
+            total_tokens=_CANCELLED_TOKEN_TOTAL,
+        )
+
+        first = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+        first_data = await self.assert_response_dict(response=first)
+
+        if first_data["status"] != ExecutionStatus.CANCELLED:
+            pytest.fail("Running execution should transition to CANCELLED")
+        if first_data["finished_at"] is None:
+            pytest.fail("Cancelled execution should have a finish timestamp")
+        if first_data["error"] is not None:
+            pytest.fail("Cancellation should not be represented as an error")
+        if first_data["total_tokens"] != _CANCELLED_TOKEN_TOTAL:
+            pytest.fail("Cancellation should retain completed-node token usage")
+
+        second = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+        second_data = await self.assert_response_dict(response=second)
+        if second_data["status"] != ExecutionStatus.CANCELLED:
+            pytest.fail("Repeated cancellation should be idempotent")
+
+        usage = await self.client.get(url="/usage", headers=headers)
+        usage_data = await self.assert_response_dict(response=usage)
+        if usage_data["executions"]["used"] != 1:
+            pytest.fail("Cancellation should record execution usage exactly once")
+        if usage_data["tokens"]["used"] != _CANCELLED_TOKEN_TOTAL:
+            pytest.fail("Cancellation should record consumed tokens exactly once")
+
+        audit = await self.client.get(url="/usage/audit", headers=headers)
+        audit_rows = await self.assert_response_list(response=audit)
+        cancellations = [
+            row for row in audit_rows if row["action"] == "execution.cancel"
+        ]
+        if len(cancellations) != 1:
+            pytest.fail("Cancellation should append exactly one audit event")
+
+    @pytest.mark.asyncio
+    async def test_signals_arq_abort(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Cancelling asks ARQ to interrupt the matching worker job."""
+        aborted_job_ids: list[str] = []
+
+        async def fake_abort(job: Job, **kwargs: object) -> bool:
+            """Capture the ARQ abort request without requiring Redis."""
+            del kwargs
+            aborted_job_ids.append(job.job_id)
+            return True
+
+        monkeypatch.setattr(Job, "abort", fake_abort)
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session, workflow_id=workflow.id
+        )
+
+        response = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+        await self.assert_response_dict(response=response)
+
+        if aborted_job_ids != [f"execution:{execution.id}"]:
+            pytest.fail("Cancellation should signal the matching ARQ job")
+
+    @pytest.mark.asyncio
+    async def test_cancelled_queued_execution_is_not_run(self) -> None:
+        """A worker delivery after queued cancellation is a no-op."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.CREATED,
+        )
+
+        response = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+        data = await self.assert_response_dict(response=response)
+        result = await run_execution(self.session, execution.id)
+
+        if data["status"] != ExecutionStatus.CANCELLED:
+            pytest.fail("Queued execution should transition to CANCELLED")
+        if result.status != ExecutionStatus.CANCELLED:
+            pytest.fail("Worker should not claim an already-cancelled execution")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "status",
+        [ExecutionStatus.SUCCESS, ExecutionStatus.FAILED],
+    )
+    async def test_rejects_finished_execution(self, status: ExecutionStatus) -> None:
+        """Successful and failed executions can no longer be cancelled."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=status,
+            finished_at=datetime.now(tz=UTC),
+        )
+
+        response = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=headers
+        )
+
+        if response.status_code != HTTPStatus.CONFLICT:
+            pytest.fail("Finished execution cancellation should return CONFLICT")
+
+    @pytest.mark.asyncio
+    async def test_other_user_cannot_cancel(self) -> None:
+        """An execution can only be cancelled by its workflow owner."""
+        owner, _ = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=owner["id"]
+        )
+        execution = await ExecutionFactory.create_async(
+            session=self.session, workflow_id=workflow.id
+        )
+        _, other_headers = await self.create_user_and_get_token()
+
+        response = await self.client.post(
+            url=f"/executions/{execution.id}/cancel", headers=other_headers
+        )
+
+        if response.status_code != HTTPStatus.NOT_FOUND:
+            pytest.fail("Cancelling another user's execution should return NOT_FOUND")
+
+
 class TestExecutionStream(BaseTestCase):
     """Tests for GET /executions/{execution_id}/stream (SSE)."""
 
@@ -2446,6 +2606,29 @@ class TestExecutionStream(BaseTestCase):
             pytest.fail("Stream should use the SSE content type")
         if "data:" not in response.text or ExecutionStatus.SUCCESS not in response.text:
             pytest.fail("Stream should emit the terminal SUCCESS status")
+
+    @pytest.mark.asyncio
+    async def test_stream_treats_cancelled_as_terminal(self) -> None:
+        """The stream emits a cancelled snapshot and closes immediately."""
+        user, headers = await self.create_user_and_get_token()
+        workflow_id = await self._create_input_output_workflow(user)
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow_id,
+            status=ExecutionStatus.CANCELLED,
+            finished_at=datetime.now(tz=UTC),
+        )
+
+        response = await self.client.get(
+            url=f"/executions/{execution.id}/stream", headers=headers
+        )
+
+        if response.status_code != HTTPStatus.OK:
+            pytest.fail("Cancelled execution stream should return OK")
+        if ExecutionStatus.CANCELLED not in response.text:
+            pytest.fail("Stream should emit the terminal CANCELLED status")
+        if '"type": "expired"' in response.text:
+            pytest.fail("Cancelled execution stream should not expire")
 
     @pytest.mark.asyncio
     async def test_other_user_cannot_stream(self) -> None:

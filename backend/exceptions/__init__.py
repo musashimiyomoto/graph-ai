@@ -17,6 +17,7 @@ from exceptions.email import (
 from exceptions.execution import (
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
+    ExecutionNotCancellableError,
     ExecutionNotFoundError,
     NodeExecutionTimeoutError,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "EmptyDocumentError",
     "ExecutionGraphValidationError",
     "ExecutionInputValidationError",
+    "ExecutionNotCancellableError",
     "ExecutionNotFoundError",
     "HTTPRequestError",
     "LLMProviderAlreadyExistsError",

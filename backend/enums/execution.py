@@ -10,6 +10,7 @@ class ExecutionStatus(StrEnum):
     RUNNING = auto()
     SUCCESS = auto()
     FAILED = auto()
+    CANCELLED = auto()
     SKIPPED = auto()
 
 

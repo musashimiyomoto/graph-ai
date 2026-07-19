@@ -885,6 +885,7 @@ class WorkerSettings:
     ]
     redis_settings = redis_settings.arq
     on_startup = startup
+    allow_abort_jobs = True
     # Model pulls can download several GB; give jobs an hour rather than the
     # 5-minute default so a large pull isn't killed mid-download.
     job_timeout = 3600

@@ -1,9 +1,11 @@
 """Execution API routes."""
 
+import logging
 from http import HTTPStatus
 from typing import Annotated
 
 from arq import ArqRedis
+from arq.jobs import Job
 from fastapi import APIRouter, Body, Depends, Path
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +22,7 @@ from schemas import (
 from usecases import ExecutionListFilter
 
 router = APIRouter(prefix="/executions", tags=["Executions"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -75,6 +78,38 @@ async def list_executions(
         limit=pagination.limit,
         offset=pagination.offset,
     )
+
+
+@router.post(path="/{execution_id}/cancel")
+async def cancel_execution(
+    execution_id: Annotated[int, Path(gt=0)],
+    session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
+    usecase: Annotated[
+        execution.ExecutionUsecase,
+        Depends(dependency=execution.get_execution_usecase),
+    ],
+    current_user: Annotated[UserResponse, Depends(dependency=auth.get_current_user)],
+    pool: Annotated[ArqRedis, Depends(dependency=queue.get_arq_pool)],
+) -> ExecutionResponse:
+    """Cancel a queued or running execution."""
+    cancelled = await usecase.cancel_execution(
+        session=session,
+        execution_id=execution_id,
+        user_id=current_user.id,
+    )
+
+    try:
+        await Job(f"execution:{execution_id}", redis=pool).abort(timeout=0)
+    except TimeoutError:
+        # The abort marker is already durable in Redis; timeout=0 deliberately
+        # avoids holding the HTTP request open while the worker acknowledges it.
+        pass
+    except Exception:
+        # The database status is authoritative. A queued job will no-op when it
+        # sees CANCELLED even if Redis is temporarily unavailable here.
+        logger.exception("Failed to signal cancellation for execution %s", execution_id)
+
+    return cancelled
 
 
 @router.get(path="/{execution_id}/nodes")

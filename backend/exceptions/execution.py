@@ -41,6 +41,18 @@ class ExecutionInputValidationError(BaseError):
         super().__init__(message=message, status_code=status_code)
 
 
+class ExecutionNotCancellableError(BaseError):
+    """Raised when an execution has already finished."""
+
+    def __init__(
+        self,
+        message: str = "Execution has already finished and cannot be cancelled",
+        status_code: HTTPStatus = HTTPStatus.CONFLICT,
+    ) -> None:
+        """Initialize the error."""
+        super().__init__(message=message, status_code=status_code)
+
+
 class NodeExecutionTimeoutError(BaseError):
     """Raised when a single node exceeds its execution time budget."""
 

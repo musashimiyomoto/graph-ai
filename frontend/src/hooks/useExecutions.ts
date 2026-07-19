@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { createExecution, getExecutions, streamExecution } from '../lib/api'
+import {
+  cancelExecution,
+  createExecution,
+  getExecutions,
+  streamExecution,
+} from '../lib/api'
 import type { ApiError, Execution, ExecutionSource, RunInputPayload } from '../lib/types'
 import { ACTIVE_STATUSES } from '../lib/types'
 
@@ -24,11 +29,13 @@ export type LiveTokens = Record<number, string>
 interface UseExecutionsResult {
   executions: Execution[]
   executionsLoading: boolean
+  cancelling: boolean
   lastExecution: Execution | null
   liveTokens: LiveTokens
   runInput: RunInputPayload
   clearExecutions: () => void
   handleRun: (input: RunInputPayload) => Promise<void>
+  handleCancel: () => Promise<void>
   refreshExecutions: (workflowId: number) => Promise<void>
 }
 
@@ -42,6 +49,7 @@ export function useExecutions({
   const [runInput, setRunInput] = useState<RunInputPayload>({ value: '' })
   const [executions, setExecutions] = useState<Execution[]>([])
   const [executionsLoading, setExecutionsLoading] = useState<boolean>(false)
+  const [cancelling, setCancelling] = useState<boolean>(false)
   const [lastExecution, setLastExecution] = useState<Execution | null>(null)
   const [liveTokens, setLiveTokens] = useState<LiveTokens>({})
 
@@ -181,6 +189,29 @@ export function useExecutions({
     [activeWorkflowId, handleError, refreshExecutions, setError, setLoading],
   )
 
+  const handleCancel = useCallback(async (): Promise<void> => {
+    if (!lastExecution || !ACTIVE_STATUSES.includes(lastExecution.status)) {
+      return
+    }
+
+    setCancelling(true)
+    try {
+      const cancelled = await cancelExecution(lastExecution.id)
+      setLastExecution(cancelled)
+      setExecutions((previous) =>
+        previous.map((item) =>
+          item.id === cancelled.id ? cancelled : item,
+        ),
+      )
+      setLiveTokens({})
+      setError(null)
+    } catch (error) {
+      handleError(error as ApiError)
+    } finally {
+      setCancelling(false)
+    }
+  }, [handleError, lastExecution, setError])
+
   const clearExecutions = useCallback(() => {
     setExecutions([])
     setLastExecution(null)
@@ -189,11 +220,13 @@ export function useExecutions({
   return {
     executions,
     executionsLoading,
+    cancelling,
     lastExecution,
     liveTokens,
     runInput,
     clearExecutions,
     handleRun,
+    handleCancel,
     refreshExecutions,
   }
 }

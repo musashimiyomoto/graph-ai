@@ -1,6 +1,11 @@
 export type NodeType = string
 
-export type ExecutionStatus = 'created' | 'running' | 'success' | 'failed'
+export type ExecutionStatus =
+  | 'created'
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'cancelled'
 
 export const ACTIVE_STATUSES: ExecutionStatus[] = ['created', 'running']
 

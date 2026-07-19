@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  cancelExecution,
   getWorkflows,
   login,
   publicWebhookUrl,
@@ -97,6 +98,18 @@ describe('api request()', () => {
 
     const [, options] = fetchMock.mock.calls[0]
     expect(options.headers['Authorization']).toBe('Bearer abc123')
+  })
+
+  it('cancels an execution with a POST request', async () => {
+    const execution = { id: 42, status: 'cancelled' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(execution))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(cancelExecution(42)).resolves.toEqual(execution)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/executions/42/cancel',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 })
 

@@ -25,6 +25,9 @@ const POLL_INTERVAL_MS = 1_000
 const MAX_POLL_ATTEMPTS = 300
 
 function finalText(execution: Execution): string {
+  if (execution.status === 'cancelled') {
+    return 'Execution cancelled.'
+  }
   if (execution.status === 'failed') {
     return execution.error ?? 'The workflow failed.'
   }
@@ -66,7 +69,11 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS))
       const execution = await getWebChatExecution(endpoint, executionId)
-      if (execution.status === 'success' || execution.status === 'failed') {
+      if (
+        execution.status === 'success' ||
+        execution.status === 'failed' ||
+        execution.status === 'cancelled'
+      ) {
         return execution
       }
     }
@@ -117,7 +124,8 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
             if (
               streamEvent.type === 'status' &&
               (streamEvent.execution.status === 'success' ||
-                streamEvent.execution.status === 'failed')
+                streamEvent.execution.status === 'failed' ||
+                streamEvent.execution.status === 'cancelled')
             ) {
               terminal = streamEvent.execution
             }

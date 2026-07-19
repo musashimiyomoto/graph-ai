@@ -141,10 +141,12 @@ export function App() {
 
   const {
     executions,
+    cancelling,
     lastExecution,
     liveTokens,
     clearExecutions,
     handleRun,
+    handleCancel,
   } = useExecutions({
     token,
     activeWorkflowId,
@@ -626,8 +628,10 @@ export function App() {
               runEnabled={runEnabled}
               runDisabledReason={runDisabledReason}
               loading={loading}
+              cancelling={cancelling}
               nodeMetaByNodeId={nodeMetaByNodeId}
               onRun={handleRun}
+              onCancel={handleCancel}
             />
           ) : (
             <ActivityLog

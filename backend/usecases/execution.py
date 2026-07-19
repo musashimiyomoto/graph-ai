@@ -44,6 +44,7 @@ from exceptions import (
     BaseError,
     ExecutionGraphValidationError,
     ExecutionInputValidationError,
+    ExecutionNotCancellableError,
     ExecutionNotFoundError,
     NodeExecutionTimeoutError,
     WorkflowNotFoundError,
@@ -397,6 +398,7 @@ class ExecutionUsecase:
         )
         if workflow is None:
             raise WorkflowNotFoundError
+        workflow_owner_id = workflow.owner_id
 
         claim_time = datetime.now(tz=UTC)
         claimed = await self._execution_repository.update_status_if(
@@ -462,23 +464,44 @@ class ExecutionUsecase:
         # trigger a lazy reload outside the async context.
         response = ExecutionResponse.model_validate(finalized)
 
-        # Record tenant usage against the durable source of truth once the run
-        # has finalized (tokens are now summed onto the execution row). Keyed
-        # by the workflow owner — the tenant boundary, since executions have no
-        # direct user column. Best-effort: a usage-accounting failure must not
-        # turn a finished run into a failed one.
+        await self._record_finalized_usage(
+            session=session,
+            execution=response,
+            user_id=workflow_owner_id,
+        )
+
+        return response
+
+    async def _record_finalized_usage(
+        self,
+        session: AsyncSession,
+        execution: ExecutionResponse,
+        user_id: int,
+    ) -> None:
+        """Record usage for a worker-finalized execution.
+
+        Args:
+            session: The worker session.
+            execution: The durable terminal execution snapshot.
+            user_id: The workflow owner.
+
+        """
+        # Cancellation records usage in the request that wins the terminal CAS.
+        # If an ARQ abort arrives late and this coroutine continues, do not count
+        # that same run a second time.
+        if execution.status is ExecutionStatus.CANCELLED:
+            return
+
         try:
             await self._usage_usecase.record_run(
                 session=session,
-                user_id=workflow.owner_id,
-                total_tokens=response.total_tokens or 0,
+                user_id=user_id,
+                total_tokens=execution.total_tokens or 0,
             )
             await session.commit()
         except Exception:
-            logger.exception("Failed to record usage for execution %s", execution_id)
+            logger.exception("Failed to record usage for execution %s", execution.id)
             await session.rollback()
-
-        return response
 
     async def reap_stuck_executions(
         self,
@@ -944,6 +967,92 @@ class ExecutionUsecase:
 
         return ExecutionResponse.model_validate(execution)
 
+    async def cancel_execution(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+        user_id: int,
+    ) -> ExecutionResponse:
+        """Cancel a queued or running execution.
+
+        Args:
+            session: The session.
+            execution_id: The execution ID.
+            user_id: The owner user ID.
+
+        Returns:
+            The cancelled execution. Repeated cancellation is idempotent.
+
+        Raises:
+            ExecutionNotFoundError: If the execution is not found.
+            WorkflowNotFoundError: If the workflow is not owned by the user.
+            ExecutionNotCancellableError: If the execution already finished.
+
+        """
+        current = await self.get_execution(
+            session=session, execution_id=execution_id, user_id=user_id
+        )
+        if current.status is ExecutionStatus.CANCELLED:
+            return current
+        if current.status not in {ExecutionStatus.CREATED, ExecutionStatus.RUNNING}:
+            raise ExecutionNotCancellableError
+
+        (
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        ) = await self._node_execution_repository.sum_tokens(
+            session=session, execution_id=execution_id
+        )
+        won = await self._execution_repository.update_status_if(
+            session=session,
+            execution_id=execution_id,
+            expected_status=current.status,
+            data={
+                "status": ExecutionStatus.CANCELLED,
+                "error": None,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "finished_at": datetime.now(tz=UTC),
+            },
+        )
+        if not won:
+            latest = await self.get_execution(
+                session=session, execution_id=execution_id, user_id=user_id
+            )
+            if latest.status is ExecutionStatus.CANCELLED:
+                return latest
+            raise ExecutionNotCancellableError
+
+        try:
+            await self._usage_usecase.record_run(
+                session=session,
+                user_id=user_id,
+                total_tokens=total_tokens,
+            )
+            await self._audit_usecase.record(
+                session=session,
+                event=AuditEvent(
+                    user_id=user_id,
+                    action="execution.cancel",
+                    entity_type="execution",
+                    entity_id=execution_id,
+                    metadata={"previous_status": current.status.value},
+                ),
+            )
+            await session.commit()
+        except Exception:
+            logger.exception(
+                "Failed to record cancellation usage for execution %s",
+                execution_id,
+            )
+            await session.rollback()
+
+        return await self.get_execution(
+            session=session, execution_id=execution_id, user_id=user_id
+        )
+
     async def get_node_executions(
         self,
         session: AsyncSession,
@@ -1086,7 +1195,11 @@ class ExecutionUsecase:
             user_id: The owner user ID.
 
         """
-        terminal = {ExecutionStatus.SUCCESS, ExecutionStatus.FAILED}
+        terminal = {
+            ExecutionStatus.SUCCESS,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+        }
         reached_terminal = False
         for _ in range(STREAM_MAX_ITERATIONS):
             async with session_factory() as session:

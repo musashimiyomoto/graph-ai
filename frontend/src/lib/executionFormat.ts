@@ -5,6 +5,7 @@ export const STATUS_COLORS: Record<ExecutionStatus, string> = {
   running: 'text-[var(--accent-2)]',
   success: 'text-[var(--accent)]',
   failed: 'text-[var(--danger)]',
+  cancelled: 'text-[var(--muted)]',
 }
 
 // Background-color variant of STATUS_COLORS for dot/badge indicators.
@@ -13,6 +14,7 @@ export const STATUS_DOT_COLORS: Record<ExecutionStatus, string> = {
   running: 'bg-[var(--accent-2)]',
   success: 'bg-[var(--accent)]',
   failed: 'bg-[var(--danger)]',
+  cancelled: 'bg-[var(--muted)]',
 }
 
 export function formatTime(iso: string): string {
