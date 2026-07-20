@@ -43,7 +43,7 @@ function requiredError(field: NodeCatalogField, value: unknown): string | null {
 
 function valueError(field: NodeCatalogField, value: unknown): string | null {
   const label = field.ui.label
-  const { min_length: minLength, ge, le, select, url } = field.validators
+  const { min_length: minLength, ge, le, select, url, datetime } = field.validators
 
   if (field.ui.widget === 'switch_branches') {
     return validateSwitchBranches(value)
@@ -82,6 +82,14 @@ function valueError(field: NodeCatalogField, value: unknown): string | null {
       }
     } catch {
       return `${label} must be an absolute HTTP(S) URL`
+    }
+  }
+
+  if (datetime && typeof value === 'string') {
+    const parsed = new Date(value)
+    const hasTimezone = /(Z|[+-]\d{2}:\d{2})$/i.test(value.trim())
+    if (Number.isNaN(parsed.getTime()) || !hasTimezone) {
+      return `${label} must be an ISO 8601 date/time with timezone`
     }
   }
 

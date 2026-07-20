@@ -11,7 +11,7 @@ const NODE_CATEGORIES: { label: string; types: NodeType[] }[] = [
   { label: 'Data', types: ['table', 'web_search', 'http_request'] },
   {
     label: 'Logic',
-    types: ['template', 'condition', 'switch', 'code_transform', 'loop'],
+    types: ['template', 'condition', 'switch', 'code_transform', 'delay', 'loop'],
   },
   { label: 'Composition', types: ['call_workflow'] },
   { label: 'Tools', types: ['mcp_tool'] },

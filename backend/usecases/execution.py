@@ -62,6 +62,7 @@ from nodes import (
     check_edge_ports,
     check_source_handle,
     evaluate_condition,
+    resolve_wait_until,
     select_switch_handle,
 )
 from schemas import (
@@ -89,7 +90,7 @@ TokenResetPublisher = Callable[[int, int], Awaitable[None]]
 
 
 class _ExecutionPausedError(Exception):
-    """Internal control flow raised after an approval checkpoint is committed."""
+    """Internal control flow raised after a durable checkpoint is committed."""
 
 
 @dataclass(frozen=True)
@@ -399,11 +400,11 @@ class ExecutionUsecase:
             ExecutionGraphValidationError: If graph is invalid for execution.
 
         """
-        execution = await self._execution_repository.get_by(
-            session=session, id=execution_id
+        execution = await self._prepare_execution_for_run(
+            session=session, execution_id=execution_id
         )
-        if execution is None:
-            raise ExecutionNotFoundError
+        if execution.status is ExecutionStatus.WAITING_DELAY:
+            return ExecutionResponse.model_validate(execution)
 
         workflow = await self._workflow_repository.get_by(
             session=session, id=execution.workflow_id
@@ -440,7 +441,7 @@ class ExecutionUsecase:
                 ),
             )
         except _ExecutionPausedError:
-            logger.info("Execution %s paused for approval", execution_id)
+            logger.info("Execution %s reached a durable checkpoint", execution_id)
             await session.rollback()
         except BaseError as exc:
             logger.warning("Execution %s failed: %s", execution_id, exc.message)
@@ -500,6 +501,84 @@ class ExecutionUsecase:
             data=claim_data,
         )
 
+    async def _prepare_execution_for_run(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+    ) -> "Execution":
+        """Load an execution and resume its Delay checkpoint when due."""
+        execution = await self._execution_repository.get_by(
+            session=session, id=execution_id
+        )
+        if execution is None:
+            raise ExecutionNotFoundError
+        if execution.status is not ExecutionStatus.WAITING_DELAY:
+            return execution
+
+        await self._resume_due_delays(session=session, execution_id=execution_id)
+        current = await self._execution_repository.get_by(
+            session=session, id=execution_id
+        )
+        if current is None:
+            raise ExecutionNotFoundError
+        return current
+
+    async def _resume_due_delays(
+        self,
+        session: AsyncSession,
+        execution_id: int,
+    ) -> bool:
+        """Complete due Delay checkpoints and make their execution claimable."""
+        execution = await self._execution_repository.get_by_id_for_update(
+            session=session, execution_id=execution_id
+        )
+        if execution is None:
+            raise ExecutionNotFoundError
+        now = datetime.now(tz=UTC)
+        if (
+            execution.status is not ExecutionStatus.WAITING_DELAY
+            or execution.wait_until is None
+            or execution.wait_until > now
+        ):
+            await session.rollback()
+            return False
+
+        waiting = await self._node_execution_repository.get_all(
+            session=session,
+            execution_id=execution_id,
+            status=ExecutionStatus.WAITING_DELAY,
+        )
+        due = [
+            node_execution
+            for node_execution in waiting
+            if node_execution.wait_until is not None
+            and node_execution.wait_until <= now
+        ]
+        if not due:
+            await session.rollback()
+            return False
+
+        for node_execution in due:
+            await self._node_execution_repository.update_by(
+                session=session,
+                id=node_execution.id,
+                data={
+                    "status": ExecutionStatus.SUCCESS,
+                    "finished_at": now,
+                },
+            )
+        await self._execution_repository.update_by(
+            session=session,
+            id=execution_id,
+            data={
+                "status": ExecutionStatus.CREATED,
+                "wait_until": None,
+                "heartbeat_at": now,
+            },
+        )
+        await session.commit()
+        return True
+
     async def _record_finalized_usage(
         self,
         session: AsyncSession,
@@ -519,6 +598,7 @@ class ExecutionUsecase:
         # that same run a second time.
         if execution.status in {
             ExecutionStatus.WAITING_APPROVAL,
+            ExecutionStatus.WAITING_DELAY,
             ExecutionStatus.CANCELLED,
             ExecutionStatus.REJECTED,
         }:
@@ -551,8 +631,8 @@ class ExecutionUsecase:
         run that hasn't completed a single node yet.
 
         Also re-enqueues executions stuck in ``CREATED`` beyond a much
-        shorter timeout — these were durably persisted but never picked up
-        by a worker (e.g. the enqueue call was lost after the DB commit).
+        shorter timeout, plus due ``WAITING_DELAY`` checkpoints whose deferred
+        Redis job may have been lost after the database commit.
         Re-enqueuing rather than failing them is safe: the worker's job
         dedup (``_job_id=f"execution:{id}"``) makes a duplicate enqueue for
         an execution that's actually already queued/running a no-op.
@@ -610,6 +690,24 @@ class ExecutionUsecase:
                 )
 
             reaped += len(stale_created)
+
+            waiting_delays = await self._execution_repository.get_all(
+                session=session, status=ExecutionStatus.WAITING_DELAY
+            )
+            due_delays = [
+                execution
+                for execution in waiting_delays
+                if execution.wait_until is not None and execution.wait_until <= now
+            ]
+            for execution in due_delays:
+                logger.warning("Re-enqueuing due delayed execution %s", execution.id)
+                await re_enqueue(
+                    execution.id,
+                    execution.queue_job_id
+                    or f"execution:{execution.id}:delay:{uuid4().hex}",
+                )
+
+            reaped += len(due_delays)
 
         return reaped
 
@@ -1033,6 +1131,7 @@ class ExecutionUsecase:
             ExecutionStatus.CREATED,
             ExecutionStatus.RUNNING,
             ExecutionStatus.WAITING_APPROVAL,
+            ExecutionStatus.WAITING_DELAY,
         }:
             raise ExecutionNotCancellableError
 
@@ -1057,6 +1156,7 @@ class ExecutionUsecase:
                 "approval_node_id": None,
                 "approval_prompt": None,
                 "approval_input": None,
+                "wait_until": None,
             },
         )
         if not won:
@@ -1083,6 +1183,22 @@ class ExecutionUsecase:
                         "finished_at": datetime.now(tz=UTC),
                     },
                 )
+            if current.status is ExecutionStatus.WAITING_DELAY:
+                waiting_delays = await self._node_execution_repository.get_all(
+                    session=session,
+                    execution_id=execution_id,
+                    status=ExecutionStatus.WAITING_DELAY,
+                )
+                for waiting_delay in waiting_delays:
+                    await self._node_execution_repository.update_by(
+                        session=session,
+                        id=waiting_delay.id,
+                        data={
+                            "status": ExecutionStatus.CANCELLED,
+                            "error": None,
+                            "finished_at": datetime.now(tz=UTC),
+                        },
+                    )
             await self._usage_usecase.record_run(
                 session=session,
                 user_id=user_id,
@@ -2136,6 +2252,14 @@ class ExecutionUsecase:
                 parent_values=parent_values,
             )
 
+        if node.type is NodeType.DELAY:
+            return await self._pause_for_delay(
+                session=session,
+                run_context=run_context,
+                node=node,
+                parent_values=parent_values,
+            )
+
         if node.type is NodeType.APPROVAL:
             await self._pause_for_approval(
                 session=session,
@@ -2161,6 +2285,81 @@ class ExecutionUsecase:
                 )
         except TimeoutError as exc:
             raise NodeExecutionTimeoutError from exc
+
+    async def _pause_for_delay(
+        self,
+        session: AsyncSession,
+        run_context: _NodeRunContext,
+        node: NodeResponse,
+        parent_values: list[str],
+    ) -> NodeExecutionResult:
+        """Persist a durable Delay checkpoint and release the worker."""
+        now = datetime.now(tz=UTC)
+        output = "\n".join(parent_values)
+        existing = await self._node_execution_repository.get_by(
+            session=session,
+            execution_id=run_context.execution_id,
+            node_id=node.id,
+            status=ExecutionStatus.WAITING_DELAY,
+        )
+        if existing is not None and existing.wait_until is not None:
+            wait_until = existing.wait_until
+        else:
+            wait_until = resolve_wait_until(node_data=node.data, now=now)
+
+        if wait_until <= now:
+            return NodeExecutionResult(output=output)
+
+        execution = await self._execution_repository.get_by_id_for_update(
+            session=session,
+            execution_id=run_context.execution_id,
+        )
+        if execution is None:
+            raise ExecutionNotFoundError
+        if execution.status not in {
+            ExecutionStatus.RUNNING,
+            ExecutionStatus.WAITING_DELAY,
+        }:
+            await session.rollback()
+            raise _ExecutionPausedError
+
+        if existing is None:
+            await self._node_execution_repository.create(
+                session=session,
+                data={
+                    "execution_id": run_context.execution_id,
+                    "node_id": node.id,
+                    "node_type": node.type,
+                    "node_label": node.data.get("label"),
+                    "iteration": None,
+                    "status": ExecutionStatus.WAITING_DELAY,
+                    "output": _truncate_for_storage(output),
+                    "error": None,
+                    "started_at": now,
+                    "finished_at": None,
+                    "wait_until": wait_until,
+                },
+            )
+
+        earliest_wait = wait_until
+        if execution.wait_until is not None:
+            earliest_wait = min(earliest_wait, execution.wait_until)
+        execution_data: dict[str, object] = {
+            "status": ExecutionStatus.WAITING_DELAY,
+            "wait_until": earliest_wait,
+            "heartbeat_at": now,
+        }
+        if execution.status is ExecutionStatus.RUNNING:
+            execution_data["queue_job_id"] = (
+                f"execution:{run_context.execution_id}:delay:{uuid4().hex}"
+            )
+        await self._execution_repository.update_by(
+            session=session,
+            id=run_context.execution_id,
+            data=execution_data,
+        )
+        await session.commit()
+        raise _ExecutionPausedError
 
     async def _pause_for_approval(
         self,

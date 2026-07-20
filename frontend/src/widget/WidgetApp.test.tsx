@@ -39,6 +39,7 @@ describe('WidgetApp', () => {
       approval_prompt: null,
       approval_input: null,
       queue_job_id: null,
+      wait_until: null,
       prefect_flow_run_id: null,
       started_at: '2026-07-18T00:00:00Z',
       finished_at: null,

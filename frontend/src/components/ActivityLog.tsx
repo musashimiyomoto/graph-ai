@@ -63,6 +63,14 @@ export function ActivityLog({
                     onApprove={onApprove}
                     onReject={onReject}
                   />
+                ) : execution.status === 'waiting_delay' ? (
+                  <div className="text-[var(--muted)]">
+                    Waiting until{' '}
+                    {execution.wait_until
+                      ? formatTime(execution.wait_until)
+                      : 'the configured time'}
+                    .
+                  </div>
                 ) : execution.status === 'failed' ? (
                   <div className="pixel-error whitespace-pre-wrap text-sm">
                     {execution.error ?? 'Execution failed.'}

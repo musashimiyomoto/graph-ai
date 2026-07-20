@@ -4,6 +4,7 @@ export type ExecutionStatus =
   | 'created'
   | 'running'
   | 'waiting_approval'
+  | 'waiting_delay'
   | 'success'
   | 'failed'
   | 'cancelled'
@@ -13,6 +14,7 @@ export const ACTIVE_STATUSES: ExecutionStatus[] = [
   'created',
   'running',
   'waiting_approval',
+  'waiting_delay',
 ]
 
 // What triggered an execution: the owner testing the flow, or real inbound
@@ -94,6 +96,7 @@ export interface Execution {
   approval_prompt: string | null
   approval_input: string | null
   queue_job_id: string | null
+  wait_until: string | null
   prefect_flow_run_id: string | null
   started_at: string
   finished_at: string | null
@@ -209,6 +212,7 @@ export interface NodeFieldValidator {
   ge?: number
   le?: number
   url?: boolean
+  datetime?: boolean
 }
 
 export type NodeFieldWidget =
@@ -435,6 +439,7 @@ export interface NodeExecutionResult {
   error: string | null
   started_at: string
   finished_at: string | null
+  wait_until: string | null
   iteration: number | null
 }
 

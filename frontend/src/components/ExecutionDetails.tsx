@@ -83,6 +83,11 @@ function NodeResultRow({
       {nodeResult.output !== null ? (
         <OutputRenderer value={nodeResult.output} portType={meta?.portType ?? null} />
       ) : null}
+      {nodeResult.status === 'waiting_delay' && nodeResult.wait_until ? (
+        <div className="text-[var(--muted)]">
+          Waiting until {new Date(nodeResult.wait_until).toLocaleString()}
+        </div>
+      ) : null}
       {nodeResult.error ? <div className="text-[var(--danger)]">{nodeResult.error}</div> : null}
     </div>
   )

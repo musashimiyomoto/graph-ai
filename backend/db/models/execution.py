@@ -59,6 +59,9 @@ class Execution(BaseWithID):
     queue_job_id: Mapped[str | None] = mapped_column(
         String(255), comment="Current ARQ job ID for cancellation/resume"
     )
+    wait_until: Mapped[datetime | None] = mapped_column(
+        comment="Earliest durable Delay checkpoint wake-up time"
+    )
     telegram_chat_id: Mapped[int | None] = mapped_column(
         BigInteger,
         comment="Telegram chat to reply to, if this run was triggered by a message",

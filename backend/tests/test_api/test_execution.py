@@ -2182,6 +2182,35 @@ class TestExecutionReaper(BaseTestCase):
             pytest.fail("A fresh CREATED execution should not be re-enqueued")
 
     @pytest.mark.asyncio
+    async def test_reenqueues_due_delay_checkpoint(self) -> None:
+        """A lost deferred Redis job is repaired once its checkpoint is due."""
+        user, _ = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        job_id = "execution:1:delay:repair"
+        execution = await ExecutionFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            status=ExecutionStatus.WAITING_DELAY,
+            wait_until=datetime.now(tz=UTC) - timedelta(seconds=1),
+            queue_job_id=job_id,
+        )
+        re_enqueued: list[tuple[int, str]] = []
+
+        async def re_enqueue(execution_id: int, queued_job_id: str) -> None:
+            re_enqueued.append((execution_id, queued_job_id))
+
+        reaped = await ExecutionUsecase().reap_stuck_executions(
+            session=self.session, re_enqueue=re_enqueue
+        )
+
+        if reaped != 1:
+            pytest.fail("Expected one due Delay checkpoint to be repaired")
+        if re_enqueued != [(execution.id, job_id)]:
+            pytest.fail("Reaper should preserve the Delay continuation job ID")
+
+    @pytest.mark.asyncio
     async def test_status_cas_prevents_clobber(self) -> None:
         """A finalized execution cannot be re-finalized (reaper/worker anti-clobber)."""
         user, _ = await self.create_user_and_get_token()

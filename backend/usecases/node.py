@@ -1,6 +1,7 @@
 """Node use case implementation."""
 
 import json
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -152,6 +153,9 @@ class NodeUsecase:
         if ValidatorType.URL.value in validators:
             self._validate_url_field(field=field, value=value, errors=errors)
 
+        if ValidatorType.DATETIME.value in validators:
+            self._validate_datetime_field(field=field, value=value, errors=errors)
+
     def _validate_min_length_field(
         self,
         *,
@@ -253,6 +257,31 @@ class NodeUsecase:
         parsed = urlparse(value)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             errors.append(f"Field '{field.name}' must be an absolute http(s) URL")
+
+    def _validate_datetime_field(
+        self,
+        *,
+        field: NodeFieldSpec,
+        value: object,
+        errors: list[str],
+    ) -> None:
+        """Append an error unless a value is timezone-aware ISO 8601."""
+        if not isinstance(value, str):
+            errors.append(
+                f"Field '{field.name}' must be an ISO 8601 datetime with timezone"
+            )
+            return
+        try:
+            parsed = datetime.fromisoformat(value.strip())
+        except ValueError:
+            errors.append(
+                f"Field '{field.name}' must be an ISO 8601 datetime with timezone"
+            )
+            return
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            errors.append(
+                f"Field '{field.name}' must be an ISO 8601 datetime with timezone"
+            )
 
     def _validate_node_data(
         self,
@@ -597,8 +626,13 @@ class NodeUsecase:
             )
             raise NodeDataValidationError(message=message)
 
-        if node_type is NodeType.APPROVAL and parent_node_id is not None:
-            message = "Approval nodes can only be created at the top level"
+        if (
+            node_type in {NodeType.APPROVAL, NodeType.DELAY}
+            and parent_node_id is not None
+        ):
+            message = (
+                f"{node_type.value.title()} nodes can only be created at the top level"
+            )
             raise NodeDataValidationError(message=message)
 
         if node_type in {NodeType.LOOP_INPUT, NodeType.LOOP_OUTPUT} and (

@@ -9,6 +9,7 @@ class ExecutionStatus(StrEnum):
     CREATED = auto()
     RUNNING = auto()
     WAITING_APPROVAL = auto()
+    WAITING_DELAY = auto()
     SUCCESS = auto()
     FAILED = auto()
     CANCELLED = auto()

@@ -13,3 +13,4 @@ class ValidatorType(StrEnum):
     JSON = auto()
     CRON = auto()
     URL = auto()
+    DATETIME = auto()

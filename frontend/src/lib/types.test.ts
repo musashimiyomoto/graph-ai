@@ -8,6 +8,7 @@ describe('ACTIVE_STATUSES', () => {
       'created',
       'running',
       'waiting_approval',
+      'waiting_delay',
     ])
   })
 })

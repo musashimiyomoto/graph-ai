@@ -13,6 +13,7 @@ from nodes.call_workflow import DEFINITION as CALL_WORKFLOW_DEFINITION
 from nodes.code_transform import DEFINITION as CODE_TRANSFORM_DEFINITION
 from nodes.condition import DEFINITION as CONDITION_DEFINITION
 from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
+from nodes.delay import DEFINITION as DELAY_DEFINITION
 from nodes.http_request import DEFINITION as HTTP_REQUEST_DEFINITION
 from nodes.input import DEFINITION as INPUT_DEFINITION
 from nodes.llm import DEFINITION as LLM_DEFINITION
@@ -35,6 +36,7 @@ NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     INPUT_DEFINITION,
     LLM_DEFINITION,
     TRANSLATE_DEFINITION,
+    DELAY_DEFINITION,
     WEB_SEARCH_DEFINITION,
     TEMPLATE_DEFINITION,
     HTTP_REQUEST_DEFINITION,

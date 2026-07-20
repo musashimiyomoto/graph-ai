@@ -848,8 +848,21 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       retryable timeout/transport/provider failures; the inspector clearly
       discloses that text is sent to the selected third party and that free
       service limits apply. Migration `f7c9e1a3b5d8` adds the node enum value.
-- [ ] **Delay / Wait node** — pause a branch for a duration or until a timestamp;
-      primarily useful for longer-running automation beyond the initial MVP.
+- [x] **Delay / Wait node** — pause execution for a relative duration
+      (seconds/minutes/hours/days) or until an absolute timezone-aware ISO 8601
+      timestamp, passing upstream text through unchanged. Waiting is a durable
+      `WAITING_DELAY` checkpoint rather than an in-worker `sleep`: completed node
+      results persist, the ARQ worker is released, and a fresh deferred job
+      resumes from checkpoints at `wait_until`. Multiple Delay nodes reached in
+      one parallel wave share the earliest pending wake-up and resume their due
+      branches without duplicating earlier work; waits are capped at 30 days,
+      remain cancellable, and the stuck-run reaper re-enqueues a due checkpoint
+      if the Redis scheduling write was lost after the database commit. The UI
+      exposes the pending timestamp/status in Test Runs, Activity Log, and node
+      Details. Delay nodes are top-level only in v1 because loop iterations reuse
+      a node ID and require a separate per-iteration continuation model.
+      Migration `a1d3f5b7c9e2` adds the node/status enum values and durable
+      wake-up timestamps.
 - [ ] **Vision support for the LLM node** — accept images for OCR, document review,
       screenshot analysis, and other multimodal workflows.
 - [x] **Email channel** — incoming messages can trigger workflows through IMAP,

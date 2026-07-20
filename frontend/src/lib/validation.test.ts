@@ -196,6 +196,23 @@ describe('validateFields', () => {
     expect(validateFields(fields, { webhook_url: 'https://example.com/callback' })).toEqual({})
   })
 
+  it('requires an ISO date/time with an explicit timezone', () => {
+    const fields = [
+      makeField({
+        name: 'timestamp',
+        required: true,
+        label: 'Wait until',
+        validators: { datetime: true },
+      }),
+    ]
+    expect(validateFields(fields, { timestamp: '2026-07-21T09:00:00' })).toEqual({
+      timestamp: 'Wait until must be an ISO 8601 date/time with timezone',
+    })
+    expect(
+      validateFields(fields, { timestamp: '2026-07-21T09:00:00+03:00' }),
+    ).toEqual({})
+  })
+
   it('collects errors across multiple fields', () => {
     const fields = [
       makeField({ name: 'a', required: true, label: 'A' }),

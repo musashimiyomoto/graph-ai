@@ -90,6 +90,9 @@ class ExecutionResponse(BaseModel):
     queue_job_id: str | None = Field(
         default=None, description="Current background job ID"
     )
+    wait_until: datetime | None = Field(
+        default=None, description="Next durable Delay checkpoint wake-up time"
+    )
     prompt_tokens: int | None = Field(
         default=None, description="Total LLM prompt tokens across the run"
     )
@@ -140,3 +143,6 @@ class NodeExecutionResponse(BaseModel):
     )
     started_at: datetime = Field(default=..., description="Started at")
     finished_at: datetime | None = Field(default=None, description="Finished at")
+    wait_until: datetime | None = Field(
+        default=None, description="Delay checkpoint wake-up time"
+    )

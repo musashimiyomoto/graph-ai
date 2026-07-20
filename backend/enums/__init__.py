@@ -6,6 +6,8 @@ from enums.llm_provider import LLMProviderType
 from enums.node import (
     ConditionBranch,
     ConditionType,
+    DelayMode,
+    DelayUnit,
     HttpMethod,
     InputNodeFormat,
     LoopMode,
@@ -20,6 +22,8 @@ __all__ = [
     "AuthActionPurpose",
     "ConditionBranch",
     "ConditionType",
+    "DelayMode",
+    "DelayUnit",
     "ExecutionSource",
     "ExecutionStatus",
     "HttpMethod",

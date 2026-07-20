@@ -42,13 +42,14 @@ class _FakeRedis:
     def __init__(self) -> None:
         """Initialize the call log."""
         self.enqueued: list[int] = []
+        self.enqueue_options: list[dict[str, object]] = []
 
     async def enqueue_job(
         self, _name: str, execution_id: int, **kwargs: object
     ) -> None:
         """Record the enqueued execution ID."""
-        del kwargs
         self.enqueued.append(execution_id)
+        self.enqueue_options.append(dict(kwargs))
 
 
 class _FakeSendMessage:
@@ -203,6 +204,81 @@ class TestPollTelegramUpdates(BaseTestCase):
         await TelegramBotFactory.create_async(session=self.session, user_id=user.id)
 
         await worker_module.poll_telegram_updates({"redis": _FakeRedis()})
+
+
+class TestDelayScheduling(BaseTestCase):
+    """Tests for releasing a worker at a durable Delay checkpoint."""
+
+    @pytest.mark.asyncio
+    async def test_enqueues_continuation_for_wake_up_time(
+        self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The worker schedules a fresh deferred job instead of sleeping."""
+        worker_sessionmaker = async_sessionmaker(
+            bind=test_engine, expire_on_commit=False
+        )
+        monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
+        user = await UserFactory.create_async(session=self.session)
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user.id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        delay_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.DELAY,
+            data={
+                "label": "Wait",
+                "mode": "duration",
+                "duration": 5,
+                "unit": "minutes",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        for source_id, target_id in (
+            (input_node.id, delay_node.id),
+            (delay_node.id, output_node.id),
+        ):
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source_id,
+                target_node_id=target_id,
+            )
+
+        async def _noop_enqueue(_execution_id: int) -> None:
+            """Run the initial job inline."""
+
+        execution = await ExecutionUsecase().create_execution(
+            session=self.session,
+            user_id=user.id,
+            data=ExecutionCreate(
+                workflow_id=workflow.id,
+                input_data=ExecutionInputPayload(value="payload"),
+            ),
+            enqueue=_noop_enqueue,
+        )
+        redis = _FakeRedis()
+
+        await worker_module.run_execution_task({"redis": redis}, execution.id)
+
+        if redis.enqueued != [execution.id]:
+            pytest.fail("Delay should enqueue exactly one continuation")
+        options = redis.enqueue_options[0]
+        if ":delay:" not in str(options.get("_job_id")):
+            pytest.fail("Delay continuation should use a fresh job ID")
+        if not isinstance(options.get("_defer_until"), datetime):
+            pytest.fail("Delay continuation should be deferred until its checkpoint")
 
 
 class TestTelegramReply(BaseTestCase):

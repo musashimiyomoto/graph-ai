@@ -51,6 +51,21 @@ export function TranslateIcon(props: IconProps) {
   )
 }
 
+export function DelayIcon(props: IconProps) {
+  return (
+    <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
+      <rect x="3" y="1" width="10" height="2" fill="var(--accent-2)" />
+      <rect x="3" y="13" width="10" height="2" fill="var(--accent-2)" />
+      <rect x="3" y="3" width="2" height="3" fill="var(--accent-2)" />
+      <rect x="11" y="3" width="2" height="3" fill="var(--accent-2)" />
+      <rect x="5" y="6" width="2" height="2" fill="var(--accent)" />
+      <rect x="9" y="6" width="2" height="2" fill="var(--accent)" />
+      <rect x="7" y="8" width="2" height="3" fill="var(--accent)" />
+      <rect x="5" y="11" width="6" height="2" fill="var(--accent)" />
+    </svg>
+  )
+}
+
 export function OutputIcon(props: IconProps) {
   return (
     <svg width={SIZE} height={SIZE} viewBox="0 0 16 16" style={STYLE} fill="none" {...props}>
@@ -263,6 +278,10 @@ export function NodeIcon({ iconKey }: { iconKey: string }) {
 
   if (iconKey === 'translate') {
     return <TranslateIcon />
+  }
+
+  if (iconKey === 'delay') {
+    return <DelayIcon />
   }
 
   if (iconKey === 'web_search') {

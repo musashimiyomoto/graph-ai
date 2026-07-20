@@ -121,6 +121,7 @@ export function ChatPanel({
   )
   const isRunning = activeExecutionId !== null
   const isWaitingApproval = lastExecution?.status === 'waiting_approval'
+  const isWaitingDelay = lastExecution?.status === 'waiting_delay'
   const outputNodeId = useMemo(
     () => findOutputNodeId(nodeMetaByNodeId),
     [nodeMetaByNodeId],
@@ -195,9 +196,13 @@ export function ChatPanel({
         <div className="text-xs text-[var(--muted)]">{workflowName}</div>
         {isRunning ? (
           <div className="flex items-center gap-2">
-            {isWaitingApproval ? null : <span className="live-dot" />}
+            {isWaitingApproval || isWaitingDelay ? null : <span className="live-dot" />}
             <span className="text-xs text-[var(--muted)]">
-              {isWaitingApproval ? 'approval required' : 'running…'}
+              {isWaitingApproval
+                ? 'approval required'
+                : isWaitingDelay
+                  ? 'waiting…'
+                  : 'running…'}
             </span>
             <button
               type="button"
@@ -331,6 +336,18 @@ function ChatTurnResponse({
         onApprove={onApprove}
         onReject={onReject}
       />
+    )
+  }
+
+  if (turn.status === 'waiting_delay') {
+    return (
+      <div className="pixel-panel max-w-[80%] px-3 py-2 text-sm text-[var(--muted)]">
+        Waiting until{' '}
+        {turn.execution.wait_until
+          ? formatTime(turn.execution.wait_until)
+          : 'the configured time'}
+        .
+      </div>
     )
   }
 

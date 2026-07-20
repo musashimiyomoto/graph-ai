@@ -84,7 +84,7 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
 
     """
     logger.info("Running execution %s", execution_id)
-    redis: Redis = ctx["redis"]
+    redis: ArqRedis = ctx["redis"]
 
     async def token_publisher(exec_id: int, node_id: int, delta: str) -> None:
         """Publish a node token delta to the execution's stream channel."""
@@ -103,6 +103,19 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
             token_reset_publisher=token_reset_publisher,
         )
         if result.status is ExecutionStatus.WAITING_APPROVAL:
+            return
+        if result.status is ExecutionStatus.WAITING_DELAY:
+            if result.wait_until is None or result.queue_job_id is None:
+                logger.error(
+                    "Execution %s has an incomplete Delay checkpoint", execution_id
+                )
+                return
+            await redis.enqueue_job(
+                "run_execution_task",
+                execution_id,
+                _job_id=result.queue_job_id,
+                _defer_until=result.wait_until,
+            )
             return
         await _reply_via_telegram(session=session, execution_id=execution_id)
         await _reply_via_email(session=session, execution_id=execution_id)

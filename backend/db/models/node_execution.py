@@ -75,3 +75,6 @@ class NodeExecution(BaseWithID):
     finished_at: Mapped[datetime | None] = mapped_column(
         comment="Node execution end time"
     )
+    wait_until: Mapped[datetime | None] = mapped_column(
+        comment="Durable Delay checkpoint wake-up time"
+    )

@@ -9,6 +9,7 @@ class NodeType(StrEnum):
     INPUT = auto()
     LLM = auto()
     TRANSLATE = auto()
+    DELAY = auto()
     WEB_SEARCH = auto()
     TEMPLATE = auto()
     HTTP_REQUEST = auto()
@@ -106,3 +107,19 @@ class LoopMode(StrEnum):
 
     LIST = auto()
     CONDITION = auto()
+
+
+class DelayMode(StrEnum):
+    """How a Delay node determines its wake-up time."""
+
+    DURATION = auto()
+    UNTIL = auto()
+
+
+class DelayUnit(StrEnum):
+    """Units accepted by duration-based Delay nodes."""
+
+    SECONDS = auto()
+    MINUTES = auto()
+    HOURS = auto()
+    DAYS = auto()

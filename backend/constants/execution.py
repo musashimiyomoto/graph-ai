@@ -35,3 +35,7 @@ MAX_LOOP_ITERATIONS = 50
 # the root workflow. Prevents deeply nested but technically acyclic graphs
 # from consuming a worker indefinitely.
 MAX_WORKFLOW_CALL_DEPTH = 5
+
+# A durable Delay node may release the worker for at most 30 days. This keeps
+# accidentally-entered years or timestamps from leaving executions pending forever.
+MAX_DELAY_SECONDS = 30 * 24 * 60 * 60

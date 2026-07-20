@@ -38,6 +38,11 @@ def _extra_fields_by_type(
             "service": "google",
             "target_language": "Spanish",
         },
+        NodeType.DELAY: {
+            "mode": "duration",
+            "duration": 1,
+            "unit": "seconds",
+        },
         NodeType.WEB_SEARCH: {"max_results": 5},
         NodeType.TEMPLATE: {"template": "Summary: {{input}}"},
         NodeType.HTTP_REQUEST: {
@@ -106,6 +111,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
         "service",
         "target_language",
     },
+    NodeType.DELAY: {"label", "mode", "duration", "unit", "timestamp"},
     NodeType.WEB_SEARCH: {"label", "max_results"},
     NodeType.TEMPLATE: {"label", "template"},
     NodeType.HTTP_REQUEST: {"label", "url", "method"},
@@ -394,6 +400,28 @@ class TestNodeCreate(BaseTestCase):
         expected = HTTPStatus.UNPROCESSABLE_ENTITY
         if response.status_code != expected:
             pytest.fail(f"Expected {expected}, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_delay_until_requires_timezone(self) -> None:
+        """An absolute Delay timestamp is rejected when its timezone is ambiguous."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        payload = {
+            "workflow_id": workflow.id,
+            "type": NodeType.DELAY,
+            "data": {
+                "label": "Wait",
+                "mode": "until",
+                "timestamp": "2026-07-21T09:00:00",
+            },
+        }
+
+        response = await self.client.post(url=self.url, json=payload, headers=headers)
+
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail("Naive Delay timestamp should be rejected at save time")
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("webhook_url", [None, "/relative-callback"])
