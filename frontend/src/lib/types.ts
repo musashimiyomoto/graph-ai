@@ -33,6 +33,31 @@ export interface RunInputPayload {
   value: string
 }
 
+export interface TriggerActor {
+  id: string | null
+  display_name: string | null
+  address: string | null
+}
+
+export interface TriggerConversation {
+  id: string
+  thread_id: string | null
+}
+
+export interface TriggerEvent {
+  schema_version: 1
+  channel: ExecutionSource
+  external_event_id: string | null
+  sender: TriggerActor | null
+  conversation: TriggerConversation | null
+  locale: string | null
+  message: NodeValueEnvelope
+  attachments: NodeValueEnvelope[]
+  occurred_at: string
+  metadata: Record<string, unknown>
+  raw_retention: 'discard'
+}
+
 export interface Workflow {
   id: number
   owner_id: number
@@ -94,6 +119,7 @@ export interface Execution {
   status: ExecutionStatus
   source: ExecutionSource
   input_data: RunInputPayload | null
+  trigger_event: TriggerEvent
   output_data: Record<string, unknown> | null
   error: string | null
   approval_node_id: number | null

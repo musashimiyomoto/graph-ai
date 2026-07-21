@@ -91,6 +91,18 @@ export function ActivityLog({
                   <span className="pixel-pill text-[10px] normal-case">
                     {execution.source}
                   </span>
+                  {execution.trigger_event.sender ? (
+                    <span className="normal-case">
+                      {execution.trigger_event.sender.display_name ??
+                        execution.trigger_event.sender.address ??
+                        execution.trigger_event.sender.id}
+                    </span>
+                  ) : null}
+                  {execution.trigger_event.conversation?.thread_id ? (
+                    <span className="normal-case">
+                      thread {execution.trigger_event.conversation.thread_id}
+                    </span>
+                  ) : null}
                   <span>{formatTime(execution.started_at)}</span>
                   {execution.finished_at ? (
                     <span>→ {formatTime(execution.finished_at)}</span>

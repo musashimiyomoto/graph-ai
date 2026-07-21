@@ -12,13 +12,23 @@ describe('web-chat public API', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await createWebChatExecution('https://graph.example/api/web-chat/token', 'Hello')
+    await createWebChatExecution(
+      'https://graph.example/api/web-chat/token',
+      'Hello',
+      'message-1',
+      'visitor-1',
+    )
 
     expect(fetchMock).toHaveBeenCalledWith(
       'https://graph.example/api/web-chat/token/executions',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ value: 'Hello' }),
+        body: JSON.stringify({
+          value: 'Hello',
+          event_id: 'message-1',
+          conversation_id: 'visitor-1',
+          locale: navigator.language || null,
+        }),
       }),
     )
     const options = fetchMock.mock.calls[0][1] as RequestInit

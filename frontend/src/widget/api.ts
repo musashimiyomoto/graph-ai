@@ -26,10 +26,17 @@ async function publicRequest<T>(url: string, options: RequestInit = {}): Promise
 export async function createWebChatExecution(
   endpoint: string,
   value: string,
+  eventId: string,
+  conversationId: string,
 ): Promise<Execution> {
   return publicRequest<Execution>(`${endpoint}/executions`, {
     method: 'POST',
-    body: JSON.stringify({ value }),
+    body: JSON.stringify({
+      value,
+      event_id: eventId,
+      conversation_id: conversationId,
+      locale: navigator.language || null,
+    }),
   })
 }
 

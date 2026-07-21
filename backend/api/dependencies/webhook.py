@@ -1,6 +1,8 @@
 """Webhook dependency providers."""
 
-from usecases import WebhookUsecase
+from usecases import WebhookInboundRequest, WebhookUsecase
+
+__all__ = ["WebhookInboundRequest", "WebhookUsecase", "get_webhook_usecase"]
 
 
 def get_webhook_usecase() -> WebhookUsecase:

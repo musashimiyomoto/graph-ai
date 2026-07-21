@@ -895,7 +895,8 @@ This phase is the prerequisite for the next product wave. It deliberately builds
 one reusable runtime contract for JSON, files, images, audio, channels, and state
 instead of adding each new capability as a special case in `execution.py` or
 `worker.py`. Work is ordered so each item can ship with backwards compatibility
-for existing text-only workflow versions.
+for persisted text-only workflow versions through one-time data migrations, not
+permanent format-specific runtime fields or adapter branches.
 
 - [x] **First-class `NodeValue` envelope** — `nodes/value.py` now defines validated
       inline text/JSON/list values and file/image/audio/video values backed by an
@@ -949,11 +950,20 @@ for existing text-only workflow versions.
       backend suite now uses pytest-xdist with isolated per-worker PostgreSQL/Redis
       databases on shared ephemeral containers, plus a serial fallback and a local
       no-coverage fast path.
-- [ ] **Universal trigger event** — introduce a versioned `TriggerEvent` envelope
-      containing channel, external event ID, sender, conversation/thread, locale,
-      message, attachments, timestamp and provider-specific metadata. Every inbound
-      adapter must be idempotent on the external event ID and retain the raw event
-      only according to an explicit privacy/retention policy.
+- [x] **Universal trigger event** — every execution now persists one versioned,
+      provider-neutral `TriggerEvent` envelope containing channel, external event
+      ID, sender, conversation/thread, locale, typed message, artifact attachments,
+      timestamp and bounded provider metadata. Telegram, email, schedule, signed
+      webhook, web chat and manual runs all produce the same contract; raw provider
+      payloads use the explicit `discard` retention policy. External IDs are guarded
+      by a partial unique index plus a PostgreSQL advisory transaction lock, so
+      concurrent retries return/re-enqueue the same execution. Reply delivery reads
+      the envelope directly: migration `e5c7a9b1d3f6` backfills existing rows and
+      removes the duplicate `telegram_chat_id`, `email_reply_to` and `email_subject`
+      execution columns rather than preserving a runtime compatibility layer.
+      Activity Log exposes normalized sender/thread context, and web chat generates
+      stable client event/conversation IDs. All 446 backend and 77 frontend tests
+      pass; clean upgrade/downgrade/re-upgrade and `alembic check` report no drift.
 - [ ] **Plugin-driven channel registry** — define declarative channel/account
       metadata plus `receive`/`acknowledge`/`deliver` adapter contracts, moving
       Telegram/email/webhook behavior out of format-specific worker branches.

@@ -90,7 +90,7 @@ export function WorkflowActionsMenu({
           <button
             type="button"
             className="px-2 py-1 text-left text-xs hover:bg-white/5"
-            title="Enable the webhook format on the workflow Input node before using this URL"
+            title="Enable webhook Input and send a unique Idempotency-Key header with every event"
             onClick={() => {
               void onCopyWebhook().then(setWebhookCopied)
             }}

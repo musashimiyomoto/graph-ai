@@ -13,9 +13,16 @@ from db.repositories import (
     NodeScheduleRepository,
     TelegramBotRepository,
 )
-from enums import ExecutionSource, ExecutionStatus, NodeType
+from enums import ExecutionSource, ExecutionStatus, NodeType, PortType
 from integrations.email import EmailConnectionConfig, InboundEmail
-from schemas import ExecutionCreate, ExecutionInputPayload
+from schemas import (
+    ExecutionCreate,
+    ExecutionInputPayload,
+    NodeValuePayload,
+    TriggerActor,
+    TriggerConversation,
+    TriggerEvent,
+)
 from tests.factories import (
     EdgeFactory,
     EmailAccountFactory,
@@ -34,6 +41,20 @@ _FAKE_CHAT_ID = 999
 _FAKE_UPDATE_ID = 501
 _PINNED_CHAT_ID = 555
 _FAKE_EMAIL_UID = 701
+
+
+def _telegram_trigger() -> ExecutionTrigger:
+    """Build a canonical Telegram trigger for delivery tests."""
+    return ExecutionTrigger(
+        source=ExecutionSource.TELEGRAM,
+        event=TriggerEvent(
+            channel=ExecutionSource.TELEGRAM,
+            external_event_id="test-telegram-reply",
+            conversation=TriggerConversation(id=str(_FAKE_CHAT_ID)),
+            message=NodeValuePayload(kind=PortType.TEXT, value="hello"),
+            occurred_at=datetime.now(tz=UTC),
+        ),
+    )
 
 
 class _FakeRedis:
@@ -71,8 +92,16 @@ async def _fake_get_updates(
         {
             "update_id": _FAKE_UPDATE_ID,
             "message": {
+                "message_id": 88,
+                "date": 1_721_600_000,
                 "text": "hello from telegram",
                 "chat": {"id": _FAKE_CHAT_ID},
+                "from": {
+                    "id": 123,
+                    "first_name": "Ada",
+                    "username": "ada",
+                    "language_code": "en",
+                },
             },
         }
     ]
@@ -89,6 +118,10 @@ async def _fake_fetch_messages(
             sender="customer@example.com",
             subject="Need help",
             body="My order is late",
+            message_id="<message-701@example.com>",
+            thread_id="<order-7@example.com>",
+            sent_at=datetime(2026, 7, 21, 12, tzinfo=UTC),
+            locale="en",
         )
     ]
 
@@ -172,10 +205,15 @@ class TestPollTelegramUpdates(BaseTestCase):
         if len(executions) != 1:
             pytest.fail(f"Expected exactly one execution, got {len(executions)}")
         execution = executions[0]
-        if execution.telegram_chat_id != _FAKE_CHAT_ID:
-            pytest.fail("Execution was not tagged with the triggering chat ID")
         if execution.input_data != {"value": "hello from telegram"}:
             pytest.fail("Execution input did not carry the Telegram message text")
+        event = execution.trigger_event
+        if event["external_event_id"] != f"bot:{bot_id}:update:{_FAKE_UPDATE_ID}":
+            pytest.fail("Telegram update ID was not persisted for idempotency")
+        if event["sender"]["address"] != "@ada":
+            pytest.fail("Telegram sender metadata was not normalized")
+        if event["conversation"]["id"] != str(_FAKE_CHAT_ID):
+            pytest.fail("Telegram chat was not normalized as the conversation")
 
         refreshed_bot = await TelegramBotRepository().get_by(
             session=self.session, id=bot_id
@@ -334,7 +372,7 @@ class TestTelegramReply(BaseTestCase):
                 input_data=ExecutionInputPayload(value="hello"),
             ),
             enqueue=_noop_enqueue,
-            trigger=ExecutionTrigger(telegram_chat_id=_FAKE_CHAT_ID),
+            trigger=_telegram_trigger(),
         )
 
         await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)
@@ -404,8 +442,6 @@ class TestTelegramReply(BaseTestCase):
         async def _noop_enqueue(_execution_id: int) -> None:
             """Skip the real ARQ enqueue; the test runs the job inline."""
 
-        # No telegram_chat_id passed: this mirrors a manual run through the
-        # public API, which never sets it.
         execution = await ExecutionUsecase().create_execution(
             session=self.session,
             user_id=user.id,
@@ -476,7 +512,7 @@ class TestTelegramReply(BaseTestCase):
                 input_data=ExecutionInputPayload(value="hello"),
             ),
             enqueue=_noop_enqueue,
-            trigger=ExecutionTrigger(telegram_chat_id=_FAKE_CHAT_ID),
+            trigger=_telegram_trigger(),
         )
 
         await worker_module.run_execution_task({"redis": _FakeRedis()}, execution.id)
@@ -541,12 +577,17 @@ class TestPollEmailUpdates(BaseTestCase):
         execution = executions[0]
         if execution.source is not ExecutionSource.EMAIL:
             pytest.fail("Execution was not tagged with the email source")
-        if execution.email_reply_to != "customer@example.com":
-            pytest.fail("Sender address was not saved for the reply")
-        if execution.email_subject != "Need help":
-            pytest.fail("Incoming subject was not saved")
         if execution.input_data != {"value": "Subject: Need help\n\nMy order is late"}:
             pytest.fail("Email subject and body did not reach the workflow input")
+        event = execution.trigger_event
+        if event["external_event_id"] != f"account:{account_id}:uid:{_FAKE_EMAIL_UID}":
+            pytest.fail("Email UID was not persisted for idempotency")
+        if event["conversation"]["id"] != "<order-7@example.com>":
+            pytest.fail("Email thread was not normalized")
+        if event["sender"]["address"] != "customer@example.com":
+            pytest.fail("Email sender was not normalized")
+        if event["metadata"]["subject"] != "Need help":
+            pytest.fail("Email subject was not normalized")
         refreshed = await EmailAccountRepository().get_by(
             session=self.session, id=account_id
         )
@@ -612,8 +653,20 @@ class TestEmailReply(BaseTestCase):
             enqueue=_noop_enqueue,
             trigger=ExecutionTrigger(
                 source=ExecutionSource.EMAIL,
-                email_reply_to="customer@example.com",
-                email_subject="Need help",
+                event=TriggerEvent(
+                    channel=ExecutionSource.EMAIL,
+                    external_event_id="test-email-reply",
+                    sender=TriggerActor(
+                        id="customer@example.com",
+                        address="customer@example.com",
+                    ),
+                    message=NodeValuePayload(
+                        kind=PortType.TEXT,
+                        value="resolved",
+                    ),
+                    occurred_at=datetime.now(tz=UTC),
+                    metadata={"subject": "Need help"},
+                ),
             ),
         )
 

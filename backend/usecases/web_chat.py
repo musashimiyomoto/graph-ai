@@ -1,17 +1,28 @@
 """Public embedded web-chat use case."""
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Workflow
 from db.repositories import ExecutionRepository, NodeRepository, WorkflowRepository
-from enums import ExecutionSource, InputNodeFormat, NodeType, OutputNodeFormat
+from enums import (
+    ExecutionSource,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+    PortType,
+)
 from exceptions import WebChatNotFoundError
 from schemas import (
     ExecutionCreate,
     ExecutionInputPayload,
     ExecutionResponse,
+    NodeValuePayload,
+    TriggerActor,
+    TriggerConversation,
+    TriggerEvent,
     WebChatMessage,
 )
 from usecases.execution import ExecutionTrigger, ExecutionUsecase
@@ -81,7 +92,21 @@ class WebChatUsecase:
                 input_data=ExecutionInputPayload(value=message.value),
             ),
             enqueue=enqueue,
-            trigger=ExecutionTrigger(source=ExecutionSource.WEB_CHAT),
+            trigger=ExecutionTrigger(
+                source=ExecutionSource.WEB_CHAT,
+                event=TriggerEvent(
+                    channel=ExecutionSource.WEB_CHAT,
+                    external_event_id=message.event_id,
+                    sender=TriggerActor(id=message.conversation_id),
+                    conversation=TriggerConversation(id=message.conversation_id),
+                    locale=message.locale,
+                    message=NodeValuePayload(
+                        kind=PortType.TEXT,
+                        value=message.value,
+                    ),
+                    occurred_at=datetime.now(tz=UTC),
+                ),
+            ),
         )
 
     async def get_execution(

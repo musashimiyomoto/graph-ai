@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 from collections import deque
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from redis.asyncio import Redis
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 if TYPE_CHECKING:
@@ -48,6 +50,7 @@ from enums import (
     LoopMode,
     NodeType,
     PortCoercion,
+    PortType,
 )
 from exceptions import (
     BaseError,
@@ -84,7 +87,9 @@ from schemas import (
     ExecutionResponse,
     NodeExecutionResponse,
     NodeResponse,
+    NodeValuePayload,
     TokenUsage,
+    TriggerEvent,
     WorkflowVersionResponse,
 )
 from streaming import subscribe_tokens
@@ -245,16 +250,10 @@ class _Adjacency:
 
 @dataclass(frozen=True)
 class ExecutionTrigger:
-    """Internal-only metadata about what triggered an execution.
-
-    Never set by the public API. Channel pollers attach the address/chat needed
-    to deliver the finished result back to the triggering conversation.
-    """
+    """Internal-only source and normalized event for an execution."""
 
     source: ExecutionSource = ExecutionSource.MANUAL
-    telegram_chat_id: int | None = None
-    email_reply_to: str | None = None
-    email_subject: str | None = None
+    event: TriggerEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -315,7 +314,7 @@ class ExecutionUsecase:
             user_id: The owner user ID.
             data: The execution payload.
             enqueue: Callback that schedules the execution for background running.
-            trigger: Internal source and reply metadata for channel-triggered runs.
+            trigger: Internal source and event for channel-triggered runs.
 
         Returns:
             The created execution in ``CREATED`` (queued) state.
@@ -326,6 +325,23 @@ class ExecutionUsecase:
 
         """
         trigger = trigger or ExecutionTrigger()
+        trigger_event = trigger.event or TriggerEvent(
+            channel=trigger.source,
+            message=NodeValuePayload(
+                kind=PortType.TEXT,
+                value=data.input_data.value,
+            ),
+            occurred_at=datetime.now(tz=UTC),
+        )
+        if trigger_event.channel is not trigger.source:
+            message = "Trigger event channel must match the execution source"
+            raise ExecutionInputValidationError(message=message)
+        if trigger.source is not ExecutionSource.MANUAL and not (
+            trigger_event.external_event_id
+        ):
+            message = "Non-manual executions require a stable external event ID"
+            raise ExecutionInputValidationError(message=message)
+
         workflow = await self._workflow_repository.get_by(
             session=session,
             id=data.workflow_id,
@@ -333,6 +349,28 @@ class ExecutionUsecase:
         )
         if not workflow:
             raise WorkflowNotFoundError
+
+        if trigger_event.external_event_id is not None:
+            lock_material = (
+                f"{data.workflow_id}:{trigger.source.value}:"
+                f"{trigger_event.external_event_id}"
+            ).encode()
+            lock_key = int.from_bytes(
+                hashlib.sha256(lock_material).digest()[:8],
+                byteorder="big",
+                signed=True,
+            )
+            await session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+            existing = await self._execution_repository.get_by(
+                session=session,
+                workflow_id=data.workflow_id,
+                source=trigger.source,
+                trigger_external_id=trigger_event.external_event_id,
+            )
+            if existing is not None:
+                if existing.status is ExecutionStatus.CREATED:
+                    await enqueue(existing.id)
+                return ExecutionResponse.model_validate(existing)
 
         # Reject up front if the tenant is already at a configured daily limit,
         # before snapshotting the graph or scheduling any background work.
@@ -362,11 +400,10 @@ class ExecutionUsecase:
                 "workflow_id": data.workflow_id,
                 "version_id": version.id,
                 "input_data": data.input_data.model_dump(),
+                "trigger_event": trigger_event.model_dump(mode="json"),
+                "trigger_external_id": trigger_event.external_event_id,
                 "status": ExecutionStatus.CREATED,
                 "source": trigger.source,
-                "telegram_chat_id": trigger.telegram_chat_id,
-                "email_reply_to": trigger.email_reply_to,
-                "email_subject": trigger.email_subject,
             },
         )
         await self._audit_usecase.record(
@@ -379,6 +416,7 @@ class ExecutionUsecase:
                 metadata={
                     "workflow_id": data.workflow_id,
                     "source": trigger.source.value,
+                    "external_event_id": trigger_event.external_event_id,
                 },
             ),
         )

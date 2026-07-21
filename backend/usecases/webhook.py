@@ -2,17 +2,40 @@
 
 import json
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.repositories import NodeRepository, WorkflowRepository
-from enums import ExecutionSource, InputNodeFormat, NodeType
+from enums import ExecutionSource, InputNodeFormat, NodeType, PortType
 from exceptions import ExecutionInputValidationError, WebhookNotFoundError
-from schemas import ExecutionCreate, ExecutionInputPayload, ExecutionResponse
+from schemas import (
+    ExecutionCreate,
+    ExecutionInputPayload,
+    ExecutionResponse,
+    NodeValuePayload,
+    TriggerActor,
+    TriggerConversation,
+    TriggerEvent,
+)
 from usecases.execution import ExecutionTrigger, ExecutionUsecase
 from utils.webhooks import parse_webhook_token
 
 _MAX_INPUT_CHARS = 50_000
+_MAX_EVENT_ID_CHARS = 255
+
+
+@dataclass(frozen=True)
+class WebhookInboundRequest:
+    """Bounded body and normalized public webhook headers."""
+
+    body: bytes
+    content_type: str | None
+    event_id: str | None
+    sender_id: str | None
+    conversation_id: str | None
+    locale: str | None
 
 
 class WebhookUsecase:
@@ -70,8 +93,7 @@ class WebhookUsecase:
         *,
         session: AsyncSession,
         token: str,
-        body: bytes,
-        content_type: str | None,
+        request: WebhookInboundRequest,
         enqueue: Callable[[int], Awaitable[None]],
     ) -> ExecutionResponse:
         """Validate a public token and queue a webhook-sourced execution.
@@ -79,8 +101,7 @@ class WebhookUsecase:
         Args:
             session: Database session.
             token: Signed workflow token from the URL.
-            body: Raw request body.
-            content_type: Request Content-Type header.
+            request: Body and normalized idempotency/sender headers.
             enqueue: Background execution enqueue callback.
 
         Returns:
@@ -112,15 +133,42 @@ class WebhookUsecase:
         ):
             raise WebhookNotFoundError
 
+        if not request.event_id or len(request.event_id) > _MAX_EVENT_ID_CHARS:
+            message = "Webhook requests require an Idempotency-Key header"
+            raise ExecutionInputValidationError(message=message)
+
+        input_value = self._input_value(request.body, request.content_type)
+
         return await self._execution_usecase.create_execution(
             session=session,
             user_id=workflow.owner_id,
             data=ExecutionCreate(
                 workflow_id=workflow_id,
-                input_data=ExecutionInputPayload(
-                    value=self._input_value(body, content_type)
-                ),
+                input_data=ExecutionInputPayload(value=input_value),
             ),
             enqueue=enqueue,
-            trigger=ExecutionTrigger(source=ExecutionSource.WEBHOOK),
+            trigger=ExecutionTrigger(
+                source=ExecutionSource.WEBHOOK,
+                event=TriggerEvent(
+                    channel=ExecutionSource.WEBHOOK,
+                    external_event_id=request.event_id,
+                    sender=(
+                        TriggerActor(id=request.sender_id)
+                        if request.sender_id
+                        else None
+                    ),
+                    conversation=(
+                        TriggerConversation(id=request.conversation_id)
+                        if request.conversation_id
+                        else None
+                    ),
+                    locale=request.locale,
+                    message=NodeValuePayload(
+                        kind=PortType.TEXT,
+                        value=input_value,
+                    ),
+                    occurred_at=datetime.now(tz=UTC),
+                    metadata={"content_type": request.content_type},
+                ),
+            ),
         )

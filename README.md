@@ -37,8 +37,9 @@ is executed in the background, versioned, streamed token-by-token, and observabl
   streaming to the client.
 - **RAG** — Qdrant vector store with local CPU embeddings (`fastembed`); upload
   `.pdf`/`.docx`/`.txt`/`.md` documents and search them from a workflow.
-- **Channels & triggers** — chat, Telegram bots (per-user, encrypted token,
-  trigger-and-reply), and cron-scheduled runs.
+- **Channels & triggers** — web chat, Telegram bots, email, signed inbound/outbound
+  webhooks, and cron schedules. Every run retains a provider-neutral trigger event
+  with sender/conversation metadata and stable event-ID deduplication.
 - **Multi-tenant hardening** — verified-email accounts, rotating refresh sessions,
   password recovery, Fernet-encrypted secrets, per-user quotas (executions &
   tokens/day), an append-only audit log, and cost observability
@@ -77,6 +78,11 @@ This copies `.env.example` → `.env` and runs `docker compose up --build`.
 | Ollama           | http://localhost:11434             |
 
 Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling.
+
+Inbound webhook calls must include a provider-stable `Idempotency-Key` header.
+Retries with the same key return the original execution instead of queuing a
+duplicate. Normalized event metadata is retained; raw provider payload retention
+is explicitly set to `discard`.
 
 ## Local Development
 

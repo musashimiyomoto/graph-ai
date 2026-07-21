@@ -16,7 +16,7 @@ from usecases.usage import UsageUsecase
 from usecases.user import UserUsecase
 from usecases.vector import VectorUsecase
 from usecases.web_chat import WebChatUsecase
-from usecases.webhook import WebhookUsecase
+from usecases.webhook import WebhookInboundRequest, WebhookUsecase
 from usecases.workflow import WorkflowUsecase
 from usecases.workflow_transfer import WorkflowTransferUsecase
 
@@ -40,6 +40,7 @@ __all__ = [
     "UserUsecase",
     "VectorUsecase",
     "WebChatUsecase",
+    "WebhookInboundRequest",
     "WebhookUsecase",
     "WorkflowTransferUsecase",
     "WorkflowUsecase",

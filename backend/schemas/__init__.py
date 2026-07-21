@@ -82,6 +82,7 @@ from schemas.telegram_bot import (
     TelegramBotResponse,
     TelegramBotUpdate,
 )
+from schemas.trigger_event import TriggerActor, TriggerConversation, TriggerEvent
 from schemas.usage import (
     AuditLogResponse,
     QuotaStatus,
@@ -181,6 +182,9 @@ __all__ = [
     "TelegramBotUpdate",
     "TokenActionRequest",
     "TokenUsage",
+    "TriggerActor",
+    "TriggerConversation",
+    "TriggerEvent",
     "UsageSummaryResponse",
     "UserCreate",
     "UserResponse",

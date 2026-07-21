@@ -24,6 +24,13 @@ interface WidgetAppProps {
 const POLL_INTERVAL_MS = 1_000
 const MAX_POLL_ATTEMPTS = 300
 
+function createPublicId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 function finalText(execution: Execution): string {
   if (execution.status === 'cancelled') {
     return 'Execution cancelled.'
@@ -42,6 +49,7 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const nextId = useRef(1)
+  const conversationId = useRef(createPublicId())
   const controller = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -100,7 +108,12 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
     setSending(true)
 
     try {
-      const execution = await createWebChatExecution(endpoint, value)
+      const execution = await createWebChatExecution(
+        endpoint,
+        value,
+        createPublicId(),
+        conversationId.current,
+      )
       const tokenText = new Map<number, string>()
       let terminal: Execution | null = null
       const abortController = new AbortController()

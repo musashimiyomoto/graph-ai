@@ -54,6 +54,7 @@ class TestWebhookTrigger(BaseTestCase):
         response = await self.client.post(
             url=build_webhook_path(workflow_id),
             json={"event": "lead.created", "score": 7},
+            headers={"Idempotency-Key": "lead-42"},
         )
 
         data = await self.assert_response_dict(response=response)
@@ -64,6 +65,11 @@ class TestWebhookTrigger(BaseTestCase):
         expected = '{"event":"lead.created","score":7}'
         if data["input_data"] != {"value": expected}:
             pytest.fail("Webhook JSON was not normalized into workflow input")
+        event = data["trigger_event"]
+        if event["external_event_id"] != "lead-42":
+            pytest.fail("Webhook event ID was not persisted")
+        if event["raw_retention"] != "discard":
+            pytest.fail("Webhook raw payload retention must be explicit")
 
     @pytest.mark.asyncio
     async def test_plain_text_body_is_preserved(self) -> None:
@@ -74,7 +80,10 @@ class TestWebhookTrigger(BaseTestCase):
         response = await self.client.post(
             url=build_webhook_path(workflow_id),
             content="hello from webhook",
-            headers={"Content-Type": "text/plain"},
+            headers={
+                "Content-Type": "text/plain",
+                "Idempotency-Key": "plain-1",
+            },
         )
 
         data = await self.assert_response_dict(response=response)
@@ -117,7 +126,42 @@ class TestWebhookTrigger(BaseTestCase):
         response = await self.client.post(
             url=build_webhook_path(workflow_id),
             content="{not-json",
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Idempotency-Key": "invalid-json-1",
+            },
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail(f"Expected 400, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_repeated_event_id_returns_the_original_execution(self) -> None:
+        """Provider retries are idempotent even when the HTTP request repeats."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(user["id"])
+        headers = {"Idempotency-Key": "provider-event-7"}
+
+        first = await self.client.post(
+            url=build_webhook_path(workflow_id), content="payload", headers=headers
+        )
+        second = await self.client.post(
+            url=build_webhook_path(workflow_id), content="payload", headers=headers
+        )
+
+        first_data = await self.assert_response_dict(response=first)
+        second_data = await self.assert_response_dict(response=second)
+        if first_data["id"] != second_data["id"]:
+            pytest.fail("A repeated external event created a duplicate execution")
+
+    @pytest.mark.asyncio
+    async def test_missing_idempotency_key_is_rejected(self) -> None:
+        """Public webhook callers must provide a stable provider event ID."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(user["id"])
+
+        response = await self.client.post(
+            url=build_webhook_path(workflow_id), content="payload"
         )
 
         if response.status_code != HTTPStatus.BAD_REQUEST:

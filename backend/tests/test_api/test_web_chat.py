@@ -63,7 +63,12 @@ class TestWebChatAPI(BaseTestCase):
 
         response = await self.client.post(
             url=f"{build_web_chat_path(workflow_id)}/executions",
-            json={"value": "Hello"},
+            json={
+                "value": "Hello",
+                "event_id": "message-1",
+                "conversation_id": "visitor-1",
+                "locale": "en-US",
+            },
         )
 
         data = await self.assert_response_dict(response=response)
@@ -73,6 +78,8 @@ class TestWebChatAPI(BaseTestCase):
             pytest.fail("Execution was not tagged with the web_chat source")
         if data["input_data"] != {"value": "Hello"}:
             pytest.fail("Visitor message was not persisted as execution input")
+        if data["trigger_event"]["conversation"]["id"] != "visitor-1":
+            pytest.fail("Web-chat conversation ID was not persisted")
 
     @pytest.mark.asyncio
     async def test_both_channel_formats_must_be_enabled(self) -> None:
@@ -84,11 +91,35 @@ class TestWebChatAPI(BaseTestCase):
 
         response = await self.client.post(
             url=f"{build_web_chat_path(workflow_id)}/executions",
-            json={"value": "Hello"},
+            json={
+                "value": "Hello",
+                "event_id": "message-disabled",
+                "conversation_id": "visitor-1",
+            },
         )
 
         if response.status_code != HTTPStatus.NOT_FOUND:
             pytest.fail(f"Expected 404, got {response.status_code}")
+
+    @pytest.mark.asyncio
+    async def test_repeated_message_event_is_idempotent(self) -> None:
+        """A retried visitor request returns the original queued execution."""
+        user, _ = await self.create_user_and_get_token()
+        workflow_id = await self._create_workflow(user["id"])
+        payload = {
+            "value": "Hello",
+            "event_id": "message-retry-1",
+            "conversation_id": "visitor-1",
+        }
+        url = f"{build_web_chat_path(workflow_id)}/executions"
+
+        first = await self.client.post(url=url, json=payload)
+        second = await self.client.post(url=url, json=payload)
+
+        first_data = await self.assert_response_dict(response=first)
+        second_data = await self.assert_response_dict(response=second)
+        if first_data["id"] != second_data["id"]:
+            pytest.fail("A web-chat retry created a duplicate execution")
 
     @pytest.mark.asyncio
     async def test_execution_cannot_be_read_through_another_workflow(self) -> None:

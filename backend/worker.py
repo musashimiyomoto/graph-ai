@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -25,6 +26,7 @@ from enums import (
     InputNodeFormat,
     NodeType,
     OutputNodeFormat,
+    PortType,
 )
 from exceptions import (
     BaseError,
@@ -44,7 +46,14 @@ from llm.ollama import OllamaClient
 from logging_config import configure_logging
 from observability import init_sentry
 from rag.qdrant import get_qdrant_client
-from schemas import ExecutionCreate, ExecutionInputPayload
+from schemas import (
+    ExecutionCreate,
+    ExecutionInputPayload,
+    NodeValuePayload,
+    TriggerActor,
+    TriggerConversation,
+    TriggerEvent,
+)
 from sessions import async_session
 from settings import artifact_settings, redis_settings
 from streaming import publish_pull_progress, publish_token, publish_token_reset
@@ -76,6 +85,22 @@ _EMAIL_POLL_SECONDS = set(range(0, 60, 30))
 _SCHEDULE_POLL_SECONDS = set(range(0, 60, 30))
 # Artifact retention cleanup runs once an hour in bounded batches.
 _ARTIFACT_GC_MINUTES = {17}
+
+
+@dataclass(frozen=True)
+class _TelegramInboundMessage:
+    """Normalized Telegram message retained without the raw provider payload."""
+
+    update_id: int
+    chat_id: int
+    text: str
+    occurred_at: datetime
+    message_id: int | None = None
+    thread_id: int | None = None
+    sender_id: int | None = None
+    sender_name: str | None = None
+    sender_username: str | None = None
+    locale: str | None = None
 
 
 async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
@@ -265,7 +290,7 @@ async def _reply_via_telegram(session: "AsyncSession", execution_id: int) -> Non
         return
 
     chat_id = _resolve_reply_chat_id(
-        node_data=output_node.data, triggered_chat_id=execution.telegram_chat_id
+        node_data=output_node.data, trigger_event=execution.trigger_event
     )
     if chat_id is None:
         return
@@ -291,14 +316,13 @@ async def _reply_via_telegram(session: "AsyncSession", execution_id: int) -> Non
 
 
 def _resolve_reply_chat_id(
-    node_data: dict[str, Any], triggered_chat_id: int | None
+    node_data: dict[str, Any], trigger_event: dict[str, Any]
 ) -> int | None:
     """Pick the chat to reply to: a pinned chat ID, else the triggering chat.
 
     Args:
         node_data: The Output node's configuration data.
-        triggered_chat_id: The chat that triggered this run via Telegram
-            polling, if any.
+        trigger_event: The canonical event that triggered the execution.
 
     Returns:
         The chat ID to reply to, or ``None`` if neither is available.
@@ -308,7 +332,16 @@ def _resolve_reply_chat_id(
     if isinstance(pinned_chat_id, int):
         return pinned_chat_id
 
-    return triggered_chat_id
+    conversation = trigger_event.get("conversation")
+    if not isinstance(conversation, dict):
+        return None
+    conversation_id = conversation.get("id")
+    if not isinstance(conversation_id, str):
+        return None
+    try:
+        return int(conversation_id)
+    except ValueError:
+        return None
 
 
 async def _resolve_telegram_bot(
@@ -356,6 +389,27 @@ def _email_reply_subject(configured: object, triggered: str | None) -> str:
     return "Workflow result"
 
 
+def _event_sender_address(trigger_event: dict[str, Any]) -> str | None:
+    """Return the best reply address from a canonical trigger event."""
+    sender = trigger_event.get("sender")
+    if not isinstance(sender, dict):
+        return None
+    for field in ("address", "id"):
+        value = sender.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _event_subject(trigger_event: dict[str, Any]) -> str | None:
+    """Return the incoming subject from a canonical trigger event."""
+    metadata = trigger_event.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    subject = metadata.get("subject")
+    return subject if isinstance(subject, str) else None
+
+
 async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
     """Deliver a finished execution through an email-formatted Output node."""
     execution_repository = ExecutionRepository()
@@ -385,7 +439,7 @@ async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
     recipient = (
         configured_recipient.strip()
         if isinstance(configured_recipient, str) and configured_recipient.strip()
-        else execution.email_reply_to
+        else _event_sender_address(execution.trigger_event)
     )
     if not recipient:
         return
@@ -403,7 +457,8 @@ async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
             config=_email_config(account),
             recipient=recipient,
             subject=_email_reply_subject(
-                output_node.data.get("email_subject"), execution.email_subject
+                output_node.data.get("email_subject"),
+                _event_subject(execution.trigger_event),
             ),
             text=text or "(empty output)",
         )
@@ -496,8 +551,32 @@ async def _trigger_email_executions(
                 enqueue=enqueue,
                 trigger=ExecutionTrigger(
                     source=ExecutionSource.EMAIL,
-                    email_reply_to=message.sender,
-                    email_subject=message.subject,
+                    event=TriggerEvent(
+                        channel=ExecutionSource.EMAIL,
+                        external_event_id=(f"account:{account.id}:uid:{message.uid}"),
+                        sender=TriggerActor(
+                            id=message.sender,
+                            address=message.sender,
+                        ),
+                        conversation=TriggerConversation(
+                            id=(
+                                message.thread_id
+                                or message.message_id
+                                or f"account:{account.id}:uid:{message.uid}"
+                            )
+                        ),
+                        locale=message.locale,
+                        message=NodeValuePayload(
+                            kind=PortType.TEXT,
+                            value=_email_input_value(message),
+                        ),
+                        occurred_at=message.sent_at or datetime.now(tz=UTC),
+                        metadata={
+                            "account_id": account.id,
+                            "message_id": message.message_id,
+                            "subject": message.subject,
+                        },
+                    ),
                 ),
             )
         except BaseError:
@@ -597,7 +676,11 @@ async def poll_telegram_updates(
 
             for node in triggered_nodes:
                 await _trigger_executions(
-                    session=session, node=node, messages=messages, enqueue=enqueue
+                    session=session,
+                    bot=bot,
+                    node=node,
+                    messages=messages,
+                    enqueue=enqueue,
                 )
 
             if max_update_id != bot.last_update_id:
@@ -630,7 +713,7 @@ def _nodes_triggered_by(bot: "TelegramBot", input_nodes: list["Node"]) -> list["
 
 async def _fetch_new_messages(
     bot: "TelegramBot",
-) -> tuple[list[tuple[int, str]] | None, int]:
+) -> tuple[list[_TelegramInboundMessage] | None, int]:
     """Fetch and parse new messages for a bot since its last poll offset.
 
     Args:
@@ -650,31 +733,33 @@ async def _fetch_new_messages(
         return None, bot.last_update_id
 
     max_update_id = bot.last_update_id
-    messages: list[tuple[int, str]] = []
+    messages: list[_TelegramInboundMessage] = []
     for update in updates:
         update_id = update.get("update_id")
         if isinstance(update_id, int):
             max_update_id = max(max_update_id, update_id)
 
-        chat_id, text = _extract_message(update)
-        if chat_id is not None and text:
-            messages.append((chat_id, text))
+        message = _extract_message(update)
+        if message is not None:
+            messages.append(message)
 
     return messages, max_update_id
 
 
 async def _trigger_executions(
     session: "AsyncSession",
+    bot: "TelegramBot",
     node: "Node",
-    messages: list[tuple[int, str]],
+    messages: list[_TelegramInboundMessage],
     enqueue: EnqueueCallback,
 ) -> None:
     """Create one execution per new message for a Telegram-triggered Input node.
 
     Args:
         session: Database session.
+        bot: Telegram bot that received the updates.
         node: The triggered Input node.
-        messages: ``(chat_id, text)`` pairs fetched for the node's bot.
+        messages: Normalized messages fetched for the node's bot.
         enqueue: Callback that schedules an execution for background running.
 
     """
@@ -683,18 +768,53 @@ async def _trigger_executions(
         return
 
     execution_usecase = ExecutionUsecase()
-    for chat_id, text in messages:
+    for message in messages:
         try:
             await execution_usecase.create_execution(
                 session=session,
                 user_id=workflow.owner_id,
                 data=ExecutionCreate(
                     workflow_id=node.workflow_id,
-                    input_data=ExecutionInputPayload(value=text),
+                    input_data=ExecutionInputPayload(value=message.text),
                 ),
                 enqueue=enqueue,
                 trigger=ExecutionTrigger(
-                    source=ExecutionSource.TELEGRAM, telegram_chat_id=chat_id
+                    source=ExecutionSource.TELEGRAM,
+                    event=TriggerEvent(
+                        channel=ExecutionSource.TELEGRAM,
+                        external_event_id=(f"bot:{bot.id}:update:{message.update_id}"),
+                        sender=(
+                            TriggerActor(
+                                id=str(message.sender_id),
+                                display_name=message.sender_name,
+                                address=(
+                                    f"@{message.sender_username}"
+                                    if message.sender_username
+                                    else None
+                                ),
+                            )
+                            if message.sender_id is not None
+                            else None
+                        ),
+                        conversation=TriggerConversation(
+                            id=str(message.chat_id),
+                            thread_id=(
+                                str(message.thread_id)
+                                if message.thread_id is not None
+                                else None
+                            ),
+                        ),
+                        locale=message.locale,
+                        message=NodeValuePayload(
+                            kind=PortType.TEXT,
+                            value=message.text,
+                        ),
+                        occurred_at=message.occurred_at,
+                        metadata={
+                            "bot_id": bot.id,
+                            "message_id": message.message_id,
+                        },
+                    ),
                 ),
             )
         except BaseError:
@@ -704,28 +824,89 @@ async def _trigger_executions(
             )
 
 
-def _extract_message(update: dict[str, Any]) -> tuple[int | None, str | None]:
+def _extract_message(update: dict[str, Any]) -> _TelegramInboundMessage | None:
     """Pull a chat ID and text out of a Telegram update, if present.
 
     Args:
         update: A raw Telegram update object.
 
     Returns:
-        A ``(chat_id, text)`` tuple, either side ``None`` when absent/malformed.
+        A normalized message, or ``None`` when the update is malformed.
 
     """
     message = update.get("message")
     if not isinstance(message, dict):
-        return None, None
+        return None
+
+    update_id = update.get("update_id")
 
     text = message.get("text")
     chat = message.get("chat")
     chat_id = chat.get("id") if isinstance(chat, dict) else None
 
-    if not isinstance(text, str) or not text or not isinstance(chat_id, int):
-        return None, None
+    if (
+        not isinstance(update_id, int)
+        or not isinstance(text, str)
+        or not text
+        or not isinstance(chat_id, int)
+    ):
+        return None
 
-    return chat_id, text
+    sender = message.get("from")
+    sender_id = sender.get("id") if isinstance(sender, dict) else None
+    first_name = sender.get("first_name") if isinstance(sender, dict) else None
+    last_name = sender.get("last_name") if isinstance(sender, dict) else None
+    sender_name = " ".join(
+        part for part in (first_name, last_name) if isinstance(part, str) and part
+    )
+    timestamp = message.get("date")
+    occurred_at = (
+        datetime.fromtimestamp(timestamp, tz=UTC)
+        if isinstance(timestamp, int | float)
+        else datetime.now(tz=UTC)
+    )
+    return _TelegramInboundMessage(
+        update_id=update_id,
+        chat_id=chat_id,
+        text=text,
+        occurred_at=occurred_at,
+        message_id=(
+            message_id
+            if isinstance((message_id := message.get("message_id")), int)
+            else None
+        ),
+        thread_id=(
+            thread_id
+            if isinstance((thread_id := message.get("message_thread_id")), int)
+            else None
+        ),
+        sender_id=sender_id if isinstance(sender_id, int) else None,
+        sender_name=sender_name or None,
+        sender_username=(
+            username
+            if isinstance(
+                (
+                    username := sender.get("username")
+                    if isinstance(sender, dict)
+                    else None
+                ),
+                str,
+            )
+            else None
+        ),
+        locale=(
+            locale
+            if isinstance(
+                (
+                    locale := sender.get("language_code")
+                    if isinstance(sender, dict)
+                    else None
+                ),
+                str,
+            )
+            else None
+        ),
+    )
 
 
 async def poll_scheduled_triggers(
@@ -767,13 +948,18 @@ async def poll_scheduled_triggers(
         schedules = await node_schedule_repository.get_all(session=session)
 
         for schedule in schedules:
-            if not _schedule_is_due(schedule=schedule, now=now):
+            due_at = _schedule_due_at(schedule=schedule, now=now)
+            if due_at is None:
                 continue
 
             node = await node_repository.get_by(session=session, id=schedule.node_id)
             if node is not None and node.type is NodeType.INPUT:
                 await _trigger_scheduled_execution(
-                    session=session, node=node, enqueue=enqueue
+                    session=session,
+                    node=node,
+                    schedule=schedule,
+                    due_at=due_at,
+                    enqueue=enqueue,
                 )
 
             await node_schedule_repository.update_by(
@@ -782,15 +968,15 @@ async def poll_scheduled_triggers(
             await session.commit()
 
 
-def _schedule_is_due(schedule: "NodeSchedule", now: datetime) -> bool:
-    """Return whether a schedule's next cron boundary after its anchor has passed.
+def _schedule_due_at(schedule: "NodeSchedule", now: datetime) -> datetime | None:
+    """Return the due cron boundary, or ``None`` when not due/invalid.
 
     Args:
         schedule: The schedule to check.
         now: The current time.
 
     Returns:
-        Whether the schedule should fire.
+        The stable boundary used as the event ID, or ``None``.
 
     """
     try:
@@ -801,13 +987,15 @@ def _schedule_is_due(schedule: "NodeSchedule", now: datetime) -> bool:
         logger.exception(
             "Invalid cron expression for schedule %s; skipping", schedule.id
         )
-        return False
-    return upcoming <= now
+        return None
+    return upcoming if upcoming <= now else None
 
 
 async def _trigger_scheduled_execution(
     session: "AsyncSession",
     node: "Node",
+    schedule: "NodeSchedule",
+    due_at: datetime,
     enqueue: EnqueueCallback,
 ) -> None:
     """Create one execution for a due scheduled Input node.
@@ -819,6 +1007,8 @@ async def _trigger_scheduled_execution(
     Args:
         session: Database session.
         node: The Input node the schedule fired for.
+        schedule: Durable schedule record that became due.
+        due_at: Exact cron boundary used for deterministic idempotency.
         enqueue: Callback that schedules an execution for background running.
 
     """
@@ -839,7 +1029,23 @@ async def _trigger_scheduled_execution(
                 input_data=ExecutionInputPayload(value=scheduled_value),
             ),
             enqueue=enqueue,
-            trigger=ExecutionTrigger(source=ExecutionSource.SCHEDULE),
+            trigger=ExecutionTrigger(
+                source=ExecutionSource.SCHEDULE,
+                event=TriggerEvent(
+                    channel=ExecutionSource.SCHEDULE,
+                    external_event_id=(f"schedule:{schedule.id}:{due_at.isoformat()}"),
+                    message=NodeValuePayload(
+                        kind=PortType.TEXT,
+                        value=scheduled_value,
+                    ),
+                    occurred_at=due_at,
+                    metadata={
+                        "node_id": node.id,
+                        "schedule_id": schedule.id,
+                        "cron_expression": schedule.cron_expression,
+                    },
+                ),
+            ),
         )
     except BaseError:
         logger.exception(

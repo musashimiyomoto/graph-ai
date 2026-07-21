@@ -50,7 +50,13 @@ async def trigger_webhook(
     return await usecase.trigger(
         session=session,
         token=token,
-        body=await _read_limited_body(request),
-        content_type=request.headers.get("content-type"),
+        request=webhook.WebhookInboundRequest(
+            body=await _read_limited_body(request),
+            content_type=request.headers.get("content-type"),
+            event_id=request.headers.get("idempotency-key"),
+            sender_id=request.headers.get("x-sender-id"),
+            conversation_id=request.headers.get("x-conversation-id"),
+            locale=request.headers.get("content-language"),
+        ),
         enqueue=enqueue,
     )

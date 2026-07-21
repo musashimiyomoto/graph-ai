@@ -102,6 +102,11 @@ class TestExecutionCreate(BaseTestCase):
             pytest.fail("Execution workflow_id did not match request")
         if data["status"] != ExecutionStatus.CREATED:
             pytest.fail("Queued execution should start in CREATED state")
+        event = data["trigger_event"]
+        if event["channel"] != ExecutionSource.MANUAL:
+            pytest.fail("Manual execution did not receive a trigger envelope")
+        if event["message"]["value"] != "hello":
+            pytest.fail("Trigger event message diverged from execution input_data")
 
         result = await run_execution(self.session, data["id"])
         if result.status != ExecutionStatus.SUCCESS:

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from enums import ExecutionSource, ExecutionStatus, NodeType, PortCoercion
 from schemas.artifact import NodeValuePayload
+from schemas.trigger_event import TriggerEvent
 
 
 class ExecutionInputPayload(BaseModel):
@@ -74,6 +75,10 @@ class ExecutionResponse(BaseModel):
     input_data: ExecutionInputPayload | None = Field(
         default=None,
         description="Execution input",
+    )
+    trigger_event: TriggerEvent = Field(
+        default=...,
+        description="Normalized event that caused this execution",
     )
     output_data: dict[str, Any] | None = Field(
         default=None, description="Execution output"

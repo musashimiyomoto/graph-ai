@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Enum, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,15 @@ class Execution(BaseWithID):
     input_data: Mapped[dict | None] = mapped_column(
         JSONB, comment="Input data for execution"
     )
+    trigger_event: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        comment="Versioned provider-neutral event that triggered this execution",
+    )
+    trigger_external_id: Mapped[str | None] = mapped_column(
+        String(255),
+        comment="Denormalized external trigger ID used for idempotency",
+    )
     output_data: Mapped[dict | None] = mapped_column(
         JSONB, comment="Output data from execution"
     )
@@ -62,17 +71,6 @@ class Execution(BaseWithID):
     wait_until: Mapped[datetime | None] = mapped_column(
         comment="Earliest durable Delay checkpoint wake-up time"
     )
-    telegram_chat_id: Mapped[int | None] = mapped_column(
-        BigInteger,
-        comment="Telegram chat to reply to, if this run was triggered by a message",
-    )
-    email_reply_to: Mapped[str | None] = mapped_column(
-        String(320), comment="Sender address to reply to for email-triggered runs"
-    )
-    email_subject: Mapped[str | None] = mapped_column(
-        String(998), comment="Subject of the email that triggered this run"
-    )
-
     # Run-level token totals, summed across every LLM node in the run. NULL
     # until the run finalizes (and stays 0 for a run with no LLM nodes).
     prompt_tokens: Mapped[int | None] = mapped_column(
@@ -97,3 +95,13 @@ class Execution(BaseWithID):
             "that's actually stalled"
         )
     )
+
+
+Index(
+    "uq_executions_trigger_external_event",
+    Execution.workflow_id,
+    Execution.source,
+    Execution.trigger_external_id,
+    unique=True,
+    postgresql_where=Execution.trigger_external_id.is_not(None),
+)

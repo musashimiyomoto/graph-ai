@@ -33,6 +33,19 @@ describe('WidgetApp', () => {
       status: 'created' as const,
       source: 'web_chat' as const,
       input_data: { value: 'Hello' },
+      trigger_event: {
+        schema_version: 1 as const,
+        channel: 'web_chat' as const,
+        external_event_id: 'message-1',
+        sender: { id: 'visitor-1', display_name: null, address: null },
+        conversation: { id: 'visitor-1', thread_id: null },
+        locale: 'en',
+        message: { kind: 'text' as const, value: 'Hello', artifact: null, metadata: {} },
+        attachments: [],
+        occurred_at: '2026-07-18T00:00:00Z',
+        metadata: {},
+        raw_retention: 'discard' as const,
+      },
       output_data: null,
       error: null,
       approval_node_id: null,
@@ -63,6 +76,8 @@ describe('WidgetApp', () => {
     expect(createMock).toHaveBeenCalledWith(
       'https://graph.example/api/web-chat/token',
       'Hello',
+      expect.any(String),
+      expect.any(String),
     )
     expect(getMock).not.toHaveBeenCalled()
   })
