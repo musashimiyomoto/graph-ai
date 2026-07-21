@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from enums import PortCoercion
+
 
 class EdgeCreate(BaseModel):
     """Payload for creating an edge."""
@@ -13,6 +15,10 @@ class EdgeCreate(BaseModel):
         default=None,
         description="Named output handle on the source node, for branching nodes",
     )
+    coercion: PortCoercion | None = Field(
+        default=None,
+        description="Explicit typed-value conversion applied by this edge",
+    )
 
 
 class EdgeUpdate(BaseModel):
@@ -23,6 +29,10 @@ class EdgeUpdate(BaseModel):
     source_handle: str | None = Field(
         default=None,
         description="Named output handle on the source node, for branching nodes",
+    )
+    coercion: PortCoercion | None = Field(
+        default=None,
+        description="Explicit typed-value conversion applied by this edge",
     )
 
 
@@ -37,4 +47,8 @@ class EdgeResponse(BaseModel):
     target_node_id: int = Field(default=..., description="Target node ID", gt=0)
     source_handle: str | None = Field(
         default=None, description="Named output handle on the source node"
+    )
+    coercion: PortCoercion | None = Field(
+        default=None,
+        description="Explicit typed-value conversion applied by this edge",
     )

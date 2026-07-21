@@ -41,7 +41,14 @@ from db.repositories import (
     WorkflowRepository,
     WorkflowVersionRepository,
 )
-from enums import ConditionType, ExecutionSource, ExecutionStatus, LoopMode, NodeType
+from enums import (
+    ConditionType,
+    ExecutionSource,
+    ExecutionStatus,
+    LoopMode,
+    NodeType,
+    PortCoercion,
+)
 from exceptions import (
     BaseError,
     ExecutionApprovalNotPendingError,
@@ -62,6 +69,7 @@ from nodes import (
     OnToken,
     check_edge_ports,
     check_source_handle,
+    coerce_node_value,
     evaluate_condition,
     resolve_wait_until,
     select_switch_handle,
@@ -82,6 +90,8 @@ from usecases.audit import AuditEvent, AuditUsecase
 from usecases.usage import UsageUsecase
 
 logger = logging.getLogger(__name__)
+
+type _RuntimeEdge = tuple[int, str | None, PortCoercion | None]
 
 # Publishes a (execution_id, node_id, token delta) for live streaming.
 TokenPublisher = Callable[[int, int, str], Awaitable[None]]
@@ -224,8 +234,8 @@ class _Adjacency:
 
     outbound: dict[int, list[int]]
     inbound: dict[int, list[int]]
-    outbound_edges: dict[int, list[tuple[int, str | None]]]
-    inbound_edges: dict[int, list[tuple[int, str | None]]]
+    outbound_edges: dict[int, list[_RuntimeEdge]]
+    inbound_edges: dict[int, list[_RuntimeEdge]]
     indegree: dict[int, int]
 
 
@@ -1642,12 +1652,12 @@ class ExecutionUsecase:
 
         """
         live_outputs: list[NodeValue] = []
-        for parent_id, handle in graph.inbound_edges[node_id]:
+        for parent_id, handle, coercion in graph.inbound_edges[node_id]:
             if not live_by_node.get(parent_id, False):
                 continue
             if handle is not None and handle != selected_handle_by_node.get(parent_id):
                 continue
-            live_outputs.append(outputs_by_node[parent_id])
+            live_outputs.append(coerce_node_value(outputs_by_node[parent_id], coercion))
         return live_outputs, bool(live_outputs)
 
     async def _record_skip(
@@ -1742,9 +1752,9 @@ class ExecutionUsecase:
                 ) from exc
         else:
             output_value = NodeValue.text(node_execution.output or "")
-        output = output_value.require_text()
         selected_handle: str | None = None
         if node.type is NodeType.CONDITION:
+            output = output_value.require_text()
             try:
                 condition_type = ConditionType(node.data.get("condition_type"))
             except ValueError as exc:
@@ -1760,6 +1770,7 @@ class ExecutionUsecase:
             )
             selected_handle = "true" if matched else "false"
         elif node.type is NodeType.SWITCH:
+            output = output_value.require_text()
             try:
                 selected_handle = select_switch_handle(node.data, output)
             except ValueError as exc:
@@ -3002,10 +3013,10 @@ class ExecutionUsecase:
         """
         outbound: dict[int, list[int]] = {node.id: [] for node in ordered_nodes}
         inbound: dict[int, list[int]] = {node.id: [] for node in ordered_nodes}
-        outbound_edges: dict[int, list[tuple[int, str | None]]] = {
+        outbound_edges: dict[int, list[_RuntimeEdge]] = {
             node.id: [] for node in ordered_nodes
         }
-        inbound_edges: dict[int, list[tuple[int, str | None]]] = {
+        inbound_edges: dict[int, list[_RuntimeEdge]] = {
             node.id: [] for node in ordered_nodes
         }
         indegree: dict[int, int] = {node.id: 0 for node in ordered_nodes}
@@ -3017,7 +3028,11 @@ class ExecutionUsecase:
                 raise ExecutionGraphValidationError(message=message)
 
             port_error = check_edge_ports(
-                nodes_by_id[source_id].type, nodes_by_id[target_id].type
+                nodes_by_id[source_id].type,
+                nodes_by_id[target_id].type,
+                source_data=nodes_by_id[source_id].data,
+                target_data=nodes_by_id[target_id].data,
+                coercion=edge.coercion,
             )
             if port_error is not None:
                 raise ExecutionGraphValidationError(message=port_error)
@@ -3034,8 +3049,11 @@ class ExecutionUsecase:
 
             outbound[source_id].append(target_id)
             inbound[target_id].append(source_id)
-            outbound_edges[source_id].append((target_id, edge.source_handle))
-            inbound_edges[target_id].append((source_id, edge.source_handle))
+            edge_data = (target_id, edge.source_handle, edge.coercion)
+            outbound_edges[source_id].append(edge_data)
+            inbound_edges[target_id].append(
+                (source_id, edge.source_handle, edge.coercion)
+            )
             indegree[target_id] += 1
 
         # Deterministic adjacency: parent merge order and wave order no longer

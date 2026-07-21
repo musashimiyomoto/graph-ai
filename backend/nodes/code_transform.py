@@ -12,7 +12,7 @@ Python thread.
 
 import json
 from asyncio import to_thread
-from typing import Any
+from typing import Any, cast
 
 from RestrictedPython import compile_restricted, safe_globals
 from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter
@@ -22,7 +22,7 @@ from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
 from nodes.definition import NodeDefinition, NodeHandlerDeps
-from nodes.rendering import upstream_text
+from nodes.value import JSONValue, NodeValue
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
@@ -32,6 +32,7 @@ from schemas import (
 
 _OUTPUT_VAR = "output"
 _INPUT_VAR = "input"
+_STRUCTURED_PORT_TYPES = (PortType.TEXT, PortType.JSON, PortType.LIST)
 
 # Safe pure-computation builtins beyond RestrictedPython's minimal default set.
 _EXTRA_BUILTINS: dict[str, Any] = {
@@ -88,20 +89,66 @@ class CodeTransformNodeHandler:
             message = "Code node requires non-empty code"
             raise ExecutionGraphValidationError(message=message)
 
-        input_text = upstream_text(context)
-        return NodeExecutionResult.text(
-            output=await to_thread(self._run_restricted, code, input_text)
+        input_type = self._configured_type(context, "input_type")
+        output_type = self._configured_type(context, "output_type")
+        raw_output = await to_thread(
+            self._run_restricted,
+            code,
+            self._runtime_input(context, input_type),
         )
+        return self._build_result(raw_output, output_type)
 
-    def _run_restricted(self, code: str, input_text: str) -> str:
+    @staticmethod
+    def _configured_type(context: NodeExecutionContext, field: str) -> PortType:
+        """Read one configurable structured port type with legacy fallback."""
+        raw_type = context.node_data.get(field, PortType.TEXT.value)
+        try:
+            port_type = PortType(raw_type)
+        except ValueError as exc:
+            raise ExecutionGraphValidationError(
+                message=f"Code node has an unsupported {field}"
+            ) from exc
+        if port_type not in _STRUCTURED_PORT_TYPES:
+            raise ExecutionGraphValidationError(
+                message=f"Code node {field} must be text, json, or list"
+            )
+        return port_type
+
+    @staticmethod
+    def _runtime_input(
+        context: NodeExecutionContext, input_type: PortType
+    ) -> JSONValue:
+        """Expose text fan-in or one structured parent to restricted code."""
+        values = context.parent_values or [context.input_value]
+        if input_type is PortType.TEXT:
+            return (
+                context.joined_parent_text()
+                if context.parent_values
+                else context.input_text
+            )
+        if len(values) != 1:
+            raise ExecutionGraphValidationError(
+                message="Structured Code node inputs require exactly one live edge"
+            )
+        value = values[0]
+        if value.kind is not input_type:
+            raise ExecutionGraphValidationError(
+                message=(
+                    f"Code node expected {input_type.value}, "
+                    f"received {value.kind.value}"
+                )
+            )
+        return value.value
+
+    def _run_restricted(self, code: str, input_value: JSONValue) -> object:
         """Compile and execute user code in a restricted sandbox.
 
         Args:
             code: User-authored Python source.
-            input_text: The upstream text, bound to the ``input`` variable.
+            input_value: Structured upstream value bound to ``input``.
 
         Returns:
-            The coerced ``output`` value.
+            The raw JSON-compatible ``output`` value.
 
         Raises:
             ExecutionGraphValidationError: If compilation or execution fails,
@@ -114,7 +161,7 @@ class CodeTransformNodeHandler:
             message = f"Code node has a syntax error: {exc}"
             raise ExecutionGraphValidationError(message=message) from exc
 
-        local_vars: dict[str, Any] = {_INPUT_VAR: input_text}
+        local_vars: dict[str, Any] = {_INPUT_VAR: input_value}
         try:
             exec(byte_code, _build_restricted_globals(), local_vars)  # noqa: S102
         except ExecutionGraphValidationError:
@@ -127,29 +174,51 @@ class CodeTransformNodeHandler:
             message = "Code node must assign a value to 'output'"
             raise ExecutionGraphValidationError(message=message)
 
-        return self._coerce_output(local_vars[_OUTPUT_VAR])
+        return local_vars[_OUTPUT_VAR]
 
-    def _coerce_output(self, value: object) -> str:
-        """Coerce the code's output value to text.
+    def _build_result(
+        self, value: object, output_type: PortType
+    ) -> NodeExecutionResult:
+        """Build the configured typed result without hiding structures in text.
 
         Args:
             value: The value assigned to ``output`` by user code.
+            output_type: Configured type of the node's output port.
 
         Returns:
-            ``value`` unchanged if it's already a string, else its JSON
-            encoding.
+            A result whose NodeValue kind matches the configured output port.
 
         Raises:
             ExecutionGraphValidationError: If the value isn't JSON-serializable.
 
         """
-        if isinstance(value, str):
-            return value
+        if output_type is PortType.TEXT:
+            if isinstance(value, str):
+                return NodeExecutionResult.text(value)
+            try:
+                return NodeExecutionResult.text(json.dumps(value))
+            except TypeError as exc:
+                message = "Code node output must be JSON-serializable"
+                raise ExecutionGraphValidationError(message=message) from exc
+        if output_type is PortType.LIST:
+            if not isinstance(value, list):
+                raise ExecutionGraphValidationError(
+                    message="Code node list output must be a list"
+                )
+            try:
+                output = NodeValue.list(cast("list[JSONValue]", value))
+            except ValueError as exc:
+                raise ExecutionGraphValidationError(
+                    message="Code node list output must contain JSON values"
+                ) from exc
+            return NodeExecutionResult(output=output)
         try:
-            return json.dumps(value)
-        except TypeError as exc:
-            message = "Code node output must be a string or JSON-serializable value"
-            raise ExecutionGraphValidationError(message=message) from exc
+            output = NodeValue.json(cast("JSONValue", value))
+        except ValueError as exc:
+            raise ExecutionGraphValidationError(
+                message="Code node JSON output must be JSON-compatible"
+            ) from exc
+        return NodeExecutionResult(output=output)
 
 
 def _build_handler(deps: NodeHandlerDeps) -> CodeTransformNodeHandler:
@@ -167,6 +236,10 @@ DEFINITION = NodeDefinition(
         has_output=True,
         input_port=PortType.TEXT,
         output_port=PortType.TEXT,
+        input_port_field="input_type",
+        output_port_field="output_type",
+        input_port_options=_STRUCTURED_PORT_TYPES,
+        output_port_options=_STRUCTURED_PORT_TYPES,
     ),
     fields=(
         NodeFieldSpec(
@@ -181,6 +254,36 @@ DEFINITION = NodeDefinition(
             default="Code node",
         ),
         NodeFieldSpec(
+            name="input_type",
+            required=False,
+            validators={
+                ValidatorType.SELECT.value: [
+                    item.value for item in _STRUCTURED_PORT_TYPES
+                ]
+            },
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.SELECT,
+                label="Input type",
+                help="Structured JSON/list inputs stay native Python values.",
+            ),
+            default=PortType.TEXT.value,
+        ),
+        NodeFieldSpec(
+            name="output_type",
+            required=False,
+            validators={
+                ValidatorType.SELECT.value: [
+                    item.value for item in _STRUCTURED_PORT_TYPES
+                ]
+            },
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.SELECT,
+                label="Output type",
+                help="JSON/list outputs remain structured in the workflow runtime.",
+            ),
+            default=PortType.TEXT.value,
+        ),
+        NodeFieldSpec(
             name="code",
             required=True,
             validators={ValidatorType.MIN_LENGTH.value: 1},
@@ -189,7 +292,7 @@ DEFINITION = NodeDefinition(
                 label="Code",
                 placeholder="output = input.upper()",
                 help=(
-                    "Restricted Python. Read the upstream text via `input`, "
+                    "Restricted Python. Read the typed upstream value via `input`, "
                     "assign the result to `output`. The `json` module is "
                     "available; imports, file, and network access are not."
                 ),

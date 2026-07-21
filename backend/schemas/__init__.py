@@ -69,6 +69,7 @@ from schemas.node import (
     NodeFieldVisibility,
     NodeFieldWidget,
     NodeGraphSpec,
+    NodePortSpec,
     NodeResponse,
     NodeUpdate,
 )
@@ -161,6 +162,7 @@ __all__ = [
     "NodeFieldVisibility",
     "NodeFieldWidget",
     "NodeGraphSpec",
+    "NodePortSpec",
     "NodeResponse",
     "NodeUpdate",
     "NodeValuePayload",

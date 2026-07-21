@@ -19,7 +19,7 @@ from db.repositories import (
     TelegramBotRepository,
     WorkflowRepository,
 )
-from enums import InputNodeFormat, NodeType, ValidatorType
+from enums import InputNodeFormat, NodeType, PortCoercion, ValidatorType
 from exceptions import (
     EmailAccountNotFoundError,
     LLMProviderNotFoundError,
@@ -33,6 +33,7 @@ from exceptions import (
 from nodes import (
     SwitchConfigurationError,
     build_node_catalog,
+    check_edge_ports,
     switch_output_handles,
 )
 from schemas import (
@@ -857,6 +858,11 @@ class NodeUsecase:
                         f"{handles}. Delete their edges first."
                     )
                     raise NodeDataValidationError(message=message)
+        await self._validate_connected_edge_ports(
+            session=session,
+            node=node,
+            validated_data=validated_data,
+        )
         await self._validate_external_references(
             session=session,
             user_id=user_id,
@@ -882,6 +888,60 @@ class NodeUsecase:
         )
         await session.commit()
         return NodeResponse.model_validate(updated)
+
+    async def _validate_connected_edge_ports(
+        self,
+        session: AsyncSession,
+        node: NodeResponse,
+        validated_data: dict[str, Any],
+    ) -> None:
+        """Reject a dynamic port change that would invalidate existing edges."""
+        inbound = await self._edge_repository.get_all(
+            session=session, target_node_id=node.id
+        )
+        outbound = await self._edge_repository.get_all(
+            session=session, source_node_id=node.id
+        )
+        for edge in (*inbound, *outbound):
+            source = (
+                node
+                if edge.source_node_id == node.id
+                else await self._node_repository.get_by(
+                    session=session, id=edge.source_node_id
+                )
+            )
+            target = (
+                node
+                if edge.target_node_id == node.id
+                else await self._node_repository.get_by(
+                    session=session, id=edge.target_node_id
+                )
+            )
+            if source is None or target is None:
+                continue
+            source_data = (
+                validated_data if edge.source_node_id == node.id else source.data
+            )
+            target_data = (
+                validated_data if edge.target_node_id == node.id else target.data
+            )
+            coercion = (
+                PortCoercion(edge.coercion) if edge.coercion is not None else None
+            )
+            port_error = check_edge_ports(
+                NodeType(source.type),
+                NodeType(target.type),
+                source_data=source_data,
+                target_data=target_data,
+                coercion=coercion,
+            )
+            if port_error is not None:
+                raise NodeDataValidationError(
+                    message=(
+                        f"Port type change invalidates edge {edge.id}: {port_error}. "
+                        "Delete and reconnect the edge with the required coercion."
+                    )
+                )
 
     async def delete_node(
         self,

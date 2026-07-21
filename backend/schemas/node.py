@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from enums import NodeType, PortType
 
@@ -119,6 +119,24 @@ class NodeFieldSpec(BaseModel):
     )
 
 
+class NodePortSpec(BaseModel):
+    """One named typed data port exposed by a node definition."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(default=..., min_length=1, description="Stable port name")
+    label: str = Field(default=..., min_length=1, description="UI port label")
+    type: PortType = Field(default=..., description="Default port value type")
+    type_field: str | None = Field(
+        default=None,
+        description="Node-data field selecting the effective type, when configurable",
+    )
+    allowed_types: tuple[PortType, ...] = Field(
+        default_factory=tuple,
+        description="Types selectable through type_field; empty for a fixed port",
+    )
+
+
 class NodeGraphSpec(BaseModel):
     """Graph-connection metadata for a node type."""
 
@@ -139,6 +157,89 @@ class NodeGraphSpec(BaseModel):
             "single implicit default handle."
         ),
     )
+    input_name: str = Field(default="input", description="Stable input port name")
+    output_name: str = Field(default="output", description="Stable output port name")
+    input_label: str = Field(default="Input", description="Input port UI label")
+    output_label: str = Field(default="Output", description="Output port UI label")
+    input_port_field: str | None = Field(
+        default=None,
+        description="Node-data field selecting the effective input type",
+    )
+    output_port_field: str | None = Field(
+        default=None,
+        description="Node-data field selecting the effective output type",
+    )
+    input_port_options: tuple[PortType, ...] = Field(
+        default_factory=tuple,
+        description="Allowed configurable input types",
+    )
+    output_port_options: tuple[PortType, ...] = Field(
+        default_factory=tuple,
+        description="Allowed configurable output types",
+    )
+
+    @model_validator(mode="after")
+    def _validate_ports(self) -> "NodeGraphSpec":
+        """Keep legacy booleans/types and configurable metadata consistent."""
+        if self.has_input != (self.input_port is not None):
+            message = "has_input must match whether input_port is configured"
+            raise ValueError(message)
+        if self.has_output != (self.output_port is not None):
+            message = "has_output must match whether output_port is configured"
+            raise ValueError(message)
+        if bool(self.input_port_field) != bool(self.input_port_options):
+            message = "Configurable input ports require a field and allowed types"
+            raise ValueError(message)
+        if bool(self.output_port_field) != bool(self.output_port_options):
+            message = "Configurable output ports require a field and allowed types"
+            raise ValueError(message)
+        if (
+            self.input_port is not None
+            and self.input_port_options
+            and self.input_port not in self.input_port_options
+        ):
+            message = "Default input_port must be one of input_port_options"
+            raise ValueError(message)
+        if (
+            self.output_port is not None
+            and self.output_port_options
+            and self.output_port not in self.output_port_options
+        ):
+            message = "Default output_port must be one of output_port_options"
+            raise ValueError(message)
+        return self
+
+    @computed_field
+    @property
+    def inputs(self) -> tuple[NodePortSpec, ...]:
+        """Expose the current single input as a named typed-port collection."""
+        if self.input_port is None:
+            return ()
+        return (
+            NodePortSpec(
+                name=self.input_name,
+                label=self.input_label,
+                type=self.input_port,
+                type_field=self.input_port_field,
+                allowed_types=self.input_port_options,
+            ),
+        )
+
+    @computed_field
+    @property
+    def outputs(self) -> tuple[NodePortSpec, ...]:
+        """Expose the current single output as a named typed-port collection."""
+        if self.output_port is None:
+            return ()
+        return (
+            NodePortSpec(
+                name=self.output_name,
+                label=self.output_label,
+                type=self.output_port,
+                type_field=self.output_port_field,
+                allowed_types=self.output_port_options,
+            ),
+        )
 
 
 class NodeCatalogItem(BaseModel):
@@ -266,6 +367,12 @@ class NodeCatalogGraphResponse(BaseModel):
     output_port: PortType | None = Field(default=None, description="Output port type")
     output_handles: list[str] | None = Field(
         default=None, description="Named output branches, if any"
+    )
+    inputs: list[NodePortSpec] = Field(
+        default_factory=list, description="Named typed input ports"
+    )
+    outputs: list[NodePortSpec] = Field(
+        default_factory=list, description="Named typed output ports"
     )
 
 

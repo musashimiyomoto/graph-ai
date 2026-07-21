@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from enums import NodeType
+from enums import NodeType, PortCoercion
 from utils.web_chat import build_web_chat_path
 from utils.webhooks import build_webhook_path
 
@@ -61,6 +61,10 @@ class WorkflowGraphEdge(BaseModel):
     )
     source_handle: str | None = Field(
         default=None, description="Named output handle on the source node"
+    )
+    coercion: PortCoercion | None = Field(
+        default=None,
+        description="Explicit typed-value conversion applied by the edge",
     )
 
 

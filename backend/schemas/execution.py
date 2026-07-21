@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from enums import ExecutionSource, ExecutionStatus, NodeType
+from enums import ExecutionSource, ExecutionStatus, NodeType, PortCoercion
 from schemas.artifact import NodeValuePayload
 
 
@@ -50,11 +50,11 @@ class ExecutionGraphContext(BaseModel):
     nodes_by_id: dict[int, Any] = Field(default=..., description="Nodes map")
     outbound: dict[int, list[int]] = Field(default=..., description="Outbound edges")
     inbound: dict[int, list[int]] = Field(default=..., description="Inbound edges")
-    outbound_edges: dict[int, list[tuple[int, str | None]]] = Field(
-        default=..., description="Outbound edges with their source handle"
+    outbound_edges: dict[int, list[tuple[int, str | None, PortCoercion | None]]] = (
+        Field(default=..., description="Outbound edges with source handle and coercion")
     )
-    inbound_edges: dict[int, list[tuple[int, str | None]]] = Field(
-        default=..., description="Inbound edges with their source handle"
+    inbound_edges: dict[int, list[tuple[int, str | None, PortCoercion | None]]] = Field(
+        default=..., description="Inbound edges with source handle and coercion"
     )
     topological_order: list[int] = Field(default=..., description="Topological order")
 

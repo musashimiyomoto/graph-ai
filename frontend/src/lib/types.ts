@@ -73,6 +73,7 @@ export interface EdgeCreatePayload {
   source_node_id: number
   target_node_id: number
   source_handle?: string | null
+  coercion?: PortCoercion | null
 }
 
 export interface EdgeResponse {
@@ -81,6 +82,7 @@ export interface EdgeResponse {
   source_node_id: number
   target_node_id: number
   source_handle: string | null
+  coercion: PortCoercion | null
 }
 
 export interface Execution {
@@ -132,6 +134,7 @@ export interface WorkflowGraphEdge {
   source_index: number
   target_index: number
   source_handle: string | null
+  coercion?: PortCoercion | null
 }
 
 export interface WorkflowGraphTransfer {
@@ -245,12 +248,33 @@ export type NodeFieldDataSourceKind =
 
 export type PortType = 'text' | 'json' | 'file' | 'list' | 'image' | 'audio' | 'video'
 
+export type PortCoercion =
+  | 'text_to_json'
+  | 'json_to_text'
+  | 'text_to_list'
+  | 'list_to_text'
+  | 'json_to_list'
+  | 'list_to_json'
+  | 'image_to_file'
+  | 'audio_to_file'
+  | 'video_to_file'
+
+export interface NodePortSpec {
+  name: string
+  label: string
+  type: PortType
+  type_field: string | null
+  allowed_types: PortType[]
+}
+
 export interface NodeCatalogGraph {
   has_input: boolean
   has_output: boolean
   input_port: PortType | null
   output_port: PortType | null
   output_handles: string[] | null
+  inputs: NodePortSpec[]
+  outputs: NodePortSpec[]
 }
 
 export interface NodeCatalogFieldUI {

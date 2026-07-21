@@ -63,6 +63,20 @@ class PortType(StrEnum):
     VIDEO = auto()
 
 
+class PortCoercion(StrEnum):
+    """Explicit value conversion stored on a workflow edge."""
+
+    TEXT_TO_JSON = auto()
+    JSON_TO_TEXT = auto()
+    TEXT_TO_LIST = auto()
+    LIST_TO_TEXT = auto()
+    JSON_TO_LIST = auto()
+    LIST_TO_JSON = auto()
+    IMAGE_TO_FILE = auto()
+    AUDIO_TO_FILE = auto()
+    VIDEO_TO_FILE = auto()
+
+
 class InputNodeFormat(StrEnum):
     """Supported input node formats."""
 

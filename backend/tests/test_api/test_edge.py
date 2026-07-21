@@ -4,7 +4,7 @@ from http import HTTPStatus
 
 import pytest
 
-from enums import NodeType
+from enums import NodeType, PortCoercion
 from tests.factories import EdgeFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
@@ -82,6 +82,48 @@ class TestEdgeCreate(BaseTestCase):
             pytest.fail(
                 f"Expected 400 for incompatible ports, got {response.status_code}"
             )
+
+    @pytest.mark.asyncio
+    async def test_convertible_ports_require_explicit_coercion(self) -> None:
+        """A typed mismatch is rejected until the edge declares its conversion."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+        )
+        target = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "Parse",
+                "input_type": "json",
+                "output_type": "json",
+                "code": "output = input",
+            },
+        )
+        payload = {
+            "workflow_id": workflow.id,
+            "source_node_id": source.id,
+            "target_node_id": target.id,
+        }
+
+        missing = await self.client.post(url=self.url, json=payload, headers=headers)
+        if missing.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail("Convertible ports connected without an explicit coercion")
+
+        created = await self.client.post(
+            url=self.url,
+            json={**payload, "coercion": PortCoercion.TEXT_TO_JSON},
+            headers=headers,
+        )
+        data = await self.assert_response_dict(response=created)
+        if data["coercion"] != PortCoercion.TEXT_TO_JSON:
+            pytest.fail("Created edge did not persist its explicit coercion")
 
     @pytest.mark.asyncio
     async def test_duplicate_edge_rejected(self) -> None:

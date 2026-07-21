@@ -20,7 +20,8 @@ import ReactFlow, {
   useReactFlow,
 } from 'reactflow'
 
-import type { NodeCatalogItem } from '../lib/types'
+import { requiredPortCoercion, resolvePortType } from '../lib/ports'
+import type { NodeCatalogItem, PortCoercion } from '../lib/types'
 import { GenericNode } from './CustomNodes'
 import { ContextMenu } from './NodeContextMenu'
 
@@ -40,7 +41,12 @@ interface GraphCanvasProps {
   onSelectionChange: (nodeIds: string[], edgeIds: string[]) => void
   onNodesChange: (changes: NodeChange[]) => void
   onMoveNode: (id: string, x: number, y: number) => void
-  onConnect: (sourceId: string, targetId: string, sourceHandle: string | null) => void
+  onConnect: (
+    sourceId: string,
+    targetId: string,
+    sourceHandle: string | null,
+    coercion: PortCoercion | null,
+  ) => void
   onDeleteEdge: (edgeId: string) => void
   onDropNode: (type: string, position: { x: number; y: number }) => void
   onDeleteNode: (id: string) => void
@@ -103,35 +109,48 @@ function GraphCanvasInner({
     () => Object.fromEntries(nodeCatalog.map((item) => [item.type, item])),
     [nodeCatalog],
   )
-  const nodeTypeById = useMemo(
-    () =>
-      Object.fromEntries(
-        nodes.map((node) => [node.id, String(node.data?.nodeType ?? node.type)]),
-      ),
+  const nodeById = useMemo(
+    () => Object.fromEntries(nodes.map((node) => [node.id, node])),
     [nodes],
   )
 
-  const isValidConnection = useCallback(
-    (connection: Connection): boolean => {
+  const connectionCoercion = useCallback(
+    (connection: Connection): PortCoercion | null | undefined => {
       if (!connection.source || !connection.target) {
-        return false
+        return undefined
       }
       if (connection.source === connection.target) {
-        return false
+        return undefined
       }
-      const sourceGraph = catalogByType[nodeTypeById[connection.source]]?.graph
-      const targetGraph = catalogByType[nodeTypeById[connection.target]]?.graph
+      const sourceNode = nodeById[connection.source]
+      const targetNode = nodeById[connection.target]
+      const sourceType = String(sourceNode?.data?.nodeType ?? sourceNode?.type)
+      const targetType = String(targetNode?.data?.nodeType ?? targetNode?.type)
+      const sourceGraph = catalogByType[sourceType]?.graph
+      const targetGraph = catalogByType[targetType]?.graph
       if (!sourceGraph || !targetGraph) {
-        return true
+        return null
       }
-      const output = sourceGraph.output_port
-      const input = targetGraph.input_port
+      const output = resolvePortType(
+        sourceGraph.outputs[0],
+        (sourceNode?.data as Record<string, unknown>) ?? {},
+      )
+      const input = resolvePortType(
+        targetGraph.inputs[0],
+        (targetNode?.data as Record<string, unknown>) ?? {},
+      )
       if (!output || !input) {
-        return false
+        return undefined
       }
-      return output === input
+      return requiredPortCoercion(output, input)
     },
-    [catalogByType, nodeTypeById],
+    [catalogByType, nodeById],
+  )
+
+  const isValidConnection = useCallback(
+    (connection: Connection): boolean =>
+      connectionCoercion(connection) !== undefined,
+    [connectionCoercion],
   )
 
   const defaultEdgeOptions = useMemo<DefaultEdgeOptions>(
@@ -281,7 +300,15 @@ function GraphCanvasInner({
         }
         onConnect={(params: Connection) => {
           if (params.source && params.target) {
-            onConnect(params.source, params.target, params.sourceHandle)
+            const coercion = connectionCoercion(params)
+            if (coercion !== undefined) {
+              onConnect(
+                params.source,
+                params.target,
+                params.sourceHandle,
+                coercion,
+              )
+            }
           }
         }}
         isValidConnection={isValidConnection}

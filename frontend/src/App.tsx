@@ -20,6 +20,7 @@ import { useNodeCatalog } from './hooks/useNodeCatalog'
 import { useWorkflowState } from './hooks/useWorkflowState'
 import { useWorkflowTransfer } from './hooks/useWorkflowTransfer'
 import { publicWebhookUrl, webChatEmbedSnippet } from './lib/api'
+import { resolvePortType } from './lib/ports'
 import type { ApiError, NodeMeta, NodeType, Workflow } from './lib/types'
 
 interface NodeCreateDraft {
@@ -347,7 +348,10 @@ export function App() {
       map.set(Number(node.id), {
         type: node.type ?? 'unknown',
         label: catalogItem?.label ?? node.type ?? 'Unknown',
-        portType: catalogItem?.graph.output_port ?? null,
+        portType: resolvePortType(
+          catalogItem?.graph.outputs[0],
+          (node.data as Record<string, unknown>) ?? {},
+        ),
         parentNodeId: (node.data?.parentNodeId as number | null | undefined) ?? null,
       })
     }

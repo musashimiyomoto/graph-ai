@@ -13,6 +13,7 @@ from enums.node import (
     LoopMode,
     NodeType,
     OutputNodeFormat,
+    PortCoercion,
     PortType,
     TableSource,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "LoopMode",
     "NodeType",
     "OutputNodeFormat",
+    "PortCoercion",
     "PortType",
     "TableSource",
     "ValidatorType",

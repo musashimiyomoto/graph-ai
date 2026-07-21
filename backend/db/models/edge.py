@@ -42,3 +42,8 @@ class Edge(BaseWithID):
         nullable=True,
         comment="Named output handle on the source node (None = default handle)",
     )
+    coercion: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="Explicit typed-value conversion applied while traversing the edge",
+    )

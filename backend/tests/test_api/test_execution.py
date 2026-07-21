@@ -17,7 +17,7 @@ from db.repositories import (
     NodeRepository,
     WorkflowRepository,
 )
-from enums import ExecutionSource, ExecutionStatus, NodeType
+from enums import ExecutionSource, ExecutionStatus, NodeType, PortCoercion, PortType
 from exceptions import ExecutionGraphValidationError, LLMProviderConnectionError
 from nodes import NodeExecutionResult
 from schemas import ExecutionResponse
@@ -1006,6 +1006,75 @@ class TestNodeExecutionList(BaseTestCase):
         }
         if any(item["output_value"] != expected_value for item in data):
             pytest.fail("Typed node output envelopes were not persisted and exposed")
+
+    @pytest.mark.asyncio
+    async def test_structured_values_cross_explicitly_coerced_edges(self) -> None:
+        """JSON/list values remain structured until a declared text boundary."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        code_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "Items",
+                "input_type": "json",
+                "output_type": "list",
+                "code": "output = input['items']",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=input_node.id,
+            target_node_id=code_node.id,
+            coercion=PortCoercion.TEXT_TO_JSON,
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=code_node.id,
+            target_node_id=output_node.id,
+            coercion=PortCoercion.LIST_TO_TEXT,
+        )
+
+        run_response = await self.client.post(
+            url="/executions",
+            json={
+                "workflow_id": workflow.id,
+                "input_data": {"value": '{"items": [1, 2, 3]}'},
+            },
+            headers=headers,
+        )
+        execution = await self.assert_response_dict(response=run_response)
+        result = await run_execution(self.session, execution["id"])
+
+        if result.output_data != {"value": "[1, 2, 3]"}:
+            pytest.fail("Explicit coercions produced the wrong final output")
+        rows = await NodeExecutionRepository().get_all(
+            session=self.session, execution_id=execution["id"]
+        )
+        code_row = next(row for row in rows if row.node_id == code_node.id)
+        if code_row.output_value is None:
+            pytest.fail("Structured Code output envelope was not persisted")
+        if code_row.output_value.get("kind") != PortType.LIST:
+            pytest.fail("Code list output was hidden inside a text value")
+        if code_row.output_value.get("value") != [1, 2, 3]:
+            pytest.fail("Persisted list output changed its structure")
 
     @pytest.mark.asyncio
     async def test_records_failed_node(self) -> None:
@@ -2590,6 +2659,54 @@ class TestExecutionApproval(BaseTestCase):
             "output": output_node.id,
         }
 
+    async def _create_structured_workflow(self, user_id: int) -> tuple[int, int]:
+        """Create Input -> list Code -> Approval -> Output and return Code ID."""
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user_id
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        code_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "List",
+                "input_type": "text",
+                "output_type": "list",
+                "code": "output = [input]",
+            },
+        )
+        approval_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.APPROVAL,
+            data={"label": "Review", "prompt": "Approve list?"},
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        for source, target, coercion in (
+            (input_node, code_node, None),
+            (code_node, approval_node, PortCoercion.LIST_TO_TEXT),
+            (approval_node, output_node, None),
+        ):
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source.id,
+                target_node_id=target.id,
+                coercion=coercion,
+            )
+        return workflow.id, code_node.id
+
     @pytest.mark.asyncio
     async def test_approve_resumes_without_reexecuting_completed_nodes(
         self, test_engine: AsyncEngine
@@ -2692,6 +2809,45 @@ class TestExecutionApproval(BaseTestCase):
         usage_data = await self.assert_response_dict(response=usage)
         if usage_data["executions"]["used"] != 1:
             pytest.fail("Rejected execution should record usage exactly once")
+
+    @pytest.mark.asyncio
+    async def test_resume_restores_structured_checkpoint(
+        self, test_engine: AsyncEngine
+    ) -> None:
+        """Approval continuation restores a list checkpoint without text coercion."""
+        user, headers = await self.create_user_and_get_token()
+        workflow_id, code_node_id = await self._create_structured_workflow(user["id"])
+        created_response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow_id, "input_data": {"value": "hello"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=created_response)
+        factory = async_sessionmaker(bind=test_engine, expire_on_commit=False)
+
+        waiting = await ExecutionUsecase().run_execution(
+            session=self.session,
+            execution_id=created["id"],
+            session_factory=factory,
+        )
+        if waiting.status is not ExecutionStatus.WAITING_APPROVAL:
+            pytest.fail("Structured workflow did not pause for approval")
+        await self.client.post(
+            url=f"/executions/{created['id']}/approve", headers=headers
+        )
+        finalized = await ExecutionUsecase().run_execution(
+            session=self.session,
+            execution_id=created["id"],
+            session_factory=factory,
+        )
+
+        if finalized.output_data != {"value": '["hello"]'}:
+            pytest.fail("Structured checkpoint was not restored through resume")
+        rows = await NodeExecutionRepository().get_all(
+            session=self.session, execution_id=created["id"]
+        )
+        if sum(row.node_id == code_node_id for row in rows) != 1:
+            pytest.fail("Structured Code checkpoint was re-executed")
 
     @pytest.mark.asyncio
     async def test_rejects_approval_node_on_bypassable_path(self) -> None:

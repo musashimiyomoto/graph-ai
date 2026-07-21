@@ -5,7 +5,14 @@ from nodes.base import NodeExecutionContext, NodeExecutionResult, NodeHandler, O
 from nodes.call_workflow import CallWorkflowNodeHandler
 from nodes.code_transform import CodeTransformNodeHandler
 from nodes.condition import ConditionNodeHandler, evaluate_condition
-from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
+from nodes.definition import (
+    PORT_COERCIONS,
+    NodeDefinition,
+    NodeHandlerDeps,
+    coerce_node_value,
+    ports_compatible,
+    required_port_coercion,
+)
 from nodes.delay import DelayNodeHandler, resolve_wait_until
 from nodes.http_request import HTTPRequestNodeHandler
 from nodes.input import InputNodeHandler
@@ -22,7 +29,9 @@ from nodes.registry import (
     check_edge_ports,
     check_source_handle,
     get_node_definition,
+    get_node_input_port,
     get_node_output_handles,
+    get_node_output_port,
 )
 from nodes.switch import (
     SwitchBranch,
@@ -42,6 +51,7 @@ from nodes.web_search import WebSearchNodeHandler
 
 __all__ = [
     "NODE_DEFINITIONS",
+    "PORT_COERCIONS",
     "ApprovalNodeHandler",
     "ArtifactReference",
     "CallWorkflowNodeHandler",
@@ -77,11 +87,15 @@ __all__ = [
     "build_node_catalog",
     "check_edge_ports",
     "check_source_handle",
+    "coerce_node_value",
     "evaluate_condition",
     "get_node_definition",
+    "get_node_input_port",
     "get_node_output_handles",
+    "get_node_output_port",
     "parse_switch_branches",
     "ports_compatible",
+    "required_port_coercion",
     "resolve_wait_until",
     "select_switch_handle",
     "switch_output_handles",

@@ -5,14 +5,20 @@ node type means declaring a ``NodeDefinition`` next to its handler and adding it
 this list (plus its ``NodeType`` enum member).
 """
 
-from enums import NodeType
+from enums import NodeType, PortCoercion, PortType
 from exceptions import ExecutionGraphValidationError
 from nodes.approval import DEFINITION as APPROVAL_DEFINITION
 from nodes.base import NodeExecutionContext, NodeExecutionResult, NodeHandler
 from nodes.call_workflow import DEFINITION as CALL_WORKFLOW_DEFINITION
 from nodes.code_transform import DEFINITION as CODE_TRANSFORM_DEFINITION
 from nodes.condition import DEFINITION as CONDITION_DEFINITION
-from nodes.definition import NodeDefinition, NodeHandlerDeps, ports_compatible
+from nodes.definition import (
+    NodeDefinition,
+    NodeHandlerDeps,
+    ports_compatible,
+    required_port_coercion,
+    resolve_graph_port,
+)
 from nodes.delay import DEFINITION as DELAY_DEFINITION
 from nodes.http_request import DEFINITION as HTTP_REQUEST_DEFINITION
 from nodes.input import DEFINITION as INPUT_DEFINITION
@@ -104,6 +110,24 @@ def get_node_output_handles(
     return get_node_definition(node_type).graph.output_handles
 
 
+def get_node_input_port(
+    node_type: NodeType, node_data: dict[str, object]
+) -> PortType | None:
+    """Resolve a node's effective input port type."""
+    return resolve_graph_port(
+        get_node_definition(node_type).graph, node_data, output=False
+    )
+
+
+def get_node_output_port(
+    node_type: NodeType, node_data: dict[str, object]
+) -> PortType | None:
+    """Resolve a node's effective output port type."""
+    return resolve_graph_port(
+        get_node_definition(node_type).graph, node_data, output=True
+    )
+
+
 def check_source_handle(
     node_type: NodeType,
     node_data: dict[str, object],
@@ -126,31 +150,61 @@ def check_source_handle(
     )
 
 
-def check_edge_ports(source_type: NodeType, target_type: NodeType) -> str | None:
+def check_edge_ports(
+    source_type: NodeType,
+    target_type: NodeType,
+    *,
+    source_data: dict[str, object] | None = None,
+    target_data: dict[str, object] | None = None,
+    coercion: PortCoercion | None = None,
+) -> str | None:
     """Check whether a source output can feed a target input.
 
     Args:
         source_type: Type of the edge's source node.
         target_type: Type of the edge's target node.
+        source_data: Source node configuration for dynamic ports.
+        target_data: Target node configuration for dynamic ports.
+        coercion: Explicit conversion declared by the edge.
 
     Returns:
         A human-readable reason when the connection is invalid, else None.
 
     """
-    output_port = get_node_definition(source_type).graph.output_port
-    input_port = get_node_definition(target_type).graph.input_port
+    try:
+        output_port = get_node_output_port(source_type, source_data or {})
+        input_port = get_node_input_port(target_type, target_data or {})
+    except ValueError as exc:
+        return str(exc)
 
+    error: str | None
     if output_port is None:
-        return f"Node type '{source_type.value}' has no output port"
-    if input_port is None:
-        return f"Node type '{target_type.value}' has no input port"
-    if not ports_compatible(output_port, input_port):
-        return (
+        error = f"Node type '{source_type.value}' has no output port"
+    elif input_port is None:
+        error = f"Node type '{target_type.value}' has no input port"
+    elif ports_compatible(output_port, input_port, coercion):
+        error = None
+    elif output_port is input_port:
+        error = f"Matching '{output_port.value}' ports must not declare a coercion"
+    elif (required := required_port_coercion(output_port, input_port)) is None:
+        error = (
             f"Incompatible ports: '{source_type.value}' outputs "
             f"'{output_port.value}' but '{target_type.value}' expects "
             f"'{input_port.value}'"
         )
-    return None
+    elif coercion is None:
+        error = (
+            f"Ports require explicit coercion '{required.value}': "
+            f"'{source_type.value}' outputs '{output_port.value}' but "
+            f"'{target_type.value}' expects '{input_port.value}'"
+        )
+    else:
+        error = (
+            f"Edge coercion '{coercion.value}' cannot convert "
+            f"'{output_port.value}' to '{input_port.value}'; "
+            f"expected '{required.value}'"
+        )
+    return error
 
 
 class NodeHandlerRegistry:

@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import type { NodeProps } from 'reactflow'
 import { Handle, Position, useUpdateNodeInternals } from 'reactflow'
 
+import { resolvePortType } from '../lib/ports'
+import type { NodePortSpec } from '../lib/types'
 import { NodeIcon } from './NodeIcons'
 
 interface NodeData {
@@ -15,6 +17,8 @@ interface NodeData {
     has_input: boolean
     has_output: boolean
     output_handles?: string[] | null
+    inputs?: NodePortSpec[]
+    outputs?: NodePortSpec[]
   }
 }
 
@@ -26,6 +30,10 @@ function handleLeft(index: number, count: number): string {
 
 export function GenericNode({ id, data }: NodeProps<NodeData>) {
   const outputHandles = data.graph.output_handles
+  const inputPort = data.graph.inputs?.[0]
+  const outputPort = data.graph.outputs?.[0]
+  const inputType = resolvePortType(inputPort, { ...data })
+  const outputType = resolvePortType(outputPort, { ...data })
   const updateNodeInternals = useUpdateNodeInternals()
 
   // reactflow caches each handle's DOM position for edge routing and only
@@ -53,6 +61,11 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
         <NodeIcon iconKey={data.iconKey} />
         {data.label}
       </div>
+      {inputPort && inputType ? (
+        <div className="text-[10px] leading-none text-[var(--muted)]">
+          ↑ {inputPort.label}: {inputType}
+        </div>
+      ) : null}
       {isLoop ? (
         <div className="flex items-center gap-1 border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
           <span>⤢ Double-click to open</span>
@@ -81,7 +94,14 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
           ))}
         </>
       ) : data.graph.has_output ? (
-        <Handle type="source" position={Position.Bottom} />
+        <>
+          {outputPort && outputType ? (
+            <div className="border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
+              ↓ {outputPort.label}: {outputType}
+            </div>
+          ) : null}
+          <Handle type="source" position={Position.Bottom} />
+        </>
       ) : null}
     </div>
   )

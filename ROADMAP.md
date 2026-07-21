@@ -19,7 +19,8 @@ against the actual code as of this writing (not carried forward from stale notes
   loop editing, a Test Runs / Activity Log split, per-node execution details,
   approval/delay/cancellation controls, React Query for CRUD data, connection
   settings, workflow transfer/duplication, an embeddable web chat, and a global
-  library of 12 workflow templates.
+  library of 12 workflow templates. Named typed ports and explicit edge conversion
+  labels are rendered directly on the canvas.
 - **Execution engine** (`backend/usecases/execution.py`) — 20 registered node types
   (including the two internal Loop boundary types), async execution with
   retries/backoff/reaper, wave-parallel scheduling and live branch propagation,
@@ -35,12 +36,12 @@ against the actual code as of this writing (not carried forward from stale notes
 
 ## Key limitations driving priorities
 
-1. **Graph definitions still expose text-only runtime ports.** Handlers and
-   schedulers exchange a tagged `NodeValue`; complete envelopes now survive JSONB
-   checkpoints and file/image/audio/video values reference tenant-owned artifacts.
-   However, every registered user-facing node still declares text ports. Real
-   structured JSON/list/file/media ports, named handles and explicit coercions are
-   the next steps before non-text values can travel through user-built graphs.
+1. **Ordinary nodes still have one runtime input and output handle.** Definitions
+   now expose named typed ports, edge coercions are explicit and persisted, and
+   JSON/list values travel through execution and checkpoints without string
+   wrapping. The next graph-contract step is multiple independently addressable
+   ordinary handles so nodes can emit text, tables, metadata and attachments at
+   the same time.
 2. **Channels are not plugin-driven.** Input/Output expose a growing format enum,
    while Telegram/email/webhook polling and delivery are separate worker branches.
    Adding Slack, WhatsApp, Discord, or voice this way would multiply orchestration
@@ -89,9 +90,9 @@ against the actual code as of this writing (not carried forward from stale notes
 
 ## Phase 3 — Richer graph & node types ✅ done
 
-- [x] Typed ports (`PortType` = text/json/file/list) with edge-level compatibility
-      checks (`ports_compatible`, currently exact-match only — the intended
-      extension point for a future coercion table).
+- [x] Typed-port foundation (`PortType` = text/json/file/list) with edge-level
+      compatibility checks. Phase 9 extended this baseline with named catalog
+      ports, configurable structured values and persisted explicit coercions.
 - [x] Prompt/Template and HTTP Request nodes; plugin-based node registration
       (`NodeDefinition` + `nodes/registry.py` — one module + one list entry per node).
 - [x] Workflow versioning: each run snapshots the live graph
@@ -921,11 +922,19 @@ for existing text-only workflow versions.
       download link for generic files. Storage adapter, API ownership/quota/dedup/
       expiry, envelope persistence/legacy resume and frontend preview coverage were
       added; all 427 backend and 72 frontend tests pass.
-- [ ] **Real typed ports and explicit coercions** — allow definitions to expose
-      typed named inputs/outputs, validate every edge against a small declared
-      conversion table, and show inserted/required conversions in the editor.
-      JSON/list values remain structured at runtime rather than being hidden in
-      strings; lossy conversions are never implicit.
+- [x] **Real typed ports and explicit coercions** — `NodePortSpec` exposes named
+      typed inputs/outputs through the node catalog, and Code / Transform can be
+      configured for `text`, `json`, or `list` on either side. Every mismatched edge
+      must persist the exact declared `PortCoercion`; edge creation and node updates
+      reject missing, incorrect, or newly invalid conversions. Coercions survive
+      workflow snapshots, export/import, duplication, copy/paste and undo/redo.
+      The editor resolves effective dynamic port types, labels handles, and shows
+      conversions such as `text → json` on the edge. JSON/list outputs remain native
+      tagged `NodeValue` values throughout scheduling and JSONB checkpoints,
+      including resume after Approval, instead of being hidden inside strings.
+      Migration `c3f5a7b9d2e4` adds the persisted edge coercion; all 435 backend and
+      75 frontend tests pass, and a clean `alembic upgrade head`/`alembic check`
+      reports no schema drift.
 - [ ] **Multiple ordinary input/output handles** — generalize dynamic handles past
       routing nodes so Document AI can emit `text`/`tables`/`metadata`, Agent can
       emit `answer`/`trace`, and channel events can expose message/attachments

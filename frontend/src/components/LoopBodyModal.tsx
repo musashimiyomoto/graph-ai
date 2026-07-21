@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Edge, Node as FlowNode, NodeChange } from 'reactflow'
 
-import type { NodeCatalogItem, NodeType } from '../lib/types'
+import type { NodeCatalogItem, NodeType, PortCoercion } from '../lib/types'
 import { GraphCanvas } from './GraphCanvas'
 import { InspectorPanel } from './InspectorPanel'
 import { NodePalette } from './NodePalette'
@@ -24,7 +24,12 @@ interface LoopBodyModalProps {
   onSelectionChange: (nodeIds: string[], edgeIds: string[]) => void
   onNodesChange: (changes: NodeChange[]) => void
   onMoveNode: (id: string, x: number, y: number) => void
-  onConnect: (sourceId: string, targetId: string, sourceHandle: string | null) => void
+  onConnect: (
+    sourceId: string,
+    targetId: string,
+    sourceHandle: string | null,
+    coercion: PortCoercion | null,
+  ) => void
   onDeleteEdge: (edgeId: string) => void
   onDropNode: (type: string, position: { x: number; y: number }) => void
   onDeleteNode: (id: string) => void

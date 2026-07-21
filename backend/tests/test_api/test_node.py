@@ -118,7 +118,7 @@ EXPECTED_FIELDS_BY_TYPE: dict[NodeType, set[str]] = {
     NodeType.CONDITION: {"label", "condition_type", "value", "case_sensitive"},
     NodeType.SWITCH: {"label", "branches", "case_sensitive"},
     NodeType.MCP_TOOL: {"label", "mcp_server_id", "tool_name", "arguments"},
-    NodeType.CODE_TRANSFORM: {"label", "code"},
+    NodeType.CODE_TRANSFORM: {"label", "input_type", "output_type", "code"},
     NodeType.VECTOR_INGEST: {"label", "collection"},
     NodeType.VECTOR_SEARCH: {"label", "collection", "top_k"},
     NodeType.TABLE: {
@@ -988,6 +988,46 @@ class TestNodeUpdate(BaseTestCase):
                 f"Expected 422 when removing a connected Switch branch, got "
                 f"{response.status_code}"
             )
+
+    @pytest.mark.asyncio
+    async def test_cannot_change_a_connected_dynamic_port_type(self) -> None:
+        """Changing a Code port requires reconnecting edges with coercions."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        code_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "Transform",
+                "input_type": "text",
+                "output_type": "text",
+                "code": "output = input",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data=build_node_data(NodeType.OUTPUT),
+        )
+        await EdgeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            source_node_id=code_node.id,
+            target_node_id=output_node.id,
+        )
+
+        response = await self.client.patch(
+            url=f"{self.url}/{code_node.id}",
+            json={"data": {"output_type": "json"}},
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail("Connected Code output type changed without reconnecting")
 
 
 class TestNodeDelete(BaseTestCase):

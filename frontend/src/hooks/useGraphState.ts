@@ -12,6 +12,7 @@ import {
   getNodes,
   updateNode,
 } from '../lib/api'
+import { coercionLabel } from '../lib/ports'
 import type {
   ApiError,
   EdgeCreatePayload,
@@ -19,6 +20,7 @@ import type {
   NodeCreatePayload,
   NodeResponse,
   NodeType,
+  PortCoercion,
 } from '../lib/types'
 import { switchOutputHandles } from '../lib/switchBranches'
 import { type UndoableCommand, useUndoRedo } from './useUndoRedo'
@@ -62,6 +64,7 @@ interface UseGraphStateResult {
     sourceId: string,
     targetId: string,
     sourceHandle: string | null,
+    coercion: PortCoercion | null,
   ) => Promise<void>
   handleDeleteEdge: (edgeId: string) => Promise<void>
   copySelection: () => void
@@ -85,12 +88,19 @@ function toFlowEdge(edge: {
   source_node_id: number
   target_node_id: number
   source_handle?: string | null
+  coercion?: PortCoercion | null
 }): Edge {
+  const label = edge.coercion ? coercionLabel(edge.coercion) : undefined
   return {
     id: String(edge.id),
     source: String(edge.source_node_id),
     target: String(edge.target_node_id),
     sourceHandle: edge.source_handle ?? undefined,
+    data: { coercion: edge.coercion ?? null },
+    label,
+    labelStyle: { fill: '#35ffbc', fontSize: 10 },
+    labelBgStyle: { fill: '#101820', fillOpacity: 0.9 },
+    labelBgPadding: [4, 2],
     type: 'step',
     markerEnd: {
       type: MarkerType.ArrowClosed,
@@ -104,6 +114,11 @@ function toFlowEdge(edge: {
       stroke: '#35ffbc',
     },
   }
+}
+
+function edgeCoercion(edge: Edge): PortCoercion | null {
+  const value = (edge.data as { coercion?: unknown } | undefined)?.coercion
+  return typeof value === 'string' ? (value as PortCoercion) : null
 }
 
 function toFlowNode(
@@ -317,6 +332,7 @@ function makeDeleteNodesCommand(
     originalSource: edge.source,
     originalTarget: edge.target,
     sourceHandle: edge.sourceHandle ?? null,
+    coercion: edgeCoercion(edge),
   }))
 
   let currentIdByOriginal = new Map<string, string>(
@@ -372,6 +388,7 @@ function makeDeleteNodesCommand(
           source_node_id: Number(sourceId),
           target_node_id: Number(targetId),
           source_handle: snapshot.sourceHandle,
+          coercion: snapshot.coercion,
         })
         mutators.setEdges((previous) => [...previous, toFlowEdge(createdEdge)])
       }
@@ -387,6 +404,7 @@ function makeDeleteEdgeCommand(
   const sourceId = edge.source
   const targetId = edge.target
   const sourceHandle = edge.sourceHandle ?? null
+  const coercion = edgeCoercion(edge)
   let currentEdgeId: string | null = edge.id
 
   return {
@@ -406,6 +424,7 @@ function makeDeleteEdgeCommand(
         source_node_id: Number(sourceId),
         target_node_id: Number(targetId),
         source_handle: sourceHandle,
+        coercion,
       })
       currentEdgeId = String(created.id)
       mutators.setEdges((previous) => [...previous, toFlowEdge(created)])
@@ -706,6 +725,7 @@ export function useGraphState({
       sourceId: string,
       targetId: string,
       sourceHandle: string | null,
+      coercion: PortCoercion | null,
     ): Promise<void> => {
       if (!activeWorkflowId) {
         return
@@ -718,6 +738,7 @@ export function useGraphState({
           source_node_id: Number(sourceId),
           target_node_id: Number(targetId),
           source_handle: sourceHandle,
+          coercion,
         },
         { setEdges },
       )
@@ -817,6 +838,7 @@ export function useGraphState({
             source_node_id: Number(newSource),
             target_node_id: Number(newTarget),
             source_handle: edge.sourceHandle ?? null,
+            coercion: edgeCoercion(edge),
           },
           { setEdges },
         )

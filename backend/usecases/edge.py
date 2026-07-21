@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Node
 from db.repositories import EdgeRepository, NodeRepository, WorkflowRepository
-from enums import NodeType
+from enums import NodeType, PortCoercion
 from exceptions import (
     EdgeAlreadyExistsError,
     EdgeHandleMismatchError,
@@ -104,7 +104,11 @@ class EdgeUsecase:
             raise EdgeNodeMismatchError
 
         port_error = check_edge_ports(
-            NodeType(source_node.type), NodeType(target_node.type)
+            NodeType(source_node.type),
+            NodeType(target_node.type),
+            source_data=source_node.data,
+            target_data=target_node.data,
+            coercion=data.coercion,
         )
         if port_error is not None:
             raise EdgePortMismatchError(message=port_error)
@@ -113,7 +117,7 @@ class EdgeUsecase:
 
         try:
             created = await self._edge_repository.create(
-                session=session, data=data.model_dump()
+                session=session, data=data.model_dump(mode="json")
             )
         except IntegrityError as exc:
             await session.rollback()
@@ -206,12 +210,12 @@ class EdgeUsecase:
         """
         edge = await self.get_edge(session=session, edge_id=edge_id, user_id=user_id)
 
-        update_data = data.model_dump(exclude_none=True)
+        update_data = data.model_dump(exclude_unset=True, mode="json")
         if not update_data:
             return edge
 
-        source_node_id = update_data.get("source_node_id", edge.source_node_id)
-        target_node_id = update_data.get("target_node_id", edge.target_node_id)
+        source_node_id = update_data.get("source_node_id") or edge.source_node_id
+        target_node_id = update_data.get("target_node_id") or edge.target_node_id
 
         source_node = await self._node_repository.get_by(
             session=session, id=source_node_id
@@ -231,8 +235,14 @@ class EdgeUsecase:
         ):
             raise EdgeNodeMismatchError
 
+        raw_coercion = update_data.get("coercion", edge.coercion)
+        coercion = PortCoercion(raw_coercion) if raw_coercion is not None else None
         port_error = check_edge_ports(
-            NodeType(source_node.type), NodeType(target_node.type)
+            NodeType(source_node.type),
+            NodeType(target_node.type),
+            source_data=source_node.data,
+            target_data=target_node.data,
+            coercion=coercion,
         )
         if port_error is not None:
             raise EdgePortMismatchError(message=port_error)

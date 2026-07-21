@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 import pytest
 
-from enums import NodeType, PortType
+from enums import NodeType, PortCoercion, PortType
 from exceptions import ExecutionGraphValidationError
 from nodes import (
     NODE_DEFINITIONS,
@@ -18,8 +18,10 @@ from nodes import (
     VectorSearchNodeHandler,
     build_node_catalog,
     check_edge_ports,
+    coerce_node_value,
     get_node_definition,
     ports_compatible,
+    required_port_coercion,
 )
 from nodes.base import NodeExecutionContext
 from tests.fakes import FakeQdrantClient
@@ -77,6 +79,19 @@ class TestCatalogPorts:
         if graph.output_port is not None or graph.input_port is not PortType.TEXT:
             pytest.fail("Output node ports are wrong")
 
+    def test_code_node_exposes_configurable_named_ports(self) -> None:
+        """Catalog clients can resolve Code port names and allowed types."""
+        graph = build_node_catalog()[NodeType.CODE_TRANSFORM].graph
+        if [port.name for port in graph.inputs] != ["input"]:
+            pytest.fail("Code node did not expose its named input")
+        if [port.name for port in graph.outputs] != ["output"]:
+            pytest.fail("Code node did not expose its named output")
+        expected = {PortType.TEXT, PortType.JSON, PortType.LIST}
+        if set(graph.inputs[0].allowed_types) != expected:
+            pytest.fail("Code node input options are incomplete")
+        if set(graph.outputs[0].allowed_types) != expected:
+            pytest.fail("Code node output options are incomplete")
+
 
 class TestPortCompatibility:
     """Tests for port compatibility checks."""
@@ -90,6 +105,28 @@ class TestPortCompatibility:
         """Different port types are not compatible."""
         if ports_compatible(PortType.TEXT, PortType.JSON):
             pytest.fail("Mismatched ports must be incompatible")
+
+    def test_mismatched_ports_require_the_declared_coercion(self) -> None:
+        """A convertible pair is valid only with its exact edge conversion."""
+        required = required_port_coercion(PortType.TEXT, PortType.JSON)
+        if required is not PortCoercion.TEXT_TO_JSON:
+            pytest.fail("text -> json coercion was not declared")
+        if not ports_compatible(
+            PortType.TEXT, PortType.JSON, PortCoercion.TEXT_TO_JSON
+        ):
+            pytest.fail("Declared text -> json coercion should be compatible")
+        if ports_compatible(PortType.TEXT, PortType.JSON, PortCoercion.TEXT_TO_LIST):
+            pytest.fail("A wrong coercion was accepted")
+
+    def test_coercion_preserves_structured_runtime_value(self) -> None:
+        """Edge conversion parses text into JSON rather than hiding it in text."""
+        converted = coerce_node_value(
+            NodeValue.text('{"answer": 42}'), PortCoercion.TEXT_TO_JSON
+        )
+        if converted.kind is not PortType.JSON:
+            pytest.fail("Text was not converted to a JSON NodeValue")
+        if converted.value != {"answer": 42}:
+            pytest.fail("JSON coercion changed the structured value")
 
     def test_text_to_text_edge_ok(self) -> None:
         """A text output feeding a text input is valid."""
@@ -646,6 +683,29 @@ class TestCodeTransformNode:
         )
         if result.output.require_text() != '["a", "b", "c"]':
             pytest.fail("Non-string output should be JSON-encoded")
+
+    @pytest.mark.asyncio
+    async def test_json_input_can_produce_native_list_output(self) -> None:
+        """Configured structured ports expose native values inside the sandbox."""
+        handler = CodeTransformNodeHandler()
+        context = NodeExecutionContext(
+            session=cast("AsyncSession", None),
+            workflow_owner_id=1,
+            node_data={
+                "input_type": "json",
+                "output_type": "list",
+                "code": "output = input['items']",
+            },
+            parent_values=[NodeValue.json({"items": [1, 2, 3]})],
+            input_value=NodeValue.text(""),
+        )
+
+        result = await handler.execute(context)
+
+        if result.output.kind is not PortType.LIST:
+            pytest.fail("Code node serialized its list output to text")
+        if result.output.value != [1, 2, 3]:
+            pytest.fail("Code node changed its structured list output")
 
     @pytest.mark.asyncio
     async def test_missing_code_rejected(self) -> None:
