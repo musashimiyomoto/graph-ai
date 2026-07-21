@@ -18,7 +18,7 @@ class LoopOutputNodeHandler:
 
     async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
         """Join upstream values into this iteration's result."""
-        return NodeExecutionResult(output="\n".join(context.parent_values))
+        return NodeExecutionResult.text(context.joined_parent_text())
 
 
 def _build_handler(deps: NodeHandlerDeps) -> LoopOutputNodeHandler:

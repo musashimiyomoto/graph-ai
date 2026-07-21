@@ -243,7 +243,7 @@ export type NodeFieldDataSourceKind =
   | 'mcp_server'
   | 'mcp_tool'
 
-export type PortType = 'text' | 'json' | 'file' | 'list'
+export type PortType = 'text' | 'json' | 'file' | 'list' | 'image' | 'audio' | 'video'
 
 export interface NodeCatalogGraph {
   has_input: boolean

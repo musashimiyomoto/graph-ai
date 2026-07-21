@@ -115,7 +115,7 @@ class SwitchNodeHandler:
         except SwitchConfigurationError as exc:
             raise ExecutionGraphValidationError(message=str(exc)) from exc
 
-        return NodeExecutionResult(output=text, selected_handle=selected_handle)
+        return NodeExecutionResult.text(text, selected_handle=selected_handle)
 
 
 def _build_handler(deps: NodeHandlerDeps) -> SwitchNodeHandler:

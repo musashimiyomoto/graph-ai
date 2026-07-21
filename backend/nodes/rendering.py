@@ -25,8 +25,8 @@ def upstream_text(context: NodeExecutionContext) -> str:
 
     """
     if context.parent_values:
-        return "\n".join(context.parent_values)
-    return context.input_value
+        return context.joined_parent_text()
+    return context.input_text
 
 
 def _resolve_placeholder(match: re.Match[str], context: NodeExecutionContext) -> str:
@@ -56,7 +56,7 @@ def _resolve_placeholder(match: re.Match[str], context: NodeExecutionContext) ->
             f"has {len(context.parent_values)} live parent value(s)"
         )
         raise ExecutionGraphValidationError(message=message)
-    return context.parent_values[index]
+    return context.parent_values[index].require_text()
 
 
 def render_input(text: str, context: NodeExecutionContext) -> str:

@@ -58,6 +58,9 @@ class PortType(StrEnum):
     JSON = auto()
     FILE = auto()
     LIST = auto()
+    IMAGE = auto()
+    AUDIO = auto()
+    VIDEO = auto()
 
 
 class InputNodeFormat(StrEnum):

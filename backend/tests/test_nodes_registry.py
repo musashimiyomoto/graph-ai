@@ -11,6 +11,7 @@ from nodes import (
     CodeTransformNodeHandler,
     ConditionNodeHandler,
     HTTPRequestNodeHandler,
+    NodeValue,
     SwitchNodeHandler,
     TemplateNodeHandler,
     VectorIngestNodeHandler,
@@ -35,8 +36,8 @@ def _context(
         session=cast("AsyncSession", None),
         workflow_owner_id=1,
         node_data=node_data,
-        parent_values=parent_values,
-        input_value="",
+        parent_values=[NodeValue.text(value) for value in parent_values],
+        input_value=NodeValue.text(""),
     )
 
 
@@ -119,7 +120,7 @@ class TestTemplateNode:
                 parent_values=["hello world"],
             )
         )
-        if result.output != "Summary: hello world":
+        if result.output.require_text() != "Summary: hello world":
             pytest.fail("Template placeholder was not substituted")
 
     @pytest.mark.asyncio
@@ -139,7 +140,7 @@ class TestTemplateNode:
                 parent_values=["hello world"],
             )
         )
-        if result.output != "Summary: hello world":
+        if result.output.require_text() != "Summary: hello world":
             pytest.fail("Whitespace-padded placeholder was not substituted")
 
     @pytest.mark.asyncio
@@ -152,7 +153,7 @@ class TestTemplateNode:
                 parent_values=["hello world"],
             )
         )
-        if result.output != "Summary: hello world":
+        if result.output.require_text() != "Summary: hello world":
             pytest.fail("Uppercase placeholder was not substituted")
 
     @pytest.mark.asyncio
@@ -165,7 +166,7 @@ class TestTemplateNode:
                 parent_values=["first", "second"],
             )
         )
-        if result.output != "second then first":
+        if result.output.require_text() != "second then first":
             pytest.fail("Indexed placeholder did not select the right parent")
 
     @pytest.mark.asyncio
@@ -231,7 +232,7 @@ class TestHTTPRequestNode:
                 parent_values=["payload"],
             )
         )
-        if result.output != "response body":
+        if result.output.require_text() != "response body":
             pytest.fail("Handler did not return the response body")
         if _DummyHTTPClient.calls.get("method") != "POST":
             pytest.fail("Method was not forwarded")
@@ -390,12 +391,10 @@ class TestHTTPRequestNode:
         result = await handler.execute(
             _context({"url": "https://api.example.com", "method": "get"}, [])
         )
-        if (
-            result.output is None
-            or "[truncated: 10050 chars total]" not in result.output
-        ):
+        output = result.output.require_text()
+        if "[truncated: 10050 chars total]" not in output:
             pytest.fail("Truncated response should carry a visible marker")
-        if len(result.output) >= len(_LongResponse.text):
+        if len(output) >= len(_LongResponse.text):
             pytest.fail("Response should actually be truncated, not just marked")
 
 
@@ -412,7 +411,10 @@ class TestConditionNode:
                 parent_values=["hello world"],
             )
         )
-        if result.selected_handle != "true" or result.output != "hello world":
+        if (
+            result.selected_handle != "true"
+            or result.output.require_text() != "hello world"
+        ):
             pytest.fail("Matching contains condition should select true")
 
     @pytest.mark.asyncio
@@ -554,7 +556,7 @@ class TestSwitchNode:
                 parent_values=["HELLO"],
             )
         )
-        if result.selected_handle != "first" or result.output != "HELLO":
+        if result.selected_handle != "first" or result.output.require_text() != "HELLO":
             pytest.fail("Switch should select its first case-insensitive match")
 
     @pytest.mark.asyncio
@@ -612,7 +614,7 @@ class TestCodeTransformNode:
                 parent_values=["hello world"],
             )
         )
-        if result.output != "HELLO WORLD":
+        if result.output.require_text() != "HELLO WORLD":
             pytest.fail("Code node did not transform the input text")
 
     @pytest.mark.asyncio
@@ -629,7 +631,7 @@ class TestCodeTransformNode:
                 parent_values=['{"a": 1, "b": 2}'],
             )
         )
-        if result.output != "3":
+        if result.output.require_text() != "3":
             pytest.fail("Code node could not use the json module")
 
     @pytest.mark.asyncio
@@ -642,7 +644,7 @@ class TestCodeTransformNode:
                 parent_values=["a, b ,c"],
             )
         )
-        if result.output != '["a", "b", "c"]':
+        if result.output.require_text() != '["a", "b", "c"]':
             pytest.fail("Non-string output should be JSON-encoded")
 
     @pytest.mark.asyncio
@@ -727,7 +729,7 @@ class TestVectorIngestNode:
             )
         )
 
-        if result.output != "Ingested 1 chunk(s) into 'docs'.":
+        if result.output.require_text() != "Ingested 1 chunk(s) into 'docs'.":
             pytest.fail("Unexpected confirmation message")
         stored_payload = client.collections["docs"][0][1]
         if stored_payload != {"text": "hello world", "source": "doc-a"}:
@@ -840,7 +842,7 @@ class TestVectorSearchNode:
             _context({"collection": "docs", "top_k": 2}, parent_values=["a query"])
         )
 
-        if result.output != "chunk one\n\n---\n\nchunk two":
+        if result.output.require_text() != "chunk one\n\n---\n\nchunk two":
             pytest.fail("Search did not return the expected chunks in order")
 
     @pytest.mark.asyncio

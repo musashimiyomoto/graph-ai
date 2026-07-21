@@ -1916,7 +1916,7 @@ class TestExecutionRetries(BaseTestCase):
             calls["count"] += 1
             if calls["count"] == 1:
                 raise LLMProviderConnectionError(message="temporary blip")
-            return NodeExecutionResult(output="ok")
+            return NodeExecutionResult.text("ok")
 
         monkeypatch.setattr("nodes.registry.NodeHandlerRegistry.execute", flaky)
         monkeypatch.setattr(
@@ -1948,7 +1948,7 @@ class TestExecutionRetries(BaseTestCase):
             calls["count"] += 1
             if calls["count"] == 1:
                 raise LLMProviderConnectionError(message="temporary blip")
-            return NodeExecutionResult(output="ok")
+            return NodeExecutionResult.text("ok")
 
         monkeypatch.setattr("nodes.registry.NodeHandlerRegistry.execute", flaky)
         monkeypatch.setattr(
@@ -2304,7 +2304,7 @@ class TestExecutionParallel(BaseTestCase):
             """Simulate slow node work so concurrent branches overlap."""
             del args, kwargs
             await asyncio.sleep(0.3)
-            return NodeExecutionResult(output="ok")
+            return NodeExecutionResult.text("ok")
 
         monkeypatch.setattr("nodes.registry.NodeHandlerRegistry.execute", slow_execute)
 
@@ -2444,7 +2444,7 @@ class TestExecutionParallel(BaseTestCase):
             if label in {"A", "B"}:
                 message = f"{label} broke"
                 raise ExecutionGraphValidationError(message=message)
-            return NodeExecutionResult(output="ok")
+            return NodeExecutionResult.text("ok")
 
         monkeypatch.setattr("nodes.registry.NodeHandlerRegistry.execute", fail_ab)
 
@@ -2482,7 +2482,7 @@ class TestExecutionParallel(BaseTestCase):
             if context.node_data.get("label") == "A":
                 message = "A broke"
                 raise ExecutionGraphValidationError(message=message)
-            return NodeExecutionResult(output="ok")
+            return NodeExecutionResult.text("ok")
 
         monkeypatch.setattr("nodes.registry.NodeHandlerRegistry.execute", fail_a)
 

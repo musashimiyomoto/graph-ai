@@ -9,37 +9,50 @@ against the actual code as of this writing (not carried forward from stale notes
 ## Where we are today
 
 - **Backend** — layered `router → usecase → repository`, ARQ + Redis background
-  execution, 8 entities (User, Workflow, Node, Edge, Execution, NodeExecution,
-  LLMProvider, TelegramBot), JWT auth, encrypted secrets (Fernet), typed ports,
-  workflow versioning, Telegram bot polling + reply integration.
+  execution, durable workflow/node execution history and checkpoints, rotating
+  browser sessions, email verification/password recovery, encrypted connection
+  secrets, quotas/audit logs, workflow versioning, and tenant-owned LLM, Telegram,
+  email, PostgreSQL, and MCP connection records.
 - **Frontend** — React 19 + React Flow graph editor, catalog-driven node inspector
-  and node-creation dialog, a Test Runs / Activity Log split (manual test runs vs.
-  real Telegram traffic, sharing per-turn version pill/timestamps/a per-node
-  "Details" expansion via a generic `OutputRenderer`), a single Settings modal
-  (LLM Providers + Telegram Bots + Vector Collections as tabs, on a shared `Modal`
-  primitive), React Query for list+CRUD data fetching, workflow export/import/
-  duplicate + a global template library (Simple/RAG Chatbot, Telegram Echo Bot).
-- **Execution engine** (`backend/usecases/execution.py`) — 6 node types (`INPUT`,
-  `LLM`, `WEB_SEARCH`, `TEMPLATE`, `HTTP_REQUEST`, `OUTPUT`), async execution with
-  retries/backoff/reaper, wave-parallel scheduling, per-node result persistence
-  (`node_executions`), SSE streaming with a polling fallback, workflow versioning
-  with pinned reruns.
+  and node-creation dialog, undo/redo/copy-paste/multi-select/auto-layout, scoped
+  loop editing, a Test Runs / Activity Log split, per-node execution details,
+  approval/delay/cancellation controls, React Query for CRUD data, connection
+  settings, workflow transfer/duplication, an embeddable web chat, and a global
+  library of 12 workflow templates.
+- **Execution engine** (`backend/usecases/execution.py`) — 20 registered node types
+  (including the two internal Loop boundary types), async execution with
+  retries/backoff/reaper, wave-parallel scheduling and live branch propagation,
+  nested loop bodies, durable approval/delay checkpoints, per-node result/token
+  persistence, SSE token streaming, cancellation, and recursively pinned workflow
+  versions for reproducible Call Workflow runs.
 - **Integrations** — multi-provider LLM (Ollama/OpenAI/Anthropic, with the OpenAI
   entry's base URL freely overridable for any OpenAI-API-compatible endpoint)
-  with token streaming; Telegram bots (per-user, encrypted token) that can trigger a
-  workflow from an incoming message and receive the reply, including a manually
-  pinned chat ID for non-Telegram-triggered runs.
+  with token streaming; Qdrant/local embeddings; remote MCP tools; PostgreSQL,
+  Google Sheets and CSV reads; Telegram, email, signed webhook and embeddable web
+  chat channels; cron triggers; outbound webhooks; and Prometheus/Sentry
+  observability.
 
 ## Key limitations driving priorities
 
-1. **Multi-step operations aren't atomic** — a crash between two commits (e.g.
-   register's user+provider, or execution create-then-enqueue) leaves orphaned state
-   that nothing reaps.
-2. **Per-attempt LLM streaming duplicates tokens to the client on retry.**
-3. **No frontend tests**, no undo/redo/multi-select, no React Query — all data
-   fetching is hand-rolled `useState`/`useEffect`.
-4. **Timezone-less datetime columns**, and pinned reruns can't record
-   per-node results for nodes that were since deleted.
+1. **Typed runtime values are not yet persisted or exposed end to end.** Handlers
+   and schedulers now exchange a tagged `NodeValue`, but every registered node
+   still exposes text ports and existing DB/API boundaries deliberately serialize
+   through the legacy text adapter. Artifact storage, envelope persistence and real
+   JSON/file/media ports are the next steps before non-text values can survive
+   checkpoints and travel through user-built graphs.
+2. **Channels are not plugin-driven.** Input/Output expose a growing format enum,
+   while Telegram/email/webhook polling and delivery are separate worker branches.
+   Adding Slack, WhatsApp, Discord, or voice this way would multiply orchestration
+   special cases instead of reusing one trigger/delivery contract.
+3. **There is no durable conversation or workflow state across executions.** A
+   channel can identify the triggering sender/thread, but a workflow cannot read or
+   write scoped memory for that conversation, user, or workflow.
+4. **Templates are static graphs with manual post-creation setup.** They cannot
+   declare required connections/capabilities, guide configuration, ship sample
+   input, validate readiness, or be saved/versioned by users.
+5. **Vector collections are still global/shared.** They need tenant namespaces,
+   source metadata and lifecycle/access controls before knowledge connectors can
+   safely ingest from Drive, Notion, Confluence, or customer channels.
 
 ---
 
@@ -758,8 +771,9 @@ Second pass (closed out everything remaining):
 
 ## Phase 8 — Product roadmap
 
-Pending work is ordered by product value: flagship MVP capabilities first,
-useful workflow extensions next, and routine or post-MVP improvements last.
+This phase contains the first product-expansion wave. Its remaining multimodal
+item is promoted into the typed-artifact work in Phases 9–10 below rather than
+being implemented as an image-only exception in the string runtime.
 
 - [x] **Embeddable web chat** — turn any workflow into a usable website chat
       widget with a public workflow-specific endpoint and streamed responses.
@@ -863,8 +877,8 @@ useful workflow extensions next, and routine or post-MVP improvements last.
       a node ID and require a separate per-iteration continuation model.
       Migration `a1d3f5b7c9e2` adds the node/status enum values and durable
       wake-up timestamps.
-- [ ] **Vision support for the LLM node** — accept images for OCR, document review,
-      screenshot analysis, and other multimodal workflows.
+- **Vision support for the LLM node** — promoted into Phase 10's Multimodal LLM
+  node after Phase 9 makes images and other artifacts first-class graph values.
 - [x] **Email channel** — incoming messages can trigger workflows through IMAP,
       and Email Output can deliver the result through SMTP.
 - [x] **Email Auto-Responder template** — a ready-made
@@ -874,9 +888,219 @@ useful workflow extensions next, and routine or post-MVP improvements last.
 
 ---
 
+## Phase 9 — Typed values, artifacts, conversations, and connector foundation
+
+This phase is the prerequisite for the next product wave. It deliberately builds
+one reusable runtime contract for JSON, files, images, audio, channels, and state
+instead of adding each new capability as a special case in `execution.py` or
+`worker.py`. Work is ordered so each item can ship with backwards compatibility
+for existing text-only workflow versions.
+
+- [x] **First-class `NodeValue` envelope** — `nodes/value.py` now defines validated
+      inline text/JSON/list values and file/image/audio/video values backed by an
+      `ArtifactReference` (ID, MIME type, size, checksum, filename), with
+      provider-neutral provenance metadata and JSON-compatible serialization.
+      `NodeExecutionContext`, `NodeExecutionResult`, both schedulers, branch
+      propagation, Call Workflow, Loop, retries and checkpoint restoration now
+      exchange `NodeValue`; every existing text handler uses explicit text accessors
+      and constructors, so a future structured value cannot be silently coerced.
+      Current execution input/output and `node_executions.output` remain backward-
+      compatible text boundaries through `NodeValue.to_legacy_text()` until the
+      following artifact/persistence work lands. Added unit coverage for envelope
+      validation, structured compatibility serialization, media references and
+      non-text rejection; the complete 418-test backend suite remains green.
+- [ ] **Artifact storage and lifecycle** — add an S3-compatible backend (MinIO in
+      local Docker Compose), tenant-scoped upload/download APIs, signed short-lived
+      URLs, content-addressed deduplication, quotas, retention and garbage
+      collection. `node_executions` stores stable artifact references rather than
+      database-sized blobs, and execution details render safe previews/downloads.
+- [ ] **Real typed ports and explicit coercions** — allow definitions to expose
+      typed named inputs/outputs, validate every edge against a small declared
+      conversion table, and show inserted/required conversions in the editor.
+      JSON/list values remain structured at runtime rather than being hidden in
+      strings; lossy conversions are never implicit.
+- [ ] **Multiple ordinary input/output handles** — generalize dynamic handles past
+      routing nodes so Document AI can emit `text`/`tables`/`metadata`, Agent can
+      emit `answer`/`trace`, and channel events can expose message/attachments
+      without encoding everything into one payload. Snapshot, transfer, undo/redo,
+      Call Workflow, Loop and checkpoint resume must preserve handle schemas.
+- [ ] **Universal trigger event** — introduce a versioned `TriggerEvent` envelope
+      containing channel, external event ID, sender, conversation/thread, locale,
+      message, attachments, timestamp and provider-specific metadata. Every inbound
+      adapter must be idempotent on the external event ID and retain the raw event
+      only according to an explicit privacy/retention policy.
+- [ ] **Plugin-driven channel registry** — define declarative channel/account
+      metadata plus `receive`/`acknowledge`/`deliver` adapter contracts, moving
+      Telegram/email/webhook behavior out of format-specific worker branches.
+      Input/Output field definitions, Settings forms and activity-log labels derive
+      from the same backend catalog, following the existing node registry pattern.
+- [ ] **Durable conversations and scoped state** — add conversation/session records
+      keyed by `(workflow, channel, external_thread)` and a typed state store with
+      `execution`, `conversation`, `user` and `workflow` scopes, TTL, optimistic
+      concurrency and audit history. Public web chat receives an opaque session ID;
+      cross-channel identity linking stays opt-in.
+- [ ] **Unified connections and OAuth foundation** — evolve one-off provider/bot/
+      account settings toward a common encrypted Connection model supporting API
+      keys, OAuth 2.0 authorization-code refresh, health checks, scopes, ownership,
+      last-used metadata and revocation. Existing entities can remain compatibility
+      facades until their adapters migrate.
+- [ ] **Tenant-safe knowledge sources** — namespace Qdrant collections by owner,
+      migrate existing collections without data loss, attach source/revision/ACL
+      metadata, and add retention and incremental-sync primitives needed by Drive,
+      Notion and Confluence connectors.
+- [ ] **Artifact/channel safety and observability** — MIME sniffing, file-size and
+      decompression limits, malware-scanner hook, SSRF/egress policy, per-connection
+      rate limits, redacted logs, channel delivery attempts, artifact bytes and
+      agent/tool costs in usage metrics and audit events.
+
+## Phase 10 — Multimodal, agentic, and data node expansion
+
+The first six items are the flagship set: together they unlock workflows that can
+understand documents and media, act through tools, remember a conversation, and
+return reliable structured results. The remainder broadens production use cases
+without weakening determinism or side-effect controls.
+
+- [ ] **Multimodal LLM** — extend the LLM node to accept text plus image/document/
+      audio parts when the selected model supports them, advertise provider/model
+      capabilities, reject unsupported combinations before execution, stream text
+      normally, and record per-modality usage/cost. Covers screenshot analysis,
+      visual question answering and document review without a separate Vision-only
+      execution path.
+- [ ] **Agent node** — run a bounded LLM → tool → observation loop over an explicit
+      allowlist of MCP tools and Call Workflow targets. Persist a structured step
+      trace, enforce step/time/token/cost limits, support cancellation and retries,
+      and require Approval before configured side-effecting tools. Never allow an
+      agent to discover or invoke an unapproved tenant connection implicitly.
+- [ ] **Structured Output / Extract node** — produce JSON conforming to a user-
+      supplied or UI-built JSON Schema, with deterministic validation, provider
+      native structured-output mode when available, bounded repair retries and
+      separate valid/error handles. Downstream JSON ports receive a real JSON value.
+- [ ] **Memory / State node** — `get`, `set`, `append`, `delete` and semantic-search
+      operations over Phase 9 scopes; configurable TTL and maximum history; atomic
+      compare-and-set for counters/locks; clear provenance in execution details.
+- [ ] **Document AI node** — extract text, layout, tables, key-value fields and page
+      images from PDF/DOCX/scans, with OCR fallback and named outputs. Large jobs run
+      asynchronously with progress events and reuse artifact checksums for caching.
+- [ ] **Speech nodes** — Speech-to-Text with timestamps/language detection/speaker
+      segments and Text-to-Speech with provider/voice selection and streamed audio
+      artifacts, forming the media layer required by voice channels.
+- [ ] **Image Generate / Edit node** — text-to-image, image-to-image, inpainting,
+      size/quality/style controls, provider capability discovery, moderation and
+      artifact outputs suitable for web, chat and CMS delivery.
+- [ ] **Browser / Web Extract node** — fetch or render a page, select structured
+      content, capture screenshots, and optionally execute a tightly bounded set of
+      browser actions. Domain allowlists, private-network blocking, time limits,
+      download limits and an Approval gate protect state-changing interactions.
+- [ ] **Data Mapper node** — select, rename, filter and construct JSON using a safe
+      declarative mapping language (JSONPath/JMESPath-class), replacing common
+      Code/Transform scripts with previewable and schema-checkable transforms.
+- [ ] **Merge / Join / Aggregate node** — deterministically combine parallel values
+      through concat, zip, keyed join, object merge and aggregate modes, including
+      explicit handling for missing/skipped branches and per-input named handles.
+- [ ] **Database Action node** — parameterized INSERT/UPDATE/DELETE and stored-
+      procedure calls on tenant connections, separated from the read-only Table
+      node. Read-only preview, transaction boundaries, row caps, statement policy,
+      idempotency keys and optional Approval are mandatory.
+- [ ] **Guardrail node** — moderation, prompt-injection detection, PII/secret
+      detection and redaction with pass/block/review handles, local rules where
+      practical, explainable findings and configurable fail-open/fail-closed policy.
+- [ ] **Evaluator / Judge node** — score relevance, groundedness, schema compliance,
+      safety or a custom rubric; compare several candidate branches and select a
+      winner while preserving every score for traces and regression datasets.
+- [ ] **Cache / Deduplicate node** — exact or semantic cache with tenant/workflow
+      scope, TTL and inspectable keys; event deduplication; cache-hit metadata; and
+      explicit bypass/invalidation controls so side-effecting branches stay safe.
+- [ ] **File Parse / Chunk node** — deterministic parsers and configurable semantic/
+      fixed/heading-aware chunking with source/page metadata, making RAG ingestion
+      an inspectable graph rather than a single fixed strategy hidden in Vector
+      Ingest.
+
+## Phase 11 — Channel and event expansion
+
+Every integration below must use Phase 9's Connection, TriggerEvent and
+ChannelAdapter contracts, support inbound and outbound delivery where the provider
+allows it, preserve native conversation/thread IDs, ingest attachments as artifacts,
+and expose delivery attempts in the activity log. Priority follows product impact,
+not ease of adding an HTTP wrapper.
+
+- [ ] **Slack** — app mentions, DMs, message shortcuts, reactions and file events;
+      streamed/threaded replies, blocks, files and Approval actions in the source
+      thread.
+- [ ] **WhatsApp Business Cloud** — text, images, documents, locations, contacts and
+      voice notes inbound; templates, interactive buttons/lists and media outbound;
+      webhook signature verification and delivery/read status tracking.
+- [ ] **Voice (Twilio/SIP)** — inbound/outbound calls, streaming STT → workflow → TTS,
+      interruption/barge-in, call transfer, DTMF, recording consent and a hard
+      latency/cost budget per call.
+- [ ] **GitHub and GitLab** — issue, PR/MR, review, comment, push and pipeline events;
+      comments/reviews, labels, statuses and check runs outbound, with installation-
+      scoped permissions and repository allowlists.
+- [ ] **Discord and Microsoft Teams** — DMs/channels, mentions, slash commands,
+      threads and attachments; replies, cards/components and channel-aware rate
+      limiting. Ship as separate adapters over the same contract.
+- [ ] **Google Drive, Dropbox and OneDrive** — file create/update/delete triggers,
+      incremental cursors, revision-aware artifact ingestion and optional generated-
+      file output.
+- [ ] **Notion and Confluence** — page/database/space change triggers, incremental
+      knowledge sync, page creation/update and source ACL metadata preservation.
+- [ ] **Jira and Linear** — issue create/update/comment triggers plus issue, comment,
+      label, assignment and status actions suitable for support/incident templates.
+- [ ] **SMS, push and calendar** — Twilio SMS and mobile/web push delivery; Google/
+      Microsoft calendar event triggers and create/update/cancel actions with
+      timezone-safe scheduling.
+- [ ] **Event buses** — Kafka, NATS, RabbitMQ, SQS and Pub/Sub consumers/producers
+      with durable cursors or acknowledgements, bounded concurrency, dead-letter
+      routing, idempotency and trace/correlation propagation.
+
+## Phase 12 — Use-case templates and template platform
+
+Templates become guided, versioned product entry points rather than static graph
+fixtures. A template is only shipped when its required nodes/channels exist and the
+instantiated workflow can validate its setup before the first real event arrives.
+
+- [ ] **Template manifest and setup wizard** — categories/tags/search, preview graph,
+      required capabilities and connections, setup fields, sample input/expected
+      output, readiness checks, secret/reference binding and a test-run checklist.
+- [ ] **User/team templates** — save any workflow as a private template, version it,
+      duplicate/share it inside a tenant, export/import it safely, and show a diff
+      before applying an upstream template update. Public/community publishing and
+      ratings remain a separate moderated follow-up.
+- [ ] **Invoice Processing Autopilot** — Email/Drive attachment → Document AI →
+      Structured Output → duplicate/policy checks → Approval → Database/ERP action.
+- [ ] **Multimodal Support Desk** — WhatsApp/Slack message plus screenshot →
+      Multimodal LLM + knowledge search → classification → Jira/Linear → threaded
+      response, with escalation through Guardrail/Approval.
+- [ ] **Voice Receptionist** — phone call → Speech-to-Text → Agent with calendar/CRM
+      tools → appointment booking → Text-to-Speech → SMS confirmation.
+- [ ] **AI Pull Request Reviewer** — GitHub/GitLab event → diff/context tools →
+      parallel security/style/test evaluators → Merge → Approval → native review.
+- [ ] **Incident Response Copilot** — PagerDuty/Alertmanager-style webhook → logs/
+      metrics tools → root-cause hypotheses → Slack/Teams war room → Jira incident,
+      with remediation tools always behind Approval.
+- [ ] **Meeting to Actions** — audio/recording → transcription → summary + structured
+      action extraction → Jira/Linear/Calendar assignments → email/chat recap.
+- [ ] **Research Swarm** — schedule → parallel search/browser branches → per-source
+      extraction/summaries → deduplication → evaluator/judge → cited Slack/email
+      digest with source artifacts retained.
+- [ ] **Lead Qualification Agent** — web form/WhatsApp → enrichment tools → structured
+      score → Switch → CRM update, owner notification and calendar invitation.
+- [ ] **Content Studio** — brief → research → draft variants → image generation →
+      brand/safety evaluator → Approval → CMS/social delivery.
+- [ ] **Knowledge Base Sync** — Drive/Notion/Confluence changes → parse → deduplicate
+      → chunk → tenant vector collection → stale-source cleanup and sync report.
+- [ ] **E-commerce Concierge** — web chat/WhatsApp plus product photo → visual and
+      catalog search → recommendation Agent → inventory/order tools → rich reply.
+- [ ] **Compliance Document Reviewer** — file upload → OCR/layout extraction → clause
+      schema → policy RAG → risk evaluator → human review → annotated report.
+
+---
+
 ### North star
 
-From a synchronous, single-user Ollama editor → an asynchronous, multi-provider,
-multi-channel (chat + Telegram + email) orchestration platform with typed data,
-streaming, and production-grade hardening — where the UI stays declarative and
-scales to new node types and integrations without per-feature frontend rewrites.
+From a synchronous, single-user Ollama editor → an asynchronous, multimodal,
+multi-provider and multi-channel orchestration platform where durable workflows can
+understand text/media/documents, maintain scoped memory, use governed tools, pause
+for people, and react to conversations or business events. Typed values, connector
+and channel registries, reproducible versions, observable costs and declarative UI
+metadata keep every new node/integration composable without per-feature engine or
+frontend rewrites.

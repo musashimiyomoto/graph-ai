@@ -89,7 +89,7 @@ class CodeTransformNodeHandler:
             raise ExecutionGraphValidationError(message=message)
 
         input_text = upstream_text(context)
-        return NodeExecutionResult(
+        return NodeExecutionResult.text(
             output=await to_thread(self._run_restricted, code, input_text)
         )
 

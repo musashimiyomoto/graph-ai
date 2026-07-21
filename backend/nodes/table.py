@@ -90,7 +90,7 @@ class TableNodeHandler:
             columns, rows = await self._load_postgres(context, max_rows)
         else:
             columns, rows = await self._load_csv(context, source, max_rows)
-        return NodeExecutionResult(output=_table_json(columns, rows))
+        return NodeExecutionResult.text(_table_json(columns, rows))
 
     @staticmethod
     def _source(context: NodeExecutionContext) -> TableSource:

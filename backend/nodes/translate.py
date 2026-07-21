@@ -73,7 +73,7 @@ class TranslateNodeHandler:
             message = "Translate node requires a supported target_language"
             raise ExecutionGraphValidationError(message=message)
 
-        text = "\n".join(context.parent_values).strip() or context.input_value.strip()
+        text = context.joined_parent_text().strip() or context.input_text.strip()
         if not text:
             message = "Translate node input is empty"
             raise ExecutionGraphValidationError(message=message)
@@ -85,7 +85,7 @@ class TranslateNodeHandler:
             target_language=language_code,
             service=service,
         )
-        return NodeExecutionResult(output=translated)
+        return NodeExecutionResult.text(translated)
 
     @staticmethod
     def _validate_input_size(text: str, service: str) -> None:

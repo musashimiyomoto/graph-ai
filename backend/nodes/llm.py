@@ -120,12 +120,12 @@ class LLMNodeHandler:
         )
         messages = [
             ChatMessage(role="system", content=system_prompt_value),
-            ChatMessage(role="user", content="\n".join(context.parent_values)),
+            ChatMessage(role="user", content=context.joined_parent_text()),
         ]
 
         if context.on_token is None:
             response = await client.chat(model=model, messages=messages, params=params)
-            return NodeExecutionResult(
+            return NodeExecutionResult.text(
                 output=response.message.content, usage=response.usage
             )
 
@@ -140,7 +140,7 @@ class LLMNodeHandler:
                 chunks.append(chunk.delta)
                 await context.on_token(chunk.delta)
 
-        return NodeExecutionResult(output="".join(chunks), usage=usage)
+        return NodeExecutionResult.text(output="".join(chunks), usage=usage)
 
 
 def _build_handler(deps: NodeHandlerDeps) -> LLMNodeHandler:

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
+from nodes import NodeValue
 from nodes.base import NodeExecutionContext
 from nodes.mcp_tool import MCPToolNodeHandler
 
@@ -49,11 +50,11 @@ async def test_mcp_tool_renders_arguments_and_returns_output(
                 "tool_name": "search",
                 "arguments": '{"query":"{{input}}"}',
             },
-            parent_values=["hello"],
-            input_value="",
+            parent_values=[NodeValue.text("hello")],
+            input_value=NodeValue.text(""),
         )
     )
-    if result.output != "tool result":
+    if result.output.require_text() != "tool result":
         pytest.fail("MCP tool output was not returned")
     if captured["arguments"] != {"query": "hello"}:
         pytest.fail("MCP tool arguments were not rendered")

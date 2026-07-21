@@ -68,7 +68,7 @@ class VectorIngestNodeHandler:
             message = "Vector Ingest node received no text to ingest"
             raise ExecutionGraphValidationError(message=message)
 
-        return NodeExecutionResult(
+        return NodeExecutionResult.text(
             output=f"Ingested {chunks_ingested} chunk(s) into '{collection}'."
         )
 

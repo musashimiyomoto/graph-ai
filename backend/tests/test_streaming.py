@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 from testcontainers.redis import RedisContainer
 
 from enums import LLMProviderType
+from nodes import NodeValue
 from nodes import llm as llm_module
 from nodes.base import NodeExecutionContext
 from schemas import ChatStreamChunk, TokenUsage
@@ -106,15 +107,15 @@ class TestNodeTokenSink:
                 session=cast("AsyncSession", None),
                 workflow_owner_id=1,
                 node_data={"llm_provider_id": 1, "model": "m", "system_prompt": ""},
-                parent_values=["prompt"],
-                input_value="prompt",
+                parent_values=[NodeValue.text("prompt")],
+                input_value=NodeValue.text("prompt"),
                 on_token=on_token,
             )
         )
 
         if collected != _DELTAS:
             pytest.fail("Each delta should have been forwarded to on_token")
-        if result.output != "".join(_DELTAS):
+        if result.output.require_text() != "".join(_DELTAS):
             pytest.fail("Node output should be the concatenated deltas")
         if result.usage is None:
             pytest.fail("Node result should carry token usage from the stream")

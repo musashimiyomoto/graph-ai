@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, cast
 import pytest
 
 from exceptions import ExecutionGraphValidationError, TranslationConnectionError
+from nodes import NodeValue
 from nodes.base import NodeExecutionContext
 from nodes.translate import TranslateNodeHandler
 
@@ -65,8 +66,8 @@ def _context(
         session=cast("AsyncSession", None),
         workflow_owner_id=1,
         node_data={"service": service, "target_language": target_language},
-        parent_values=[text],
-        input_value=text,
+        parent_values=[NodeValue.text(text)],
+        input_value=NodeValue.text(text),
     )
 
 
@@ -85,7 +86,7 @@ class TestTranslateNodeHandler:
             _context(service="google", target_language="Spanish")
         )
 
-        if result.output != "Hola mundo":
+        if result.output.require_text() != "Hola mundo":
             pytest.fail("Google response segments were not joined")
         _, params = _TranslationClient.calls[0]
         if params.get("sl") != "auto" or params.get("tl") != "es":
@@ -105,7 +106,7 @@ class TestTranslateNodeHandler:
             _context(service="mymemory", target_language="French")
         )
 
-        if result.output != "Bonjour & bienvenue":
+        if result.output.require_text() != "Bonjour & bienvenue":
             pytest.fail("MyMemory response was not decoded")
         _, params = _TranslationClient.calls[0]
         if params.get("langpair") != "Autodetect|fr":

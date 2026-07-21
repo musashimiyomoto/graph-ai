@@ -6,6 +6,7 @@ from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nodes.value import NodeValue
 from schemas.llm_provider import TokenUsage
 
 OnToken = Callable[[str], Awaitable[None]]
@@ -18,9 +19,23 @@ class NodeExecutionContext:
     session: AsyncSession
     workflow_owner_id: int
     node_data: dict[str, object]
-    parent_values: list[str]
-    input_value: str
+    parent_values: list[NodeValue]
+    input_value: NodeValue
     on_token: OnToken | None = None
+
+    @property
+    def parent_texts(self) -> list[str]:
+        """Return all parent values as validated text values."""
+        return [value.require_text() for value in self.parent_values]
+
+    @property
+    def input_text(self) -> str:
+        """Return the execution input as validated text."""
+        return self.input_value.require_text()
+
+    def joined_parent_text(self, separator: str = "\n") -> str:
+        """Join validated parent text in deterministic parent order."""
+        return separator.join(self.parent_texts)
 
 
 @dataclass(frozen=True)
@@ -37,9 +52,24 @@ class NodeExecutionResult:
     per-run total.
     """
 
-    output: str
+    output: NodeValue
     selected_handle: str | None = None
     usage: TokenUsage | None = None
+
+    @classmethod
+    def text(
+        cls,
+        output: str,
+        *,
+        selected_handle: str | None = None,
+        usage: TokenUsage | None = None,
+    ) -> "NodeExecutionResult":
+        """Build a text result for an existing text-output handler."""
+        return cls(
+            output=NodeValue.text(output),
+            selected_handle=selected_handle,
+            usage=usage,
+        )
 
 
 class NodeHandler(Protocol):

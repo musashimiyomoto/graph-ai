@@ -63,7 +63,7 @@ class HTTPRequestNodeHandler:
         payload = await self._request(
             method=method, url=url, headers=headers, body=body
         )
-        return NodeExecutionResult(output=_truncate_response(payload))
+        return NodeExecutionResult.text(_truncate_response(payload))
 
     def _read_url(self, context: NodeExecutionContext) -> str:
         """Read, render, and validate the target URL.

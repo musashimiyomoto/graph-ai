@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
+from nodes import NodeValue
 from nodes.base import NodeExecutionContext
 from nodes.table import TableNodeHandler, _google_sheets_csv_url
 
@@ -119,13 +120,16 @@ class TestTablePostgres:
                     "query": "SELECT id, name FROM people;",
                     "max_rows": 25,
                 },
-                parent_values=["input"],
-                input_value="input",
+                parent_values=[NodeValue.text("input")],
+                input_value=NodeValue.text("input"),
             )
         )
         if "LIMIT 25" not in connection.query:
             pytest.fail("PostgreSQL query was not bounded")
-        if result.output != '{"columns": ["id", "name"], "rows": [[1, "Ada"]]}':
+        if (
+            result.output.require_text()
+            != '{"columns": ["id", "name"], "rows": [[1, "Ada"]]}'
+        ):
             pytest.fail("PostgreSQL rows were not normalized")
         if not connection.closed:
             pytest.fail("PostgreSQL connection was not closed")

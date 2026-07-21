@@ -34,7 +34,7 @@ class TemplateNodeHandler:
             message = "Template node requires a non-empty template"
             raise ExecutionGraphValidationError(message=message)
 
-        return NodeExecutionResult(output=render_input(template, context))
+        return NodeExecutionResult.text(render_input(template, context))
 
 
 def _build_handler(deps: NodeHandlerDeps) -> TemplateNodeHandler:

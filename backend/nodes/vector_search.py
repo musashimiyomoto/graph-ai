@@ -77,7 +77,7 @@ class VectorSearchNodeHandler:
         response = await client.query_points(
             collection_name=collection, query=vector, limit=top_k
         )
-        return NodeExecutionResult(
+        return NodeExecutionResult.text(
             output="\n\n---\n\n".join(
                 str((point.payload or {}).get("text", "")) for point in response.points
             )

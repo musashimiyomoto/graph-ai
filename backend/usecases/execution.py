@@ -58,6 +58,7 @@ from nodes import (
     NodeExecutionResult,
     NodeHandlerDeps,
     NodeHandlerRegistry,
+    NodeValue,
     OnToken,
     check_edge_ports,
     check_source_handle,
@@ -142,6 +143,11 @@ def _truncate_for_storage(output: str | None) -> str | None:
     return f"{output[:MAX_NODE_OUTPUT_CHARS]}\n\n[truncated: {len(output)} chars total]"
 
 
+def _join_text_values(values: list[NodeValue], separator: str = "\n") -> str:
+    """Join typed text values at an explicitly text-only engine boundary."""
+    return separator.join(value.require_text() for value in values)
+
+
 @dataclass(frozen=True)
 class _GraphSource:
     """A workflow's full node/edge list, across every scope.
@@ -179,7 +185,7 @@ class _NodeRunContext:
     execution_id: int
     workflow_id: int
     workflow_owner_id: int
-    input_value: str
+    input_value: NodeValue
     graph_source: _GraphSource
     called_graphs: dict[int, _LoadedGraph]
     workflow_call_stack: tuple[int, ...]
@@ -195,7 +201,7 @@ class _WaveState:
     as nodes resolve — this just bundles them as one parameter.
     """
 
-    outputs_by_node: dict[int, str]
+    outputs_by_node: dict[int, NodeValue]
     live_by_node: dict[int, bool]
     selected_handle_by_node: dict[int, str | None]
     resolved_by_node: dict[int, "NodeExecution"]
@@ -206,7 +212,7 @@ class _NodeOutcome:
     """Final result of a single node execution."""
 
     status: ExecutionStatus
-    output: str | None = None
+    output: NodeValue | None = None
     error: str | None = None
     iteration: int | None = None
     usage: TokenUsage | None = None
@@ -1604,16 +1610,18 @@ class ExecutionUsecase:
                 session_factory=session_factory,
             )
 
-        return ExecutionOutputPayload(value=outputs_by_node[graph.output_node_id])
+        return ExecutionOutputPayload(
+            value=outputs_by_node[graph.output_node_id].to_legacy_text()
+        )
 
     def _resolve_live_parents(
         self,
         node_id: int,
         graph: ExecutionGraphContext,
-        outputs_by_node: dict[int, str],
+        outputs_by_node: dict[int, NodeValue],
         live_by_node: dict[int, bool],
         selected_handle_by_node: dict[int, str | None],
-    ) -> tuple[list[str], bool]:
+    ) -> tuple[list[NodeValue], bool]:
         """Gather live parent outputs for a node and whether it should run.
 
         A parent edge is live when its source node itself ran (not skipped)
@@ -1633,7 +1641,7 @@ class ExecutionUsecase:
             whether the node has at least one live inbound edge.
 
         """
-        live_outputs: list[str] = []
+        live_outputs: list[NodeValue] = []
         for parent_id, handle in graph.inbound_edges[node_id]:
             if not live_by_node.get(parent_id, False):
                 continue
@@ -1747,7 +1755,7 @@ class ExecutionUsecase:
                 selected_handle = select_switch_handle(node.data, output)
             except ValueError as exc:
                 raise ExecutionGraphValidationError(message=str(exc)) from exc
-        return NodeExecutionResult(
+        return NodeExecutionResult.text(
             output=output,
             selected_handle=selected_handle,
         )
@@ -1758,7 +1766,7 @@ class ExecutionUsecase:
         run_context: _NodeRunContext,
         graph: ExecutionGraphContext,
         iteration: int | None = None,
-    ) -> dict[int, str]:
+    ) -> dict[int, NodeValue]:
         """Run nodes one at a time in topological order.
 
         Args:
@@ -1775,7 +1783,7 @@ class ExecutionUsecase:
             Mapping of node ID to output text.
 
         """
-        outputs_by_node: dict[int, str] = {}
+        outputs_by_node: dict[int, NodeValue] = {}
         live_by_node: dict[int, bool] = {}
         selected_handle_by_node: dict[int, str | None] = {}
         resolved = await self._load_resolved_node_executions(
@@ -1802,7 +1810,7 @@ class ExecutionUsecase:
                 continue
 
             if node_id == graph.input_node_id:
-                parent_values: list[str] = []
+                parent_values: list[NodeValue] = []
                 is_live = True
             else:
                 parent_values, is_live = self._resolve_live_parents(
@@ -1858,7 +1866,7 @@ class ExecutionUsecase:
         state: _WaveState,
         run_context: _NodeRunContext,
         session_factory: async_sessionmaker[AsyncSession],
-    ) -> tuple[list[int], dict[int, list[str]]]:
+    ) -> tuple[list[int], dict[int, list[NodeValue]]]:
         """Split a wave's ready nodes into runnable ones vs. dead-branch skips.
 
         Args:
@@ -1874,7 +1882,7 @@ class ExecutionUsecase:
 
         """
         runnable: list[int] = []
-        parent_values_by_node: dict[int, list[str]] = {}
+        parent_values_by_node: dict[int, list[NodeValue]] = {}
         for node_id in ready:
             existing = state.resolved_by_node.get(node_id)
             if existing is not None:
@@ -1923,7 +1931,7 @@ class ExecutionUsecase:
         run_context: _NodeRunContext,
         graph: ExecutionGraphContext,
         session_factory: async_sessionmaker[AsyncSession],
-    ) -> dict[int, str]:
+    ) -> dict[int, NodeValue]:
         """Run nodes wave by wave, concurrently within each wave.
 
         Each node runs on its own session so concurrent nodes never share one
@@ -1936,7 +1944,7 @@ class ExecutionUsecase:
             session_factory: Factory for per-node sessions.
 
         Returns:
-            Mapping of node ID to output text.
+            Mapping of node ID to typed output value.
 
         Raises:
             BaseError: If any node fails after exhausting its attempts.
@@ -2093,7 +2101,7 @@ class ExecutionUsecase:
         session_factory: async_sessionmaker[AsyncSession],
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> tuple[int, NodeExecutionResult]:
         """Run one node on a dedicated session and return its ID and result.
 
@@ -2122,7 +2130,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
         iteration: int | None = None,
     ) -> NodeExecutionResult:
         """Run one node with retries, persisting its final result.
@@ -2205,7 +2213,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> NodeExecutionResult:
         """Execute a single node attempt within its time budget.
 
@@ -2291,11 +2299,11 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> NodeExecutionResult:
         """Persist a durable Delay checkpoint and release the worker."""
         now = datetime.now(tz=UTC)
-        output = "\n".join(parent_values)
+        output = _join_text_values(parent_values)
         existing = await self._node_execution_repository.get_by(
             session=session,
             execution_id=run_context.execution_id,
@@ -2308,7 +2316,7 @@ class ExecutionUsecase:
             wait_until = resolve_wait_until(node_data=node.data, now=now)
 
         if wait_until <= now:
-            return NodeExecutionResult(output=output)
+            return NodeExecutionResult.text(output)
 
         execution = await self._execution_repository.get_by_id_for_update(
             session=session,
@@ -2366,7 +2374,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> None:
         """Persist an approval checkpoint and stop the current worker attempt."""
         prompt = node.data.get("prompt")
@@ -2386,7 +2394,7 @@ class ExecutionUsecase:
             raise _ExecutionPausedError
 
         now = datetime.now(tz=UTC)
-        approval_input = "\n".join(parent_values)
+        approval_input = _join_text_values(parent_values)
         await self._node_execution_repository.create(
             session=session,
             data={
@@ -2421,7 +2429,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> NodeExecutionResult:
         """Run another owned workflow inline and return its Output value.
 
@@ -2475,7 +2483,7 @@ class ExecutionUsecase:
         nested_context = replace(
             run_context,
             workflow_id=target_id,
-            input_value="\n".join(parent_values),
+            input_value=NodeValue.text(_join_text_values(parent_values)),
             graph_source=loaded.source,
             called_graphs=loaded.called_graphs,
             workflow_call_stack=(*run_context.workflow_call_stack, target_id),
@@ -2492,7 +2500,7 @@ class ExecutionUsecase:
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
-        parent_values: list[str],
+        parent_values: list[NodeValue],
     ) -> NodeExecutionResult:
         """Run a Loop node's body to completion and return its aggregate result.
 
@@ -2533,7 +2541,7 @@ class ExecutionUsecase:
         body_graph = self._build_scoped_graph_context(
             graph_source=run_context.graph_source, parent_node_id=node.id
         )
-        seed_text = "\n".join(parent_values)
+        seed_text = _join_text_values(parent_values)
 
         if node.data.get("mode") == LoopMode.CONDITION.value:
             return await self._run_loop_condition(
@@ -2592,14 +2600,16 @@ class ExecutionUsecase:
         results: list[str] = []
         for index, item in enumerate(bounded_items):
             item_text = item if isinstance(item, str) else json.dumps(item)
-            iteration_context = replace(run_context, input_value=item_text)
+            iteration_context = replace(
+                run_context, input_value=NodeValue.text(item_text)
+            )
             body_outputs = await self._run_nodes_serial(
                 session=session,
                 run_context=iteration_context,
                 graph=body_graph,
                 iteration=index,
             )
-            results.append(body_outputs[body_graph.output_node_id])
+            results.append(body_outputs[body_graph.output_node_id].require_text())
 
         output = json.dumps(results)
         if len(items) > self._max_loop_iterations:
@@ -2607,7 +2617,7 @@ class ExecutionUsecase:
                 f"{output}\n\n[truncated: {len(items)} items total, "
                 f"ran the first {self._max_loop_iterations}]"
             )
-        return NodeExecutionResult(output=output)
+        return NodeExecutionResult.text(output)
 
     async def _run_loop_condition(
         self,
@@ -2651,14 +2661,16 @@ class ExecutionUsecase:
 
         current_text = seed_text
         for index in range(self._max_loop_iterations):
-            iteration_context = replace(run_context, input_value=current_text)
+            iteration_context = replace(
+                run_context, input_value=NodeValue.text(current_text)
+            )
             body_outputs = await self._run_nodes_serial(
                 session=session,
                 run_context=iteration_context,
                 graph=body_graph,
                 iteration=index,
             )
-            current_text = body_outputs[body_graph.output_node_id]
+            current_text = body_outputs[body_graph.output_node_id].require_text()
 
             if evaluate_condition(
                 condition_type=condition_type,
@@ -2666,13 +2678,13 @@ class ExecutionUsecase:
                 case_sensitive=case_sensitive,
                 value=value,
             ):
-                return NodeExecutionResult(output=current_text)
+                return NodeExecutionResult.text(current_text)
 
         marker = (
             f"\n\n[stopped: iteration cap ({self._max_loop_iterations}) reached "
             "without matching the stop condition]"
         )
-        return NodeExecutionResult(output=f"{current_text}{marker}")
+        return NodeExecutionResult.text(f"{current_text}{marker}")
 
     def _read_loop_condition_type(self, node: NodeResponse) -> ConditionType:
         """Read and validate a Loop node's stop condition_type."""
@@ -2724,6 +2736,9 @@ class ExecutionUsecase:
                 inside a Loop node's body) iteration index.
 
         """
+        stored_output = (
+            outcome.output.to_legacy_text() if outcome.output is not None else None
+        )
         await self._node_execution_repository.create(
             session=session,
             data={
@@ -2733,7 +2748,7 @@ class ExecutionUsecase:
                 "node_label": node.data.get("label"),
                 "iteration": outcome.iteration,
                 "status": outcome.status,
-                "output": _truncate_for_storage(outcome.output),
+                "output": _truncate_for_storage(stored_output),
                 "error": outcome.error,
                 "prompt_tokens": (
                     outcome.usage.prompt_tokens if outcome.usage else None
@@ -3121,14 +3136,14 @@ class ExecutionUsecase:
             stack.extend(adjacency[node_id])
         return visited
 
-    def _extract_input_value(self, input_data: dict | None) -> str:
+    def _extract_input_value(self, input_data: dict | None) -> NodeValue:
         """Extract text input for input node execution.
 
         Args:
             input_data: Execution input payload.
 
         Returns:
-            Input value.
+            Typed text input value.
 
         Raises:
             ExecutionInputValidationError: If payload is invalid.
@@ -3143,4 +3158,4 @@ class ExecutionUsecase:
             message = "Execution input_data.value must be a string"
             raise ExecutionInputValidationError(message=message)
 
-        return value
+        return NodeValue.text(value)

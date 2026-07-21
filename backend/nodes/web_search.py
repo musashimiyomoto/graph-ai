@@ -132,12 +132,12 @@ class WebSearchNodeHandler:
         lines = self._format_results(results=results, max_results=max_results)
 
         if lines:
-            return NodeExecutionResult(output="\n\n".join(lines))
-        return NodeExecutionResult(output=f"No search results found for: {query}")
+            return NodeExecutionResult.text("\n\n".join(lines))
+        return NodeExecutionResult.text(f"No search results found for: {query}")
 
     def _build_query(self, context: NodeExecutionContext) -> str:
         """Build query text from node inputs."""
-        query = "\n".join(context.parent_values).strip() or context.input_value.strip()
+        query = context.joined_parent_text().strip() or context.input_text.strip()
         if not query:
             raise ExecutionGraphValidationError(message="Web search query is empty")
         return query

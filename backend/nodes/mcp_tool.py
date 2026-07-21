@@ -64,7 +64,7 @@ class MCPToolNodeHandler:
             tool_name=tool_name,
             arguments=arguments,
         )
-        return NodeExecutionResult(output=output)
+        return NodeExecutionResult.text(output)
 
     def _read_arguments(self, context: NodeExecutionContext) -> dict[str, Any]:
         """Render and parse the JSON object passed as tool arguments."""

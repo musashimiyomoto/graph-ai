@@ -104,7 +104,7 @@ class ConditionNodeHandler:
             value=value if isinstance(value, str) else None,
         )
         branch = ConditionBranch.TRUE if matched else ConditionBranch.FALSE
-        return NodeExecutionResult(output=text, selected_handle=branch.value)
+        return NodeExecutionResult.text(text, selected_handle=branch.value)
 
     def _read_condition_type(self, context: NodeExecutionContext) -> ConditionType:
         """Read and validate the condition type."""
