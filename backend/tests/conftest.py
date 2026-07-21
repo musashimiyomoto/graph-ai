@@ -2,11 +2,14 @@
 
 from collections.abc import AsyncGenerator, Generator
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 import bcrypt
 import pytest
 import pytest_asyncio
+from arq.connections import RedisSettings
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -15,12 +18,113 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
+from xdist.workermanage import WorkerController
 
 from api.dependencies import db, qdrant, queue, quota, rate_limit
 from api.dependencies import redis as redis_dependency
 from db.models import Base
 from main import app
 from settings import postgres_settings
+
+_POSTGRES_URL_WORKER_KEY = "graph_ai_postgres_url"
+_REDIS_URL_WORKER_KEY = "graph_ai_redis_url"
+_shared_postgres_container: PostgresContainer | None = None
+_shared_redis_container: RedisContainer | None = None
+
+
+def _new_postgres_container() -> PostgresContainer:
+    """Build an ephemeral PostgreSQL tuned for test throughput."""
+    return (
+        PostgresContainer(image=postgres_settings.image, driver="asyncpg")
+        .with_command(
+            [
+                "postgres",
+                "-c",
+                "fsync=off",
+                "-c",
+                "full_page_writes=off",
+                "-c",
+                "synchronous_commit=off",
+            ]
+        )
+        .with_kwargs(tmpfs={"/var/lib/postgresql/data": "rw"})
+    )
+
+
+def _new_redis_container() -> RedisContainer:
+    """Build an ephemeral Redis with enough logical worker databases."""
+    return RedisContainer(image="redis:7.4-alpine").with_command(
+        [
+            "redis-server",
+            "--databases",
+            "256",
+            "--save",
+            "",
+            "--appendonly",
+            "no",
+        ]
+    )
+
+
+def pytest_configure_node(node: WorkerController) -> None:
+    """Give xdist workers isolated databases on shared test servers."""
+    global _shared_postgres_container, _shared_redis_container  # noqa: PLW0603
+
+    if _shared_postgres_container is None:
+        container = _new_postgres_container()
+        container.start()
+        _shared_postgres_container = container
+
+    worker_id = node.gateway.id
+    if not worker_id.startswith("gw") or not worker_id[2:].isdigit():
+        message = f"Unexpected xdist worker ID: {worker_id}"
+        raise RuntimeError(message)
+    worker_number = int(worker_id[2:])
+
+    database_name = f"graph_ai_test_{worker_id}"
+    creation = _shared_postgres_container.exec(
+        [
+            "createdb",
+            "-U",
+            _shared_postgres_container.username,
+            database_name,
+        ]
+    )
+    if creation.exit_code != 0:
+        detail = creation.output.decode(errors="replace")
+        message = f"Could not create test database {database_name}: {detail}"
+        raise RuntimeError(message)
+
+    base_url = _shared_postgres_container.get_connection_url()
+    node.workerinput[_POSTGRES_URL_WORKER_KEY] = base_url.rsplit("/", 1)[0] + (
+        f"/{database_name}"
+    )
+
+    if _shared_redis_container is None:
+        redis_container = _new_redis_container()
+        redis_container.start()
+        _shared_redis_container = redis_container
+
+    redis_host = _shared_redis_container.get_container_host_ip()
+    redis_port = _shared_redis_container.get_exposed_port(6379)
+    node.workerinput[_REDIS_URL_WORKER_KEY] = (
+        f"redis://{redis_host}:{redis_port}/{worker_number}"
+    )
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Stop controller-owned data services after every worker has exited."""
+    del config
+    global _shared_postgres_container, _shared_redis_container  # noqa: PLW0603
+
+    if _shared_redis_container is not None:
+        _shared_redis_container.stop()
+        _shared_redis_container = None
+
+    if _shared_postgres_container is not None:
+        _shared_postgres_container.stop()
+        _shared_postgres_container = None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -66,20 +170,78 @@ class _NoopQdrantClient:
         return
 
 
-@pytest_asyncio.fixture(scope="session")
-async def postgres_container() -> AsyncGenerator[PostgresContainer, None]:
-    """Spin up a Postgres container for the test session."""
-    with PostgresContainer(image=postgres_settings.image, driver="asyncpg") as postgres:
-        yield postgres
+@pytest.fixture(scope="session")
+def test_database_url(request: pytest.FixtureRequest) -> Generator[str, None, None]:
+    """Provide a private database URL from serial or controller-owned Postgres."""
+    worker_input = getattr(request.config, "workerinput", None)
+    if isinstance(worker_input, dict):
+        database_url = worker_input.get(_POSTGRES_URL_WORKER_KEY)
+        if not isinstance(database_url, str):
+            message = "xdist controller did not provide a PostgreSQL URL"
+            raise TypeError(message)
+        yield database_url
+        return
+
+    with _new_postgres_container() as postgres:
+        yield postgres.get_connection_url()
+
+
+@pytest.fixture(scope="session")
+def test_redis_url(request: pytest.FixtureRequest) -> Generator[str, None, None]:
+    """Provide an isolated logical Redis database for the current worker."""
+    worker_input = getattr(request.config, "workerinput", None)
+    if isinstance(worker_input, dict):
+        redis_url = worker_input.get(_REDIS_URL_WORKER_KEY)
+        if not isinstance(redis_url, str):
+            message = "xdist controller did not provide a Redis URL"
+            raise TypeError(message)
+        yield redis_url
+        return
+
+    with _new_redis_container() as redis_container:
+        redis_host = redis_container.get_container_host_ip()
+        redis_port = redis_container.get_exposed_port(6379)
+        yield f"redis://{redis_host}:{redis_port}/0"
+
+
+@pytest_asyncio.fixture
+async def test_redis(test_redis_url: str) -> AsyncGenerator[Redis, None]:
+    """Yield a clean real Redis client without starting a per-test container."""
+    client: Redis = Redis.from_url(test_redis_url)
+    await client.flushdb()
+    try:
+        yield client
+    finally:
+        await client.flushdb()
+        await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def test_redis_settings(
+    test_redis_url: str,
+    test_redis: Redis,
+) -> AsyncGenerator[RedisSettings, None]:
+    """Yield ARQ settings for the worker's clean real Redis database."""
+    del test_redis
+    parsed = urlsplit(test_redis_url)
+    if parsed.hostname is None or parsed.port is None:
+        message = f"Invalid test Redis URL: {test_redis_url}"
+        raise ValueError(message)
+    database = int(parsed.path.removeprefix("/") or "0")
+    yield RedisSettings(
+        host=parsed.hostname,
+        port=parsed.port,
+        database=database,
+    )
 
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine(
-    postgres_container: PostgresContainer,
+    test_database_url: str,
 ) -> AsyncGenerator[AsyncEngine, None]:
     """Create one database engine and schema for the entire test session."""
     engine = create_async_engine(
-        url=postgres_container.get_connection_url(),
+        url=test_database_url,
         echo=False,
     )
 

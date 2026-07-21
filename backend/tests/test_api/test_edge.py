@@ -163,6 +163,74 @@ class TestEdgeCreate(BaseTestCase):
             )
 
     @pytest.mark.asyncio
+    async def test_multiple_handles_between_same_nodes_are_distinct(self) -> None:
+        """Default and named target handles persist as separate edges."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+        )
+        target = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.HTTP_REQUEST,
+        )
+
+        created = []
+        for target_handle in (None, "body"):
+            response = await self.client.post(
+                url=self.url,
+                json={
+                    "workflow_id": workflow.id,
+                    "source_node_id": source.id,
+                    "target_node_id": target.id,
+                    "target_handle": target_handle,
+                },
+                headers=headers,
+            )
+            created.append(await self.assert_response_dict(response=response))
+
+        if {edge["target_handle"] for edge in created} != {None, "body"}:
+            pytest.fail("Edges did not preserve their distinct target handles")
+
+    @pytest.mark.asyncio
+    async def test_unknown_target_handle_rejected(self) -> None:
+        """An edge cannot target an input absent from the node definition."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        source = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+        )
+        target = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.HTTP_REQUEST,
+        )
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "source_node_id": source.id,
+                "target_node_id": target.id,
+                "target_handle": "missing",
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.BAD_REQUEST:
+            pytest.fail(
+                f"Expected 400 for unknown target handle, got {response.status_code}"
+            )
+
+    @pytest.mark.asyncio
     async def test_switch_accepts_configured_and_default_handles(self) -> None:
         """Switch edges may use configured branch names or the default fallback."""
         user, headers = await self.create_user_and_get_token()

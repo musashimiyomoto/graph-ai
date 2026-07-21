@@ -64,6 +64,7 @@ interface UseGraphStateResult {
     sourceId: string,
     targetId: string,
     sourceHandle: string | null,
+    targetHandle: string | null,
     coercion: PortCoercion | null,
   ) => Promise<void>
   handleDeleteEdge: (edgeId: string) => Promise<void>
@@ -88,6 +89,7 @@ function toFlowEdge(edge: {
   source_node_id: number
   target_node_id: number
   source_handle?: string | null
+  target_handle?: string | null
   coercion?: PortCoercion | null
 }): Edge {
   const label = edge.coercion ? coercionLabel(edge.coercion) : undefined
@@ -96,6 +98,7 @@ function toFlowEdge(edge: {
     source: String(edge.source_node_id),
     target: String(edge.target_node_id),
     sourceHandle: edge.source_handle ?? undefined,
+    targetHandle: edge.target_handle ?? undefined,
     data: { coercion: edge.coercion ?? null },
     label,
     labelStyle: { fill: '#35ffbc', fontSize: 10 },
@@ -332,6 +335,7 @@ function makeDeleteNodesCommand(
     originalSource: edge.source,
     originalTarget: edge.target,
     sourceHandle: edge.sourceHandle ?? null,
+    targetHandle: edge.targetHandle ?? null,
     coercion: edgeCoercion(edge),
   }))
 
@@ -388,6 +392,7 @@ function makeDeleteNodesCommand(
           source_node_id: Number(sourceId),
           target_node_id: Number(targetId),
           source_handle: snapshot.sourceHandle,
+          target_handle: snapshot.targetHandle,
           coercion: snapshot.coercion,
         })
         mutators.setEdges((previous) => [...previous, toFlowEdge(createdEdge)])
@@ -404,6 +409,7 @@ function makeDeleteEdgeCommand(
   const sourceId = edge.source
   const targetId = edge.target
   const sourceHandle = edge.sourceHandle ?? null
+  const targetHandle = edge.targetHandle ?? null
   const coercion = edgeCoercion(edge)
   let currentEdgeId: string | null = edge.id
 
@@ -424,6 +430,7 @@ function makeDeleteEdgeCommand(
         source_node_id: Number(sourceId),
         target_node_id: Number(targetId),
         source_handle: sourceHandle,
+        target_handle: targetHandle,
         coercion,
       })
       currentEdgeId = String(created.id)
@@ -725,6 +732,7 @@ export function useGraphState({
       sourceId: string,
       targetId: string,
       sourceHandle: string | null,
+      targetHandle: string | null,
       coercion: PortCoercion | null,
     ): Promise<void> => {
       if (!activeWorkflowId) {
@@ -738,6 +746,7 @@ export function useGraphState({
           source_node_id: Number(sourceId),
           target_node_id: Number(targetId),
           source_handle: sourceHandle,
+          target_handle: targetHandle,
           coercion,
         },
         { setEdges },
@@ -838,6 +847,7 @@ export function useGraphState({
             source_node_id: Number(newSource),
             target_node_id: Number(newTarget),
             source_handle: edge.sourceHandle ?? null,
+            target_handle: edge.targetHandle ?? null,
             coercion: edgeCoercion(edge),
           },
           { setEdges },

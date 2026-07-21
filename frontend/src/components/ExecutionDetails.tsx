@@ -70,6 +70,7 @@ function NodeResultRow({
 }) {
   const meta = nodeMetaByNodeId.get(nodeResult.node_id)
   const duration = formatDuration(nodeResult.started_at, nodeResult.finished_at)
+  const outputEntries = Object.entries(nodeResult.output_values ?? {})
 
   return (
     <div className="border-b border-white/10 pb-2 last:border-0 last:pb-0">
@@ -80,7 +81,18 @@ function NodeResultRow({
         <span className={STATUS_COLORS[nodeResult.status]}>{nodeResult.status}</span>
         {duration ? <span>{duration}</span> : null}
       </div>
-      {nodeResult.output !== null || nodeResult.output_value !== null ? (
+      {outputEntries.length > 0 ? (
+        <div className="space-y-2">
+          {outputEntries.map(([handle, typedValue]) => (
+            <div key={handle}>
+              <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                {handle}
+              </div>
+              <OutputRenderer value={null} typedValue={typedValue} />
+            </div>
+          ))}
+        </div>
+      ) : nodeResult.output !== null || nodeResult.output_value !== null ? (
         <OutputRenderer
           value={nodeResult.output}
           typedValue={nodeResult.output_value}

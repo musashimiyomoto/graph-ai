@@ -6,16 +6,13 @@ the three risky seams — Redis job serialization, the worker owning its own DB
 session, and the new CREATED -> SUCCESS contract.
 """
 
-from collections.abc import AsyncGenerator, Sequence
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
-import pytest_asyncio
 from arq import create_pool
 from arq.connections import RedisSettings
 from arq.worker import Function, Worker
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
-from testcontainers.redis import RedisContainer
 
 import worker as worker_module
 from api.dependencies import queue
@@ -25,26 +22,20 @@ from main import app
 from tests.factories import EdgeFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 pytestmark = pytest.mark.committed_db
 
 
 class TestExecutionAsyncDispatch(BaseTestCase):
     """Validate the full enqueue -> worker -> DB round-trip over real Redis."""
 
-    @pytest_asyncio.fixture
-    async def redis_settings(self) -> AsyncGenerator[RedisSettings, None]:
-        """Spin up a throwaway Redis and yield ARQ settings for it."""
-        with RedisContainer() as container:
-            yield RedisSettings(
-                host=container.get_container_host_ip(),
-                port=int(container.get_exposed_port(6379)),
-            )
-
     @pytest.mark.asyncio
     async def test_enqueue_and_worker_run_end_to_end(
         self,
         test_engine: AsyncEngine,
-        redis_settings: RedisSettings,
+        test_redis_settings: RedisSettings,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """POST enqueues, an ARQ burst worker runs it, and the DB reaches SUCCESS."""
@@ -55,7 +46,7 @@ class TestExecutionAsyncDispatch(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
 
         # Point the API's ARQ pool at the throwaway Redis.
-        pool = await create_pool(redis_settings)
+        pool = await create_pool(test_redis_settings)
 
         def override_pool() -> object:
             """Return the real ARQ pool for the API dependency."""
@@ -100,7 +91,7 @@ class TestExecutionAsyncDispatch(BaseTestCase):
         functions = cast("Sequence[Function]", [worker_module.run_execution_task])
         arq_worker = Worker(
             functions=functions,
-            redis_settings=redis_settings,
+            redis_settings=test_redis_settings,
             burst=True,
             poll_delay=0.1,
             handle_signals=False,

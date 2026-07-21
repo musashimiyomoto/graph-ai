@@ -1,7 +1,7 @@
 """Base contracts for execution node handlers."""
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,12 +21,21 @@ class NodeExecutionContext:
     node_data: dict[str, object]
     parent_values: list[NodeValue]
     input_value: NodeValue
+    values_by_input: dict[str, tuple[NodeValue, ...]] = field(default_factory=dict)
+    primary_input_name: str = "input"
     on_token: OnToken | None = None
+
+    @property
+    def primary_parent_values(self) -> tuple[NodeValue, ...]:
+        """Return values delivered to the primary ordinary input handle."""
+        if not self.values_by_input:
+            return tuple(self.parent_values)
+        return self.values_for_input(self.primary_input_name)
 
     @property
     def parent_texts(self) -> list[str]:
         """Return all parent values as validated text values."""
-        return [value.require_text() for value in self.parent_values]
+        return [value.require_text() for value in self.primary_parent_values]
 
     @property
     def input_text(self) -> str:
@@ -36,6 +45,10 @@ class NodeExecutionContext:
     def joined_parent_text(self, separator: str = "\n") -> str:
         """Join validated parent text in deterministic parent order."""
         return separator.join(self.parent_texts)
+
+    def values_for_input(self, name: str) -> tuple[NodeValue, ...]:
+        """Return values delivered to one declared ordinary input handle."""
+        return self.values_by_input.get(name, ())
 
 
 @dataclass(frozen=True)
@@ -55,6 +68,7 @@ class NodeExecutionResult:
     output: NodeValue
     selected_handle: str | None = None
     usage: TokenUsage | None = None
+    outputs: dict[str, NodeValue] = field(default_factory=dict)
 
     @classmethod
     def text(
@@ -70,6 +84,16 @@ class NodeExecutionResult:
             selected_handle=selected_handle,
             usage=usage,
         )
+
+    def value_for_output(self, handle: str | None) -> NodeValue:
+        """Resolve the primary output or one named additional output."""
+        if handle is None:
+            return self.output
+        value = self.outputs.get(handle)
+        if value is None:
+            message = f"Node result did not produce output handle '{handle}'"
+            raise ValueError(message)
+        return value
 
 
 class NodeHandler(Protocol):

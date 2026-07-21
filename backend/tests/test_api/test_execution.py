@@ -3,7 +3,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 import httpx
 import pytest
@@ -1075,6 +1075,145 @@ class TestNodeExecutionList(BaseTestCase):
             pytest.fail("Code list output was hidden inside a text value")
         if code_row.output_value.get("value") != [1, 2, 3]:
             pytest.fail("Persisted list output changed its structure")
+
+    @pytest.mark.asyncio
+    async def test_http_multi_handles_flow_and_persist(  # noqa: C901
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ordinary output handles all stay live and retain typed checkpoints."""
+
+        class Response:
+            """Fixed successful HTTP response with all exposed output values."""
+
+            text = "response body"
+            status_code = 201
+            headers: ClassVar[dict[str, str]] = {"X-Test": "yes"}
+
+            def raise_for_status(self) -> None:
+                """Keep the fixed response successful."""
+
+        class Client:
+            """Minimal async client returning the fixed response."""
+
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                """Accept the production client's constructor arguments."""
+
+            async def __aenter__(self) -> Self:
+                """Enter the async context."""
+                return self
+
+            async def __aexit__(self, *args: object) -> bool:
+                """Exit the async context."""
+                return False
+
+            async def request(self, *args: object, **kwargs: object) -> Response:
+                """Return the fixed response."""
+                del args, kwargs
+                return Response()
+
+        async def allow_url(url: str) -> None:
+            """Bypass DNS-based SSRF checks for the fixed test URL."""
+            del url
+
+        monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", Client)
+        monkeypatch.setattr("nodes.http_request.blocked_url_reason", allow_url)
+
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session, owner_id=user["id"]
+        )
+        input_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.INPUT,
+            data={"label": "Input", "format": "txt"},
+        )
+        request_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.HTTP_REQUEST,
+            data={
+                "label": "Request",
+                "method": "post",
+                "url": "https://api.example.com/{{input}}",
+            },
+        )
+        body_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.TEMPLATE,
+            data={"label": "Body", "template": "body={{input}}"},
+        )
+        status_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "Status",
+                "input_type": "json",
+                "output_type": "text",
+                "code": "output = input",
+            },
+        )
+        headers_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.CODE_TRANSFORM,
+            data={
+                "label": "Header",
+                "input_type": "json",
+                "output_type": "text",
+                "code": "output = input['X-Test']",
+            },
+        )
+        output_node = await NodeFactory.create_async(
+            session=self.session,
+            workflow_id=workflow.id,
+            type=NodeType.OUTPUT,
+            data={"label": "Output", "format": "txt"},
+        )
+        edges = (
+            (input_node.id, request_node.id, None, None),
+            (input_node.id, request_node.id, None, "body"),
+            (request_node.id, body_node.id, None, None),
+            (request_node.id, status_node.id, "status", None),
+            (request_node.id, headers_node.id, "headers", None),
+            (body_node.id, output_node.id, None, None),
+            (status_node.id, output_node.id, None, None),
+            (headers_node.id, output_node.id, None, None),
+        )
+        for source_id, target_id, source_handle, target_handle in edges:
+            await EdgeFactory.create_async(
+                session=self.session,
+                workflow_id=workflow.id,
+                source_node_id=source_id,
+                target_node_id=target_id,
+                source_handle=source_handle,
+                target_handle=target_handle,
+            )
+
+        response = await self.client.post(
+            url="/executions",
+            json={"workflow_id": workflow.id, "input_data": {"value": "query"}},
+            headers=headers,
+        )
+        created = await self.assert_response_dict(response=response)
+        result = await run_execution(self.session, created["id"])
+        if result.output_data != {"value": "body=response body\n201\nyes"}:
+            pytest.fail("Multi-output values did not all reach the final output")
+
+        response = await self.client.get(
+            url=f"/executions/{created['id']}/nodes", headers=headers
+        )
+        rows = await self.assert_response_list(response=response)
+        request_row = next(row for row in rows if row["node_id"] == request_node.id)
+        output_values = request_row["output_values"]
+        if set(output_values) != {"body", "status", "headers"}:
+            pytest.fail("Named outputs were not persisted by handle")
+        if output_values["status"]["kind"] != PortType.JSON:
+            pytest.fail("Status output lost its JSON type in the checkpoint")
+        if output_values["headers"]["value"] != {"X-Test": "yes"}:
+            pytest.fail("Headers output changed in the checkpoint")
 
     @pytest.mark.asyncio
     async def test_records_failed_node(self) -> None:

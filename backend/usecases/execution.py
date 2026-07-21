@@ -68,9 +68,11 @@ from nodes import (
     NodeValue,
     OnToken,
     check_edge_ports,
-    check_source_handle,
     coerce_node_value,
     evaluate_condition,
+    get_node_definition,
+    get_node_output_handles,
+    get_node_output_port,
     resolve_wait_until,
     select_switch_handle,
 )
@@ -91,7 +93,7 @@ from usecases.usage import UsageUsecase
 
 logger = logging.getLogger(__name__)
 
-type _RuntimeEdge = tuple[int, str | None, PortCoercion | None]
+type _RuntimeEdge = tuple[int, str | None, str | None, PortCoercion | None]
 
 # Publishes a (execution_id, node_id, token delta) for live streaming.
 TokenPublisher = Callable[[int, int, str], Awaitable[None]]
@@ -212,6 +214,7 @@ class _WaveState:
     """
 
     outputs_by_node: dict[int, NodeValue]
+    named_outputs_by_node: dict[int, dict[str, NodeValue]]
     live_by_node: dict[int, bool]
     selected_handle_by_node: dict[int, str | None]
     resolved_by_node: dict[int, "NodeExecution"]
@@ -223,6 +226,7 @@ class _NodeOutcome:
 
     status: ExecutionStatus
     output: NodeValue | None = None
+    outputs: dict[str, NodeValue] | None = None
     error: str | None = None
     iteration: int | None = None
     usage: TokenUsage | None = None
@@ -1624,14 +1628,15 @@ class ExecutionUsecase:
             value=outputs_by_node[graph.output_node_id].to_legacy_text()
         )
 
-    def _resolve_live_parents(
+    def _resolve_live_parents(  # noqa: PLR0913 - scheduler state is map-based
         self,
         node_id: int,
         graph: ExecutionGraphContext,
         outputs_by_node: dict[int, NodeValue],
+        named_outputs_by_node: dict[int, dict[str, NodeValue]],
         live_by_node: dict[int, bool],
         selected_handle_by_node: dict[int, str | None],
-    ) -> tuple[list[NodeValue], bool]:
+    ) -> tuple[list[NodeValue], dict[str, tuple[NodeValue, ...]], bool]:
         """Gather live parent outputs for a node and whether it should run.
 
         A parent edge is live when its source node itself ran (not skipped)
@@ -1643,22 +1648,53 @@ class ExecutionUsecase:
             node_id: Node whose inputs are being resolved.
             graph: Validated graph context.
             outputs_by_node: Outputs recorded so far.
+            named_outputs_by_node: Additional ordinary outputs by source node.
             live_by_node: Whether each already-resolved node ran (vs skipped).
             selected_handle_by_node: Branch handle selected by each node, if any.
 
         Returns:
-            The live parent outputs (in deterministic parent-id order), and
-            whether the node has at least one live inbound edge.
+            The live parent outputs, values grouped by target handle, and whether
+            the node has at least one live inbound edge.
 
         """
         live_outputs: list[NodeValue] = []
-        for parent_id, handle, coercion in graph.inbound_edges[node_id]:
+        grouped: dict[str, list[NodeValue]] = {}
+        target_ports = get_node_definition(graph.nodes_by_id[node_id].type).graph.inputs
+        primary_input_name = target_ports[0].name if target_ports else "input"
+        for parent_id, source_handle, target_handle, coercion in graph.inbound_edges[
+            node_id
+        ]:
             if not live_by_node.get(parent_id, False):
                 continue
-            if handle is not None and handle != selected_handle_by_node.get(parent_id):
+            parent = graph.nodes_by_id[parent_id]
+            routing_handles = get_node_output_handles(parent.type, parent.data)
+            if (
+                routing_handles is not None
+                and source_handle != selected_handle_by_node.get(parent_id)
+            ):
                 continue
-            live_outputs.append(coerce_node_value(outputs_by_node[parent_id], coercion))
-        return live_outputs, bool(live_outputs)
+            if source_handle is None or routing_handles is not None:
+                source_value = outputs_by_node[parent_id]
+            else:
+                source_value = named_outputs_by_node.get(parent_id, {}).get(
+                    source_handle
+                )
+                if source_value is None:
+                    raise ExecutionGraphValidationError(
+                        message=(
+                            f"Node {parent_id} did not produce output handle "
+                            f"'{source_handle}'"
+                        )
+                    )
+            value = coerce_node_value(source_value, coercion)
+            live_outputs.append(value)
+            input_name = target_handle or primary_input_name
+            grouped.setdefault(input_name, []).append(value)
+        return (
+            live_outputs,
+            {name: tuple(values) for name, values in grouped.items()},
+            bool(live_outputs),
+        )
 
     async def _record_skip(
         self,
@@ -1743,6 +1779,19 @@ class ExecutionUsecase:
         node_execution: "NodeExecution",
     ) -> NodeExecutionResult:
         """Rebuild an in-memory result from a durable successful checkpoint."""
+        output_values: dict[str, NodeValue] = {}
+        if node_execution.output_values is not None:
+            try:
+                output_values = {
+                    name: NodeValue.from_payload(payload)
+                    for name, payload in node_execution.output_values.items()
+                }
+            except (TypeError, ValueError) as exc:
+                raise ExecutionGraphValidationError(
+                    message="Stored node output handle envelopes are invalid"
+                ) from exc
+        primary_ports = get_node_definition(node.type).graph.outputs
+        primary_name = primary_ports[0].name if primary_ports else "output"
         if node_execution.output_value is not None:
             try:
                 output_value = NodeValue.from_payload(node_execution.output_value)
@@ -1750,8 +1799,13 @@ class ExecutionUsecase:
                 raise ExecutionGraphValidationError(
                     message="Stored node output envelope is invalid"
                 ) from exc
+        elif primary_name in output_values:
+            output_value = output_values[primary_name]
         else:
             output_value = NodeValue.text(node_execution.output or "")
+        additional_outputs = {
+            name: value for name, value in output_values.items() if name != primary_name
+        }
         selected_handle: str | None = None
         if node.type is NodeType.CONDITION:
             output = output_value.require_text()
@@ -1778,6 +1832,7 @@ class ExecutionUsecase:
         return NodeExecutionResult(
             output=output_value,
             selected_handle=selected_handle,
+            outputs=additional_outputs,
         )
 
     async def _run_nodes_serial(
@@ -1804,6 +1859,7 @@ class ExecutionUsecase:
 
         """
         outputs_by_node: dict[int, NodeValue] = {}
+        named_outputs_by_node: dict[int, dict[str, NodeValue]] = {}
         live_by_node: dict[int, bool] = {}
         selected_handle_by_node: dict[int, str | None] = {}
         resolved = await self._load_resolved_node_executions(
@@ -1825,18 +1881,21 @@ class ExecutionUsecase:
                         node=node, node_execution=existing
                     )
                     outputs_by_node[node_id] = restored.output
+                    named_outputs_by_node[node_id] = restored.outputs
                     live_by_node[node_id] = True
                     selected_handle_by_node[node_id] = restored.selected_handle
                 continue
 
             if node_id == graph.input_node_id:
                 parent_values: list[NodeValue] = []
+                values_by_input: dict[str, tuple[NodeValue, ...]] = {}
                 is_live = True
             else:
-                parent_values, is_live = self._resolve_live_parents(
+                parent_values, values_by_input, is_live = self._resolve_live_parents(
                     node_id=node_id,
                     graph=graph,
                     outputs_by_node=outputs_by_node,
+                    named_outputs_by_node=named_outputs_by_node,
                     live_by_node=live_by_node,
                     selected_handle_by_node=selected_handle_by_node,
                 )
@@ -1858,6 +1917,7 @@ class ExecutionUsecase:
                     run_context=run_context,
                     node=node,
                     parent_values=parent_values,
+                    values_by_input=values_by_input,
                     iteration=iteration,
                 )
             except BaseError:
@@ -1873,6 +1933,7 @@ class ExecutionUsecase:
                     )
                 raise
             outputs_by_node[node_id] = result.output
+            named_outputs_by_node[node_id] = result.outputs
             live_by_node[node_id] = True
             selected_handle_by_node[node_id] = result.selected_handle
 
@@ -1886,7 +1947,11 @@ class ExecutionUsecase:
         state: _WaveState,
         run_context: _NodeRunContext,
         session_factory: async_sessionmaker[AsyncSession],
-    ) -> tuple[list[int], dict[int, list[NodeValue]]]:
+    ) -> tuple[
+        list[int],
+        dict[int, list[NodeValue]],
+        dict[int, dict[str, tuple[NodeValue, ...]]],
+    ]:
         """Split a wave's ready nodes into runnable ones vs. dead-branch skips.
 
         Args:
@@ -1903,6 +1968,7 @@ class ExecutionUsecase:
         """
         runnable: list[int] = []
         parent_values_by_node: dict[int, list[NodeValue]] = {}
+        values_by_input_by_node: dict[int, dict[str, tuple[NodeValue, ...]]] = {}
         for node_id in ready:
             existing = state.resolved_by_node.get(node_id)
             if existing is not None:
@@ -1915,24 +1981,28 @@ class ExecutionUsecase:
                         node_execution=existing,
                     )
                     state.outputs_by_node[node_id] = restored.output
+                    state.named_outputs_by_node[node_id] = restored.outputs
                     state.live_by_node[node_id] = True
                     state.selected_handle_by_node[node_id] = restored.selected_handle
                 continue
 
             if node_id == graph.input_node_id:
                 parent_values_by_node[node_id] = []
+                values_by_input_by_node[node_id] = {}
                 runnable.append(node_id)
                 continue
 
-            parent_values, is_live = self._resolve_live_parents(
+            parent_values, values_by_input, is_live = self._resolve_live_parents(
                 node_id=node_id,
                 graph=graph,
                 outputs_by_node=state.outputs_by_node,
+                named_outputs_by_node=state.named_outputs_by_node,
                 live_by_node=state.live_by_node,
                 selected_handle_by_node=state.selected_handle_by_node,
             )
             if is_live:
                 parent_values_by_node[node_id] = parent_values
+                values_by_input_by_node[node_id] = values_by_input
                 runnable.append(node_id)
             else:
                 state.live_by_node[node_id] = False
@@ -1943,7 +2013,7 @@ class ExecutionUsecase:
                     node=graph.nodes_by_id[node_id],
                 )
 
-        return runnable, parent_values_by_node
+        return runnable, parent_values_by_node, values_by_input_by_node
 
     async def _run_nodes_parallel(
         self,
@@ -1981,6 +2051,7 @@ class ExecutionUsecase:
         )
         state = _WaveState(
             outputs_by_node={},
+            named_outputs_by_node={},
             live_by_node={},
             selected_handle_by_node={},
             resolved_by_node=resolved,
@@ -1988,7 +2059,11 @@ class ExecutionUsecase:
         ready = [node_id for node_id, degree in indegree.items() if degree == 0]
 
         while ready:
-            runnable, parent_values_by_node = await self._prepare_wave(
+            (
+                runnable,
+                parent_values_by_node,
+                values_by_input_by_node,
+            ) = await self._prepare_wave(
                 ready=ready,
                 graph=graph,
                 state=state,
@@ -2003,6 +2078,7 @@ class ExecutionUsecase:
                         run_context=run_context,
                         node=graph.nodes_by_id[node_id],
                         parent_values=parent_values_by_node[node_id],
+                        values_by_input=values_by_input_by_node[node_id],
                     )
                     for node_id in runnable
                 ),
@@ -2015,6 +2091,7 @@ class ExecutionUsecase:
                     continue
                 node_id, node_result = result
                 state.outputs_by_node[node_id] = node_result.output
+                state.named_outputs_by_node[node_id] = node_result.outputs
                 state.live_by_node[node_id] = True
                 state.selected_handle_by_node[node_id] = node_result.selected_handle
 
@@ -2122,6 +2199,7 @@ class ExecutionUsecase:
         run_context: _NodeRunContext,
         node: NodeResponse,
         parent_values: list[NodeValue],
+        values_by_input: dict[str, tuple[NodeValue, ...]],
     ) -> tuple[int, NodeExecutionResult]:
         """Run one node on a dedicated session and return its ID and result.
 
@@ -2130,6 +2208,7 @@ class ExecutionUsecase:
             run_context: Loop-invariant run context.
             node: Node to execute.
             parent_values: Outputs of the node's parents.
+            values_by_input: Parent values grouped by declared target handle.
 
         Returns:
             The node ID paired with its execution result.
@@ -2141,16 +2220,18 @@ class ExecutionUsecase:
                 run_context=run_context,
                 node=node,
                 parent_values=parent_values,
+                values_by_input=values_by_input,
             )
 
         return node.id, result
 
-    async def _run_node(
+    async def _run_node(  # noqa: PLR0913 - execution and resolved-input contexts
         self,
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
         parent_values: list[NodeValue],
+        values_by_input: dict[str, tuple[NodeValue, ...]],
         iteration: int | None = None,
     ) -> NodeExecutionResult:
         """Run one node with retries, persisting its final result.
@@ -2160,6 +2241,7 @@ class ExecutionUsecase:
             run_context: Loop-invariant run context.
             node: Node to execute.
             parent_values: Outputs of the node's parents.
+            values_by_input: Parent values grouped by declared target handle.
             iteration: The loop iteration this node belongs to, if any — see
                 `_run_nodes_serial`. `None` for a top-level node.
 
@@ -2178,7 +2260,9 @@ class ExecutionUsecase:
                     run_context=run_context,
                     node=node,
                     parent_values=parent_values,
+                    values_by_input=values_by_input,
                 )
+                self._validate_node_result(node=node, result=result)
             except BaseError as exc:
                 if exc.retryable and attempt < self._max_node_attempts:
                     logger.warning(
@@ -2218,6 +2302,7 @@ class ExecutionUsecase:
                 outcome=_NodeOutcome(
                     status=ExecutionStatus.SUCCESS,
                     output=result.output,
+                    outputs=result.outputs,
                     iteration=iteration,
                     usage=result.usage,
                 ),
@@ -2228,12 +2313,67 @@ class ExecutionUsecase:
         message = f"Node {node.id} exhausted retries"
         raise ExecutionGraphValidationError(message=message)
 
+    def _validate_node_result(
+        self,
+        node: NodeResponse,
+        result: NodeExecutionResult,
+    ) -> None:
+        """Require handler outputs to match the node's declared ordinary ports."""
+        graph = get_node_definition(node.type).graph
+        if not graph.outputs:
+            return
+        primary_type = get_node_output_port(node.type, node.data)
+        if primary_type is not None and result.output.kind is not primary_type:
+            raise ExecutionGraphValidationError(
+                message=(
+                    f"Node {node.id} produced '{result.output.kind.value}' on its "
+                    f"primary output; expected '{primary_type.value}'"
+                )
+            )
+        if graph.output_handles is not None:
+            if result.outputs:
+                raise ExecutionGraphValidationError(
+                    message=f"Routing node {node.id} produced ordinary named outputs"
+                )
+            return
+        declared = {port.name: port for port in graph.outputs[1:]}
+        unknown = sorted(set(result.outputs) - set(declared))
+        if unknown:
+            raise ExecutionGraphValidationError(
+                message=(
+                    f"Node {node.id} produced undeclared output handle(s): "
+                    f"{', '.join(unknown)}"
+                )
+            )
+        missing = sorted(
+            name
+            for name, port in declared.items()
+            if port.required and name not in result.outputs
+        )
+        if missing:
+            raise ExecutionGraphValidationError(
+                message=(
+                    f"Node {node.id} did not produce required output handle(s): "
+                    f"{', '.join(missing)}"
+                )
+            )
+        for name, value in result.outputs.items():
+            expected = get_node_output_port(node.type, node.data, name)
+            if expected is not None and value.kind is not expected:
+                raise ExecutionGraphValidationError(
+                    message=(
+                        f"Node {node.id} produced '{value.kind.value}' on output "
+                        f"'{name}'; expected '{expected.value}'"
+                    )
+                )
+
     async def _run_node_once(
         self,
         session: AsyncSession,
         run_context: _NodeRunContext,
         node: NodeResponse,
         parent_values: list[NodeValue],
+        values_by_input: dict[str, tuple[NodeValue, ...]],
     ) -> NodeExecutionResult:
         """Execute a single node attempt within its time budget.
 
@@ -2242,6 +2382,7 @@ class ExecutionUsecase:
             run_context: Loop-invariant run context.
             node: Node to execute.
             parent_values: Outputs of the node's parents.
+            values_by_input: Parent values grouped by declared target handle.
 
         Returns:
             The node execution result.
@@ -2306,6 +2447,12 @@ class ExecutionUsecase:
                         node_data=node.data,
                         parent_values=parent_values,
                         input_value=run_context.input_value,
+                        values_by_input=values_by_input,
+                        primary_input_name=(
+                            get_node_definition(node.type).graph.inputs[0].name
+                            if get_node_definition(node.type).graph.inputs
+                            else "input"
+                        ),
                         on_token=self._make_on_token(
                             run_context=run_context, node_id=node.id
                         ),
@@ -2758,8 +2905,15 @@ class ExecutionUsecase:
         """
         stored_output = None
         output_value = None
+        output_values = None
         if outcome.output is not None:
             output_value = outcome.output.to_payload()
+            output_ports = get_node_definition(node.type).graph.outputs
+            primary_name = output_ports[0].name if output_ports else "output"
+            all_outputs = {primary_name: outcome.output, **(outcome.outputs or {})}
+            output_values = {
+                name: value.to_payload() for name, value in all_outputs.items()
+            }
             if outcome.output.artifact is None:
                 stored_output = outcome.output.to_legacy_text()
         await self._node_execution_repository.create(
@@ -2773,6 +2927,7 @@ class ExecutionUsecase:
                 "status": outcome.status,
                 "output": _truncate_for_storage(stored_output),
                 "output_value": output_value,
+                "output_values": output_values,
                 "error": outcome.error,
                 "prompt_tokens": (
                     outcome.usage.prompt_tokens if outcome.usage else None
@@ -3027,34 +3182,44 @@ class ExecutionUsecase:
                 message = "Workflow contains edge with missing node reference"
                 raise ExecutionGraphValidationError(message=message)
 
-            port_error = check_edge_ports(
-                nodes_by_id[source_id].type,
-                nodes_by_id[target_id].type,
-                source_data=nodes_by_id[source_id].data,
-                target_data=nodes_by_id[target_id].data,
-                coercion=edge.coercion,
-            )
-            if port_error is not None:
-                raise ExecutionGraphValidationError(message=port_error)
             try:
-                handle_error = check_source_handle(
+                port_error = check_edge_ports(
                     nodes_by_id[source_id].type,
-                    nodes_by_id[source_id].data,
-                    edge.source_handle,
+                    nodes_by_id[target_id].type,
+                    source_data=nodes_by_id[source_id].data,
+                    target_data=nodes_by_id[target_id].data,
+                    source_handle=edge.source_handle,
+                    target_handle=edge.target_handle,
+                    coercion=edge.coercion,
                 )
             except ValueError as exc:
                 raise ExecutionGraphValidationError(message=str(exc)) from exc
-            if handle_error is not None:
-                raise ExecutionGraphValidationError(message=handle_error)
+            if port_error is not None:
+                raise ExecutionGraphValidationError(message=port_error)
 
             outbound[source_id].append(target_id)
             inbound[target_id].append(source_id)
-            edge_data = (target_id, edge.source_handle, edge.coercion)
+            edge_data = (
+                target_id,
+                edge.source_handle,
+                edge.target_handle,
+                edge.coercion,
+            )
             outbound_edges[source_id].append(edge_data)
             inbound_edges[target_id].append(
-                (source_id, edge.source_handle, edge.coercion)
+                (
+                    source_id,
+                    edge.source_handle,
+                    edge.target_handle,
+                    edge.coercion,
+                )
             )
             indegree[target_id] += 1
+
+        self._validate_required_input_handles(
+            ordered_nodes=ordered_nodes,
+            inbound_edges=inbound_edges,
+        )
 
         # Deterministic adjacency: parent merge order and wave order no longer
         # depend on edge-return order from the database.
@@ -3074,6 +3239,33 @@ class ExecutionUsecase:
             inbound_edges=inbound_edges,
             indegree=indegree,
         )
+
+    def _validate_required_input_handles(
+        self,
+        ordered_nodes: list[NodeResponse],
+        inbound_edges: dict[int, list[_RuntimeEdge]],
+    ) -> None:
+        """Require every non-optional declared input handle to be connected."""
+        for node in ordered_nodes:
+            input_ports = get_node_definition(node.type).graph.inputs
+            if not input_ports:
+                continue
+            connected = {
+                target_handle or input_ports[0].name
+                for _, _, target_handle, _ in inbound_edges[node.id]
+            }
+            missing = [
+                port.name
+                for port in input_ports
+                if port.required and port.name not in connected
+            ]
+            if missing:
+                names = ", ".join(missing)
+                raise ExecutionGraphValidationError(
+                    message=(
+                        f"Node {node.id} requires connected input handle(s): {names}"
+                    )
+                )
 
     def _topological_order(
         self,

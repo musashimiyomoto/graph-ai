@@ -1,5 +1,6 @@
 """Plugin node registry and typed-port compatibility tests."""
 
+from http import HTTPStatus
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 import pytest
@@ -31,7 +32,9 @@ if TYPE_CHECKING:
 
 
 def _context(
-    node_data: dict[str, object], parent_values: list[str]
+    node_data: dict[str, object],
+    parent_values: list[str],
+    values_by_input: dict[str, list[str]] | None = None,
 ) -> NodeExecutionContext:
     """Build a minimal node execution context for handler tests."""
     return NodeExecutionContext(
@@ -40,6 +43,10 @@ def _context(
         node_data=node_data,
         parent_values=[NodeValue.text(value) for value in parent_values],
         input_value=NodeValue.text(""),
+        values_by_input={
+            name: tuple(NodeValue.text(value) for value in values)
+            for name, values in (values_by_input or {}).items()
+        },
     )
 
 
@@ -91,6 +98,16 @@ class TestCatalogPorts:
             pytest.fail("Code node input options are incomplete")
         if set(graph.outputs[0].allowed_types) != expected:
             pytest.fail("Code node output options are incomplete")
+
+    def test_http_node_exposes_ordinary_multi_ports(self) -> None:
+        """HTTP Request publishes independent body, status, and header values."""
+        graph = build_node_catalog()[NodeType.HTTP_REQUEST].graph
+        if [port.name for port in graph.inputs] != ["input", "body"]:
+            pytest.fail("HTTP Request input handles are incomplete")
+        if [port.name for port in graph.outputs] != ["body", "status", "headers"]:
+            pytest.fail("HTTP Request output handles are incomplete")
+        if graph.inputs[1].required:
+            pytest.fail("HTTP Request's named body input should remain optional")
 
 
 class TestPortCompatibility:
@@ -222,8 +239,12 @@ class TestTemplateNode:
 class _DummyHTTPResponse:
     """Fixed HTTP response for the request-node test."""
 
-    status_code = 200
+    status_code = HTTPStatus.OK
     text = "response body"
+    headers: ClassVar[dict[str, str]] = {
+        "Content-Type": "text/plain",
+        "X-Test": "yes",
+    }
 
     def raise_for_status(self) -> None:
         """Keep the successful status."""
@@ -271,10 +292,36 @@ class TestHTTPRequestNode:
         )
         if result.output.require_text() != "response body":
             pytest.fail("Handler did not return the response body")
+        if result.outputs["status"].value != HTTPStatus.OK:
+            pytest.fail("Handler did not expose the response status output")
+        if result.outputs["headers"].value != _DummyHTTPResponse.headers:
+            pytest.fail("Handler did not expose the response headers output")
         if _DummyHTTPClient.calls.get("method") != "POST":
             pytest.fail("Method was not forwarded")
         if _DummyHTTPClient.calls.get("content") != "payload":
             pytest.fail("Upstream text was not sent as the POST body")
+
+    @pytest.mark.asyncio
+    async def test_named_body_input_overrides_primary_input(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The optional body handle supplies content independently of input."""
+        monkeypatch.setattr("nodes.http_request.httpx.AsyncClient", _DummyHTTPClient)
+        handler = HTTPRequestNodeHandler()
+        await handler.execute(
+            _context(
+                {"url": "https://api.example.com/{{input}}", "method": "post"},
+                parent_values=["query", "request-body"],
+                values_by_input={
+                    "input": ["query"],
+                    "body": ["request-body"],
+                },
+            )
+        )
+        if _DummyHTTPClient.calls.get("url") != "https://api.example.com/query":
+            pytest.fail("Primary input should be used for URL rendering")
+        if _DummyHTTPClient.calls.get("content") != "request-body":
+            pytest.fail("Named body input should be used as request content")
 
     @pytest.mark.asyncio
     async def test_renders_url_body_and_headers(

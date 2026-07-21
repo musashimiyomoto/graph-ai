@@ -1,6 +1,9 @@
 SHELL := /bin/bash
+PYTEST_WORKERS ?= auto
+PYTEST_TARGET ?= tests/
+PYTEST_ARGS ?=
 
-.PHONY: back-lint back-format back-typecheck back-test back-migrate \
+.PHONY: back-lint back-format back-typecheck back-test back-test-fast back-migrate \
         front-lint front-typecheck front-build front-test \
         setup run
 
@@ -16,7 +19,12 @@ back-typecheck:
 	cd backend && uv run ty check .
 
 back-test:
-	cd backend && uv run pytest tests/ --cov --cov-report=term-missing:skip-covered
+	cd backend && uv run pytest $(PYTEST_TARGET) -n $(PYTEST_WORKERS) \
+		--dist worksteal --cov --cov-report=term-missing:skip-covered $(PYTEST_ARGS)
+
+back-test-fast:
+	cd backend && uv run pytest $(PYTEST_TARGET) -n $(PYTEST_WORKERS) \
+		--dist worksteal $(PYTEST_ARGS)
 
 back-migrate:
 	@set -euo pipefail; \

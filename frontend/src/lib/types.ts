@@ -73,6 +73,7 @@ export interface EdgeCreatePayload {
   source_node_id: number
   target_node_id: number
   source_handle?: string | null
+  target_handle?: string | null
   coercion?: PortCoercion | null
 }
 
@@ -82,6 +83,7 @@ export interface EdgeResponse {
   source_node_id: number
   target_node_id: number
   source_handle: string | null
+  target_handle: string | null
   coercion: PortCoercion | null
 }
 
@@ -134,6 +136,7 @@ export interface WorkflowGraphEdge {
   source_index: number
   target_index: number
   source_handle: string | null
+  target_handle: string | null
   coercion?: PortCoercion | null
 }
 
@@ -263,6 +266,7 @@ export interface NodePortSpec {
   name: string
   label: string
   type: PortType
+  required: boolean
   type_field: string | null
   allowed_types: PortType[]
 }
@@ -461,6 +465,7 @@ export interface NodeExecutionResult {
   status: ExecutionStatus
   output: string | null
   output_value: NodeValueEnvelope | null
+  output_values: Record<string, NodeValueEnvelope> | null
   error: string | null
   started_at: string
   finished_at: string | null

@@ -27,6 +27,7 @@ function renderJson(value: string): ReactNode {
 const RENDERERS: Partial<Record<PortType, (value: string) => ReactNode>> = {
   text: renderText,
   json: renderJson,
+  list: renderJson,
 }
 
 interface OutputRendererProps {
@@ -41,10 +42,13 @@ export function OutputRenderer({ value, portType, typedValue }: OutputRendererPr
   }
 
   const resolvedPort = typedValue?.kind ?? portType
-  const inlineValue =
+  const typedInlineValue =
     typedValue?.kind === 'text' && typeof typedValue.value === 'string'
       ? typedValue.value
-      : value
+      : typedValue?.kind === 'json' || typedValue?.kind === 'list'
+        ? JSON.stringify(typedValue.value)
+        : null
+  const inlineValue = typedInlineValue ?? value
   if (inlineValue === null) {
     return null
   }

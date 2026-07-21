@@ -933,6 +933,8 @@ class NodeUsecase:
                 NodeType(target.type),
                 source_data=source_data,
                 target_data=target_data,
+                source_handle=edge.source_handle,
+                target_handle=edge.target_handle,
                 coercion=coercion,
             )
             if port_error is not None:

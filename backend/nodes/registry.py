@@ -36,7 +36,7 @@ from nodes.translate import DEFINITION as TRANSLATE_DEFINITION
 from nodes.vector_ingest import DEFINITION as VECTOR_INGEST_DEFINITION
 from nodes.vector_search import DEFINITION as VECTOR_SEARCH_DEFINITION
 from nodes.web_search import DEFINITION as WEB_SEARCH_DEFINITION
-from schemas import NodeCatalogItem
+from schemas import NodeCatalogItem, NodePortSpec
 
 NODE_DEFINITIONS: tuple[NodeDefinition, ...] = (
     INPUT_DEFINITION,
@@ -111,20 +111,30 @@ def get_node_output_handles(
 
 
 def get_node_input_port(
-    node_type: NodeType, node_data: dict[str, object]
+    node_type: NodeType,
+    node_data: dict[str, object],
+    target_handle: str | None = None,
 ) -> PortType | None:
     """Resolve a node's effective input port type."""
     return resolve_graph_port(
-        get_node_definition(node_type).graph, node_data, output=False
+        get_node_definition(node_type).graph,
+        node_data,
+        output=False,
+        handle=target_handle,
     )
 
 
 def get_node_output_port(
-    node_type: NodeType, node_data: dict[str, object]
+    node_type: NodeType,
+    node_data: dict[str, object],
+    source_handle: str | None = None,
 ) -> PortType | None:
     """Resolve a node's effective output port type."""
     return resolve_graph_port(
-        get_node_definition(node_type).graph, node_data, output=True
+        get_node_definition(node_type).graph,
+        node_data,
+        output=True,
+        handle=source_handle,
     )
 
 
@@ -135,27 +145,70 @@ def check_source_handle(
 ) -> str | None:
     """Return a validation error when an edge uses an invalid source handle."""
     output_handles = get_node_output_handles(node_type, node_data)
-    if output_handles is None:
-        if source_handle is None:
+    if output_handles is not None:
+        if source_handle in output_handles:
             return None
+        options = ", ".join(output_handles)
         return (
-            f"Node type '{node_type.value}' has a single default output handle; "
-            "source_handle must be omitted"
+            f"Node type '{node_type.value}' requires source_handle to be one of: "
+            f"{options}"
         )
-    if source_handle in output_handles:
-        return None
-    options = ", ".join(output_handles)
-    return (
-        f"Node type '{node_type.value}' requires source_handle to be one of: {options}"
+    return _ordinary_handle_error(
+        node_type=node_type,
+        ports=get_node_definition(node_type).graph.outputs,
+        handle=source_handle,
+        direction="output",
     )
 
 
-def check_edge_ports(
+def check_target_handle(
+    node_type: NodeType,
+    target_handle: str | None,
+) -> str | None:
+    """Return a validation error for an invalid ordinary input handle."""
+    return _ordinary_handle_error(
+        node_type=node_type,
+        ports=get_node_definition(node_type).graph.inputs,
+        handle=target_handle,
+        direction="input",
+    )
+
+
+def _ordinary_handle_error(
+    *,
+    node_type: NodeType,
+    ports: tuple[NodePortSpec, ...],
+    handle: str | None,
+    direction: str,
+) -> str | None:
+    """Validate one default-or-named ordinary port handle."""
+    if not ports:
+        return f"Node type '{node_type.value}' has no {direction} port"
+    if handle is None:
+        return None
+    additional_names = {port.name for port in ports[1:]}
+    if handle in additional_names:
+        return None
+    handle_field = "source_handle" if direction == "output" else "target_handle"
+    if len(ports) == 1:
+        return (
+            f"Node type '{node_type.value}' has a single default {direction} handle; "
+            f"{handle_field} must be omitted"
+        )
+    options = ", ".join((f"default ({ports[0].name})", *sorted(additional_names)))
+    return (
+        f"Node type '{node_type.value}' requires {handle_field} to be one of: {options}"
+    )
+
+
+def check_edge_ports(  # noqa: PLR0913 - an edge has two typed endpoint contracts
     source_type: NodeType,
     target_type: NodeType,
     *,
     source_data: dict[str, object] | None = None,
     target_data: dict[str, object] | None = None,
+    source_handle: str | None = None,
+    target_handle: str | None = None,
     coercion: PortCoercion | None = None,
 ) -> str | None:
     """Check whether a source output can feed a target input.
@@ -165,15 +218,23 @@ def check_edge_ports(
         target_type: Type of the edge's target node.
         source_data: Source node configuration for dynamic ports.
         target_data: Target node configuration for dynamic ports.
+        source_handle: Named ordinary output or routing handle.
+        target_handle: Named ordinary input handle.
         coercion: Explicit conversion declared by the edge.
 
     Returns:
         A human-readable reason when the connection is invalid, else None.
 
     """
+    source_data = source_data or {}
+    target_data = target_data or {}
     try:
-        output_port = get_node_output_port(source_type, source_data or {})
-        input_port = get_node_input_port(target_type, target_data or {})
+        if handle_error := check_source_handle(source_type, source_data, source_handle):
+            return handle_error
+        if handle_error := check_target_handle(target_type, target_handle):
+            return handle_error
+        output_port = get_node_output_port(source_type, source_data, source_handle)
+        input_port = get_node_input_port(target_type, target_data, target_handle)
     except ValueError as exc:
         return str(exc)
 

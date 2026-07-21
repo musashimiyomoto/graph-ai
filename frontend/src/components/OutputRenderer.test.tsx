@@ -31,6 +31,21 @@ describe('OutputRenderer', () => {
     expect(pre?.textContent).toContain('"a": 1')
   })
 
+  it('renders a structured typed value without a legacy text mirror', () => {
+    const { container } = render(
+      <OutputRenderer
+        value={null}
+        typedValue={{
+          kind: 'list',
+          value: [1, { ok: true }],
+          artifact: null,
+          metadata: {},
+        }}
+      />,
+    )
+    expect(container.querySelector('pre')?.textContent).toContain('"ok": true')
+  })
+
   it('degrades malformed JSON to plain text', () => {
     const { container } = render(
       <OutputRenderer value="{not json" portType="json" />,

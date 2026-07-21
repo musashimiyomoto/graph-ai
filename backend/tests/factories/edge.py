@@ -16,4 +16,5 @@ class EdgeFactory(AsyncSQLAlchemyModelFactory):
     source_node_id = None
     target_node_id = None
     source_handle = None
+    target_handle = None
     coercion = None

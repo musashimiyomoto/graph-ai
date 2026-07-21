@@ -24,7 +24,7 @@ def upstream_text(context: NodeExecutionContext) -> str:
         Joined parent values, or the raw input value when there are no parents.
 
     """
-    if context.parent_values:
+    if context.primary_parent_values:
         return context.joined_parent_text()
     return context.input_text
 
@@ -50,13 +50,14 @@ def _resolve_placeholder(match: re.Match[str], context: NodeExecutionContext) ->
         return upstream_text(context)
 
     index = int(index_text)
-    if index >= len(context.parent_values):
+    values = context.primary_parent_values
+    if index >= len(values):
         message = (
             f"Template references {{{{input[{index}]}}}}, but this node only "
-            f"has {len(context.parent_values)} live parent value(s)"
+            f"has {len(values)} live parent value(s)"
         )
         raise ExecutionGraphValidationError(message=message)
-    return context.parent_values[index].require_text()
+    return values[index].require_text()
 
 
 def render_input(text: str, context: NodeExecutionContext) -> str:

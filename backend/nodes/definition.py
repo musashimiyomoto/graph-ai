@@ -14,7 +14,7 @@ from enums import NodeType, PortCoercion, PortType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeHandler
 from nodes.value import JSONValue, NodeValue
-from schemas import NodeFieldSpec, NodeGraphSpec
+from schemas import NodeFieldSpec, NodeGraphSpec, NodePortSpec
 
 PORT_COERCIONS: dict[PortCoercion, tuple[PortType, PortType]] = {
     PortCoercion.TEXT_TO_JSON: (PortType.TEXT, PortType.JSON),
@@ -96,30 +96,42 @@ def required_port_coercion(
     )
 
 
+def resolve_port_type(
+    port: NodePortSpec,
+    node_data: dict[str, object],
+) -> PortType:
+    """Resolve one fixed or node-configured port's effective value type."""
+    if port.type_field is None:
+        return port.type
+    raw_type = node_data.get(port.type_field, port.type.value)
+    try:
+        resolved = PortType(raw_type)
+    except ValueError as exc:
+        message = f"Node port '{port.name}' has an unsupported configured type"
+        raise ValueError(message) from exc
+    if resolved not in port.allowed_types:
+        message = f"Node port '{port.name}' has a disallowed configured type"
+        raise ValueError(message)
+    return resolved
+
+
 def resolve_graph_port(
     graph: NodeGraphSpec,
     node_data: dict[str, object],
     *,
     output: bool,
+    handle: str | None = None,
 ) -> PortType | None:
-    """Resolve a fixed or node-configured port type from graph metadata."""
-    default = graph.output_port if output else graph.input_port
-    field = graph.output_port_field if output else graph.input_port_field
-    options = graph.output_port_options if output else graph.input_port_options
-    if default is None or field is None:
-        return default
-    raw_type = node_data.get(field, default.value)
-    try:
-        resolved = PortType(raw_type)
-    except ValueError as exc:
-        direction = "output" if output else "input"
-        message = f"Node has an unsupported configured {direction} port type"
-        raise ValueError(message) from exc
-    if resolved not in options:
-        direction = "output" if output else "input"
-        message = f"Node has a disallowed configured {direction} port type"
-        raise ValueError(message)
-    return resolved
+    """Resolve a graph port by handle, defaulting to the primary port."""
+    ports = graph.outputs if output else graph.inputs
+    if not ports:
+        return None
+    if handle is None or (output and graph.output_handles is not None):
+        return resolve_port_type(ports[0], node_data)
+    port = next((candidate for candidate in ports if candidate.name == handle), None)
+    if port is None:
+        return None
+    return resolve_port_type(port, node_data)
 
 
 def _text_to_json(value: NodeValue) -> NodeValue:

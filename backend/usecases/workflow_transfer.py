@@ -148,6 +148,7 @@ class WorkflowTransferUsecase:
                 source_index=index_by_node_id[edge.source_node_id],
                 target_index=index_by_node_id[edge.target_node_id],
                 source_handle=edge.source_handle,
+                target_handle=edge.target_handle,
                 coercion=edge.coercion,
             )
             for edge in edges
@@ -282,6 +283,7 @@ class WorkflowTransferUsecase:
                     source_node_id=created_node_ids[graph_edge.source_index],
                     target_node_id=created_node_ids[graph_edge.target_index],
                     source_handle=graph_edge.source_handle,
+                    target_handle=graph_edge.target_handle,
                     coercion=graph_edge.coercion,
                 ),
             )

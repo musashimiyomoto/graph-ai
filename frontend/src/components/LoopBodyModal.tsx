@@ -28,6 +28,7 @@ interface LoopBodyModalProps {
     sourceId: string,
     targetId: string,
     sourceHandle: string | null,
+    targetHandle: string | null,
     coercion: PortCoercion | null,
   ) => void
   onDeleteEdge: (edgeId: string) => void

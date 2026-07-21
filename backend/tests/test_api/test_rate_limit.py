@@ -6,7 +6,6 @@ from http import HTTPStatus
 import pytest
 import pytest_asyncio
 from redis.asyncio import Redis
-from testcontainers.redis import RedisContainer
 
 from api.dependencies import rate_limit
 from api.dependencies import redis as redis_dependency
@@ -21,33 +20,29 @@ class TestAuthRateLimit(BaseTestCase):
     """Tests for the Redis-backed rate limiter on login/register."""
 
     @pytest_asyncio.fixture
-    async def real_redis_rate_limit(self) -> AsyncGenerator[None, None]:
+    async def real_redis_rate_limit(
+        self, test_redis: Redis
+    ) -> AsyncGenerator[None, None]:
         """Swap the test-suite's no-op rate limit override for a real one."""
-        with RedisContainer() as container:
-            client: Redis = Redis(
-                host=container.get_container_host_ip(),
-                port=int(container.get_exposed_port(6379)),
-            )
-            previous_login = app.dependency_overrides.pop(
-                rate_limit.enforce_login_rate_limit, None
-            )
-            previous_register = app.dependency_overrides.pop(
-                rate_limit.enforce_register_rate_limit, None
-            )
-            app.dependency_overrides[redis_dependency.get_redis_client] = lambda: client
-            try:
-                yield
-            finally:
-                app.dependency_overrides.pop(redis_dependency.get_redis_client, None)
-                if previous_login is not None:
-                    app.dependency_overrides[rate_limit.enforce_login_rate_limit] = (
-                        previous_login
-                    )
-                if previous_register is not None:
-                    app.dependency_overrides[rate_limit.enforce_register_rate_limit] = (
-                        previous_register
-                    )
-                await client.aclose()
+        previous_login = app.dependency_overrides.pop(
+            rate_limit.enforce_login_rate_limit, None
+        )
+        previous_register = app.dependency_overrides.pop(
+            rate_limit.enforce_register_rate_limit, None
+        )
+        app.dependency_overrides[redis_dependency.get_redis_client] = lambda: test_redis
+        try:
+            yield
+        finally:
+            app.dependency_overrides.pop(redis_dependency.get_redis_client, None)
+            if previous_login is not None:
+                app.dependency_overrides[rate_limit.enforce_login_rate_limit] = (
+                    previous_login
+                )
+            if previous_register is not None:
+                app.dependency_overrides[rate_limit.enforce_register_rate_limit] = (
+                    previous_register
+                )
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("real_redis_rate_limit")

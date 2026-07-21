@@ -19,6 +19,7 @@ from nodes import (
     SwitchConfigurationError,
     check_edge_ports,
     check_source_handle,
+    check_target_handle,
 )
 from schemas import EdgeCreate, EdgeResponse, EdgeUpdate
 
@@ -32,14 +33,20 @@ class EdgeUsecase:
         self._node_repository = NodeRepository()
         self._workflow_repository = WorkflowRepository()
 
-    def _validate_source_handle(
-        self, source_node: Node, source_handle: str | None
+    def _validate_handles(
+        self,
+        source_node: Node,
+        target_node: Node,
+        source_handle: str | None,
+        target_handle: str | None,
     ) -> None:
-        """Check that a source handle matches the source node's output handles.
+        """Check that edge handles exist on their respective nodes.
 
         Args:
             source_node: The edge's source node.
+            target_node: The edge's target node.
             source_handle: The requested handle, or None for the default handle.
+            target_handle: The requested handle, or None for the default handle.
 
         Raises:
             EdgeHandleMismatchError: If the handle doesn't match the node type.
@@ -53,6 +60,12 @@ class EdgeUsecase:
             )
         except SwitchConfigurationError as exc:
             raise EdgeHandleMismatchError(message=str(exc)) from exc
+        if handle_error is not None:
+            raise EdgeHandleMismatchError(message=handle_error)
+        handle_error = check_target_handle(
+            NodeType(target_node.type),
+            target_handle,
+        )
         if handle_error is not None:
             raise EdgeHandleMismatchError(message=handle_error)
 
@@ -103,17 +116,23 @@ class EdgeUsecase:
         if target_node.workflow_id != data.workflow_id:
             raise EdgeNodeMismatchError
 
+        self._validate_handles(
+            source_node,
+            target_node,
+            data.source_handle,
+            data.target_handle,
+        )
         port_error = check_edge_ports(
             NodeType(source_node.type),
             NodeType(target_node.type),
             source_data=source_node.data,
             target_data=target_node.data,
+            source_handle=data.source_handle,
+            target_handle=data.target_handle,
             coercion=data.coercion,
         )
         if port_error is not None:
             raise EdgePortMismatchError(message=port_error)
-
-        self._validate_source_handle(source_node, data.source_handle)
 
         try:
             created = await self._edge_repository.create(
@@ -237,18 +256,25 @@ class EdgeUsecase:
 
         raw_coercion = update_data.get("coercion", edge.coercion)
         coercion = PortCoercion(raw_coercion) if raw_coercion is not None else None
+        source_handle = update_data.get("source_handle", edge.source_handle)
+        target_handle = update_data.get("target_handle", edge.target_handle)
+        self._validate_handles(
+            source_node,
+            target_node,
+            source_handle,
+            target_handle,
+        )
         port_error = check_edge_ports(
             NodeType(source_node.type),
             NodeType(target_node.type),
             source_data=source_node.data,
             target_data=target_node.data,
+            source_handle=source_handle,
+            target_handle=target_handle,
             coercion=coercion,
         )
         if port_error is not None:
             raise EdgePortMismatchError(message=port_error)
-
-        source_handle = update_data.get("source_handle", edge.source_handle)
-        self._validate_source_handle(source_node, source_handle)
 
         try:
             edge = await self._edge_repository.update_by(

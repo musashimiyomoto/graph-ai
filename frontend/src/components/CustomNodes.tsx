@@ -30,10 +30,10 @@ function handleLeft(index: number, count: number): string {
 
 export function GenericNode({ id, data }: NodeProps<NodeData>) {
   const outputHandles = data.graph.output_handles
-  const inputPort = data.graph.inputs?.[0]
-  const outputPort = data.graph.outputs?.[0]
-  const inputType = resolvePortType(inputPort, { ...data })
-  const outputType = resolvePortType(outputPort, { ...data })
+  const inputPorts = data.graph.inputs ?? []
+  const outputPorts = data.graph.outputs ?? []
+  const inputPortKey = inputPorts.map((port) => port.name).join(':')
+  const outputPortKey = outputPorts.map((port) => port.name).join(':')
   const updateNodeInternals = useUpdateNodeInternals()
 
   // reactflow caches each handle's DOM position for edge routing and only
@@ -41,7 +41,7 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
   // stale coordinates whenever a node's handle count/layout changes.
   useEffect(() => {
     updateNodeInternals(id)
-  }, [id, outputHandles, updateNodeInternals])
+  }, [id, inputPortKey, outputHandles, outputPortKey, updateNodeInternals])
 
   const isLoop = data.nodeType === 'loop'
   const isCallWorkflow = data.nodeType === 'call_workflow'
@@ -56,16 +56,30 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
       className={`pixel-node flex flex-col gap-1 ${isLoop ? 'border-dashed' : ''}`}
       title={drilldownTitle}
     >
+      {inputPorts.length > 0 ? (
+        <>
+          <div className="flex justify-around border-b border-white/10 pb-1 text-[10px] leading-none text-[var(--muted)]">
+            {inputPorts.map((port) => (
+              <span key={port.name}>
+                ↑ {port.label}: {resolvePortType(port, { ...data })}
+              </span>
+            ))}
+          </div>
+          {inputPorts.map((port, index) => (
+            <Handle
+              key={port.name}
+              type="target"
+              id={index === 0 ? undefined : port.name}
+              position={Position.Top}
+              style={{ left: handleLeft(index, inputPorts.length) }}
+            />
+          ))}
+        </>
+      ) : null}
       <div className="flex items-center gap-2">
-        {data.graph.has_input ? <Handle type="target" position={Position.Top} /> : null}
         <NodeIcon iconKey={data.iconKey} />
         {data.label}
       </div>
-      {inputPort && inputType ? (
-        <div className="text-[10px] leading-none text-[var(--muted)]">
-          ↑ {inputPort.label}: {inputType}
-        </div>
-      ) : null}
       {isLoop ? (
         <div className="flex items-center gap-1 border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
           <span>⤢ Double-click to open</span>
@@ -93,14 +107,24 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
             />
           ))}
         </>
-      ) : data.graph.has_output ? (
+      ) : outputPorts.length > 0 ? (
         <>
-          {outputPort && outputType ? (
-            <div className="border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
-              ↓ {outputPort.label}: {outputType}
-            </div>
-          ) : null}
-          <Handle type="source" position={Position.Bottom} />
+          <div className="flex justify-around border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
+            {outputPorts.map((port) => (
+              <span key={port.name}>
+                ↓ {port.label}: {resolvePortType(port, { ...data })}
+              </span>
+            ))}
+          </div>
+          {outputPorts.map((port, index) => (
+            <Handle
+              key={port.name}
+              type="source"
+              id={index === 0 ? undefined : port.name}
+              position={Position.Bottom}
+              style={{ left: handleLeft(index, outputPorts.length) }}
+            />
+          ))}
         </>
       ) : null}
     </div>

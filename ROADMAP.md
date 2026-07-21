@@ -36,12 +36,11 @@ against the actual code as of this writing (not carried forward from stale notes
 
 ## Key limitations driving priorities
 
-1. **Ordinary nodes still have one runtime input and output handle.** Definitions
-   now expose named typed ports, edge coercions are explicit and persisted, and
-   JSON/list values travel through execution and checkpoints without string
-   wrapping. The next graph-contract step is multiple independently addressable
-   ordinary handles so nodes can emit text, tables, metadata and attachments at
-   the same time.
+1. **The multi-port runtime needs broader node adoption.** Ordinary nodes can now
+   expose independently addressable typed inputs and outputs, but HTTP Request is
+   the first production node to use the contract. Document AI, Agent and channel
+   events still need to turn their text, tables, traces, metadata and attachments
+   into simultaneous named outputs.
 2. **Channels are not plugin-driven.** Input/Output expose a growing format enum,
    while Telegram/email/webhook polling and delivery are separate worker branches.
    Adding Slack, WhatsApp, Discord, or voice this way would multiply orchestration
@@ -935,11 +934,21 @@ for existing text-only workflow versions.
       Migration `c3f5a7b9d2e4` adds the persisted edge coercion; all 435 backend and
       75 frontend tests pass, and a clean `alembic upgrade head`/`alembic check`
       reports no schema drift.
-- [ ] **Multiple ordinary input/output handles** — generalize dynamic handles past
-      routing nodes so Document AI can emit `text`/`tables`/`metadata`, Agent can
-      emit `answer`/`trace`, and channel events can expose message/attachments
-      without encoding everything into one payload. Snapshot, transfer, undo/redo,
-      Call Workflow, Loop and checkpoint resume must preserve handle schemas.
+- [x] **Multiple ordinary input/output handles** — ordinary ports now have stable
+      names, types and required/optional input semantics. Edges persist both source
+      and target handles; schedulers keep every ordinary output live at once while
+      retaining single-branch routing semantics for Condition/Switch. Execution
+      contexts group values by input handle, results and JSONB checkpoints preserve
+      named output maps, and required ports are validated before execution. HTTP
+      Request is the first real multi-port use case: optional `body` input plus
+      simultaneous typed `body`, `status` and `headers` outputs. Snapshots,
+      export/import, duplication, undo/redo and copy/paste retain target handles;
+      the editor renders and connects each typed port, and Execution Details shows
+      every named result. Migration `d4a6c8e0f2b1` adds persisted target handles
+      and per-handle output maps. All 440 backend and 77 frontend tests pass; the
+      backend suite now uses pytest-xdist with isolated per-worker PostgreSQL/Redis
+      databases on shared ephemeral containers, plus a serial fallback and a local
+      no-coverage fast path.
 - [ ] **Universal trigger event** — introduce a versioned `TriggerEvent` envelope
       containing channel, external event ID, sender, conversation/thread, locale,
       message, attachments, timestamp and provider-specific metadata. Every inbound

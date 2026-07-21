@@ -20,7 +20,11 @@ import ReactFlow, {
   useReactFlow,
 } from 'reactflow'
 
-import { requiredPortCoercion, resolvePortType } from '../lib/ports'
+import {
+  portForHandle,
+  requiredPortCoercion,
+  resolvePortType,
+} from '../lib/ports'
 import type { NodeCatalogItem, PortCoercion } from '../lib/types'
 import { GenericNode } from './CustomNodes'
 import { ContextMenu } from './NodeContextMenu'
@@ -45,6 +49,7 @@ interface GraphCanvasProps {
     sourceId: string,
     targetId: string,
     sourceHandle: string | null,
+    targetHandle: string | null,
     coercion: PortCoercion | null,
   ) => void
   onDeleteEdge: (edgeId: string) => void
@@ -131,12 +136,21 @@ function GraphCanvasInner({
       if (!sourceGraph || !targetGraph) {
         return null
       }
+      const sourcePort = portForHandle(
+        sourceGraph.outputs,
+        connection.sourceHandle,
+        sourceGraph.output_handles !== null,
+      )
+      const targetPort = portForHandle(
+        targetGraph.inputs,
+        connection.targetHandle,
+      )
       const output = resolvePortType(
-        sourceGraph.outputs[0],
+        sourcePort,
         (sourceNode?.data as Record<string, unknown>) ?? {},
       )
       const input = resolvePortType(
-        targetGraph.inputs[0],
+        targetPort,
         (targetNode?.data as Record<string, unknown>) ?? {},
       )
       if (!output || !input) {
@@ -306,6 +320,7 @@ function GraphCanvasInner({
                 params.source,
                 params.target,
                 params.sourceHandle,
+                params.targetHandle,
                 coercion,
               )
             }

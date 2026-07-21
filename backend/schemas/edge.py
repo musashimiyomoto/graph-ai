@@ -13,7 +13,11 @@ class EdgeCreate(BaseModel):
     target_node_id: int = Field(default=..., description="Target node ID", gt=0)
     source_handle: str | None = Field(
         default=None,
-        description="Named output handle on the source node, for branching nodes",
+        description="Named ordinary output or routing handle on the source node",
+    )
+    target_handle: str | None = Field(
+        default=None,
+        description="Named ordinary input handle on the target node",
     )
     coercion: PortCoercion | None = Field(
         default=None,
@@ -28,7 +32,11 @@ class EdgeUpdate(BaseModel):
     target_node_id: int | None = Field(default=None, description="Target node ID")
     source_handle: str | None = Field(
         default=None,
-        description="Named output handle on the source node, for branching nodes",
+        description="Named ordinary output or routing handle on the source node",
+    )
+    target_handle: str | None = Field(
+        default=None,
+        description="Named ordinary input handle on the target node",
     )
     coercion: PortCoercion | None = Field(
         default=None,
@@ -47,6 +55,9 @@ class EdgeResponse(BaseModel):
     target_node_id: int = Field(default=..., description="Target node ID", gt=0)
     source_handle: str | None = Field(
         default=None, description="Named output handle on the source node"
+    )
+    target_handle: str | None = Field(
+        default=None, description="Named input handle on the target node"
     )
     coercion: PortCoercion | None = Field(
         default=None,

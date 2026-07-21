@@ -11,11 +11,13 @@ from exceptions import ExecutionGraphValidationError, HTTPRequestError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
 from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import render_input, render_input_url_encoded, upstream_text
+from nodes.value import JSONValue, NodeValue
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
     NodeGraphSpec,
+    NodePortSpec,
 )
 from utils.network import blocked_url_reason
 
@@ -60,10 +62,17 @@ class HTTPRequestNodeHandler:
         headers = self._read_headers(context)
         body = self._read_body(context, method=method)
 
-        payload = await self._request(
+        payload, status, response_headers = await self._request(
             method=method, url=url, headers=headers, body=body
         )
-        return NodeExecutionResult.text(_truncate_response(payload))
+        output = NodeValue.text(_truncate_response(payload))
+        return NodeExecutionResult(
+            output=output,
+            outputs={
+                "status": NodeValue.json(status),
+                "headers": NodeValue.json(cast("JSONValue", response_headers)),
+            },
+        )
 
     def _read_url(self, context: NodeExecutionContext) -> str:
         """Read, render, and validate the target URL.
@@ -126,6 +135,10 @@ class HTTPRequestNodeHandler:
         if not method.allows_body:
             return None
 
+        body_values = context.values_for_input("body")
+        if body_values:
+            return "\n".join(value.require_text() for value in body_values)
+
         raw_body = context.node_data.get("body")
         if isinstance(raw_body, str) and raw_body:
             return render_input(raw_body, context)
@@ -137,7 +150,7 @@ class HTTPRequestNodeHandler:
         url: str,
         headers: dict[str, str],
         body: str | None,
-    ) -> str:
+    ) -> tuple[str, int, dict[str, str]]:
         """Execute the HTTP request, mapping transport errors to domain errors."""
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
@@ -157,7 +170,11 @@ class HTTPRequestNodeHandler:
         except httpx.HTTPError as exc:
             raise HTTPRequestError from exc
 
-        return response.text
+        response_headers = {
+            str(name): str(value)
+            for name, value in getattr(response, "headers", {}).items()
+        }
+        return response.text, response.status_code, response_headers
 
 
 def _build_handler(deps: NodeHandlerDeps) -> HTTPRequestNodeHandler:
@@ -175,6 +192,20 @@ DEFINITION = NodeDefinition(
         has_output=True,
         input_port=PortType.TEXT,
         output_port=PortType.TEXT,
+        output_name="body",
+        output_label="Body",
+        additional_inputs=(
+            NodePortSpec(
+                name="body",
+                label="Request body",
+                type=PortType.TEXT,
+                required=False,
+            ),
+        ),
+        additional_outputs=(
+            NodePortSpec(name="status", label="Status", type=PortType.JSON),
+            NodePortSpec(name="headers", label="Headers", type=PortType.JSON),
+        ),
     ),
     fields=(
         NodeFieldSpec(

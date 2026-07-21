@@ -127,6 +127,10 @@ class NodePortSpec(BaseModel):
     name: str = Field(default=..., min_length=1, description="Stable port name")
     label: str = Field(default=..., min_length=1, description="UI port label")
     type: PortType = Field(default=..., description="Default port value type")
+    required: bool = Field(
+        default=True,
+        description="Whether graph validation requires this input to be connected",
+    )
     type_field: str | None = Field(
         default=None,
         description="Node-data field selecting the effective type, when configurable",
@@ -135,6 +139,17 @@ class NodePortSpec(BaseModel):
         default_factory=tuple,
         description="Types selectable through type_field; empty for a fixed port",
     )
+
+    @model_validator(mode="after")
+    def _validate_dynamic_type(self) -> "NodePortSpec":
+        """Keep configurable-port metadata internally consistent."""
+        if bool(self.type_field) != bool(self.allowed_types):
+            message = "Configurable ports require a type_field and allowed_types"
+            raise ValueError(message)
+        if self.allowed_types and self.type not in self.allowed_types:
+            message = "Default port type must be one of allowed_types"
+            raise ValueError(message)
+        return self
 
 
 class NodeGraphSpec(BaseModel):
@@ -177,10 +192,24 @@ class NodeGraphSpec(BaseModel):
         default_factory=tuple,
         description="Allowed configurable output types",
     )
+    additional_inputs: tuple[NodePortSpec, ...] = Field(
+        default_factory=tuple,
+        description="Additional independently addressable ordinary input ports",
+    )
+    additional_outputs: tuple[NodePortSpec, ...] = Field(
+        default_factory=tuple,
+        description="Additional independently addressable ordinary output ports",
+    )
 
     @model_validator(mode="after")
     def _validate_ports(self) -> "NodeGraphSpec":
         """Keep legacy booleans/types and configurable metadata consistent."""
+        self._validate_primary_ports()
+        self._validate_additional_ports()
+        return self
+
+    def _validate_primary_ports(self) -> None:
+        """Validate legacy primary-port and dynamic-type metadata."""
         if self.has_input != (self.input_port is not None):
             message = "has_input must match whether input_port is configured"
             raise ValueError(message)
@@ -207,7 +236,29 @@ class NodeGraphSpec(BaseModel):
         ):
             message = "Default output_port must be one of output_port_options"
             raise ValueError(message)
-        return self
+
+    def _validate_additional_ports(self) -> None:
+        """Validate independently addressable ordinary port declarations."""
+        if self.additional_inputs and not self.has_input:
+            message = "Additional inputs require a primary input port"
+            raise ValueError(message)
+        if self.additional_outputs and not self.has_output:
+            message = "Additional outputs require a primary output port"
+            raise ValueError(message)
+        input_names = (self.input_name, *(port.name for port in self.additional_inputs))
+        output_names = (
+            self.output_name,
+            *(port.name for port in self.additional_outputs),
+        )
+        if len(input_names) != len(set(input_names)):
+            message = "Input port names must be unique"
+            raise ValueError(message)
+        if len(output_names) != len(set(output_names)):
+            message = "Output port names must be unique"
+            raise ValueError(message)
+        if self.output_handles is not None and self.additional_outputs:
+            message = "Routing handles cannot be combined with ordinary multi-outputs"
+            raise ValueError(message)
 
     @computed_field
     @property
@@ -223,6 +274,7 @@ class NodeGraphSpec(BaseModel):
                 type_field=self.input_port_field,
                 allowed_types=self.input_port_options,
             ),
+            *self.additional_inputs,
         )
 
     @computed_field
@@ -239,6 +291,7 @@ class NodeGraphSpec(BaseModel):
                 type_field=self.output_port_field,
                 allowed_types=self.output_port_options,
             ),
+            *self.additional_outputs,
         )
 
 

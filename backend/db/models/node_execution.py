@@ -56,6 +56,10 @@ class NodeExecution(BaseWithID):
         JSONB,
         comment="Typed NodeValue envelope; NULL for legacy checkpoint rows",
     )
+    output_values: Mapped[dict | None] = mapped_column(
+        JSONB,
+        comment="Typed NodeValue envelopes keyed by declared output port name",
+    )
     error: Mapped[str | None] = mapped_column(
         Text, comment="Error message if the node failed"
     )

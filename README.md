@@ -90,9 +90,23 @@ make setup
 make back-lint              # Lint (ruff --fix)
 make back-format            # Format (ruff format)
 make back-typecheck         # Type check (ty)
-make back-test              # Tests (pytest + testcontainers)
+make back-test              # Full parallel suite with coverage
+make back-test-fast         # Parallel local loop without coverage
 make back-migrate MSG="…"   # Generate Alembic migration
 ```
+
+Parallel backend tests share one ephemeral PostgreSQL and one Redis container;
+each worker receives isolated databases. Both targets use every available CPU by
+default. Set `PYTEST_WORKERS=4` to cap parallelism or `PYTEST_WORKERS=0` for a
+serial debugging run. A focused local run can select one path and pass extra args:
+
+```bash
+make back-test-fast PYTEST_TARGET=tests/test_api/test_edge.py PYTEST_WORKERS=0 \
+  PYTEST_ARGS="-k create"
+```
+
+Serial mode is usually faster for one small file because it skips xdist worker
+startup; keep parallel workers for the full suite or large test selections.
 
 ### Frontend
 

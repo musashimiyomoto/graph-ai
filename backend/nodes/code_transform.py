@@ -119,11 +119,11 @@ class CodeTransformNodeHandler:
         context: NodeExecutionContext, input_type: PortType
     ) -> JSONValue:
         """Expose text fan-in or one structured parent to restricted code."""
-        values = context.parent_values or [context.input_value]
+        values = list(context.primary_parent_values) or [context.input_value]
         if input_type is PortType.TEXT:
             return (
                 context.joined_parent_text()
-                if context.parent_values
+                if context.primary_parent_values
                 else context.input_text
             )
         if len(values) != 1:

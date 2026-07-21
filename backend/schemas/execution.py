@@ -50,12 +50,12 @@ class ExecutionGraphContext(BaseModel):
     nodes_by_id: dict[int, Any] = Field(default=..., description="Nodes map")
     outbound: dict[int, list[int]] = Field(default=..., description="Outbound edges")
     inbound: dict[int, list[int]] = Field(default=..., description="Inbound edges")
-    outbound_edges: dict[int, list[tuple[int, str | None, PortCoercion | None]]] = (
-        Field(default=..., description="Outbound edges with source handle and coercion")
-    )
-    inbound_edges: dict[int, list[tuple[int, str | None, PortCoercion | None]]] = Field(
-        default=..., description="Inbound edges with source handle and coercion"
-    )
+    outbound_edges: dict[
+        int, list[tuple[int, str | None, str | None, PortCoercion | None]]
+    ] = Field(default=..., description="Outbound edges with handles and coercion")
+    inbound_edges: dict[
+        int, list[tuple[int, str | None, str | None, PortCoercion | None]]
+    ] = Field(default=..., description="Inbound edges with handles and coercion")
     topological_order: list[int] = Field(default=..., description="Topological order")
 
 
@@ -134,6 +134,10 @@ class NodeExecutionResponse(BaseModel):
     output: str | None = Field(default=None, description="Node output text")
     output_value: NodeValuePayload | None = Field(
         default=None, description="Typed node output envelope"
+    )
+    output_values: dict[str, NodeValuePayload] | None = Field(
+        default=None,
+        description="Typed node output envelopes keyed by output port name",
     )
     error: str | None = Field(default=None, description="Error message")
     prompt_tokens: int | None = Field(

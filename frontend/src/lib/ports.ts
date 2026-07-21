@@ -35,6 +35,17 @@ export function resolvePortType(
     : port.type
 }
 
+export function portForHandle(
+  ports: NodePortSpec[],
+  handle: string | null,
+  routing = false,
+): NodePortSpec | undefined {
+  if (!handle || routing) {
+    return ports[0]
+  }
+  return ports.find((port) => port.name === handle)
+}
+
 export function requiredPortCoercion(
   output: PortType,
   input: PortType,
