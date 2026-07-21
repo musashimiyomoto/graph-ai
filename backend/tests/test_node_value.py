@@ -46,24 +46,44 @@ def test_text_handler_rejects_non_text_value() -> None:
 def test_media_value_carries_artifact_reference_without_inline_bytes() -> None:
     """Media envelopes point at stable artifact storage references."""
     artifact = ArtifactReference(
-        artifact_id="artifact-1",
+        artifact_id=1,
         mime_type="image/png",
         size=128,
-        checksum="sha256:abc",
+        checksum="a" * 64,
         filename="screen.png",
     )
     value = NodeValue.artifact_value(PortType.IMAGE, artifact)
 
     if value.to_payload()["artifact"] != {
-        "artifact_id": "artifact-1",
+        "artifact_id": 1,
         "mime_type": "image/png",
         "size": 128,
-        "checksum": "sha256:abc",
+        "checksum": "a" * 64,
         "filename": "screen.png",
     }:
         pytest.fail("Artifact metadata was not preserved")
     with pytest.raises(ExecutionGraphValidationError, match="legacy text boundary"):
         value.to_legacy_text()
+
+
+def test_artifact_value_round_trips_through_persisted_payload() -> None:
+    """A complete media envelope can be restored from JSONB-compatible data."""
+    original = NodeValue.artifact_value(
+        PortType.AUDIO,
+        ArtifactReference(
+            artifact_id=42,
+            mime_type="audio/mpeg",
+            size=4096,
+            checksum="b" * 64,
+            filename="voice.mp3",
+        ),
+        metadata={"source": "telegram"},
+    )
+
+    restored = NodeValue.from_payload(original.to_payload())
+
+    if restored != original:
+        pytest.fail("Persisted artifact envelope did not round-trip")
 
 
 def test_artifact_kind_rejects_inline_data() -> None:

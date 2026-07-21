@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  ArtifactDownload,
   AuthSession,
   EdgeCreatePayload,
   EdgeResponse,
@@ -360,6 +361,12 @@ export async function getExecutionNodeResults(
   executionId: number,
 ): Promise<NodeExecutionResult[]> {
   return request<NodeExecutionResult[]>(`/executions/${executionId}/nodes`)
+}
+
+export async function getArtifactDownload(
+  artifactId: number,
+): Promise<ArtifactDownload> {
+  return request<ArtifactDownload>(`/artifacts/${artifactId}/download`)
 }
 
 export async function cancelExecution(executionId: number): Promise<Execution> {

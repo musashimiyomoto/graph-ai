@@ -1,7 +1,9 @@
 """Typed values exchanged between workflow node handlers."""
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import cast
 
 from enums import PortType
 from exceptions import ExecutionGraphValidationError
@@ -15,18 +17,19 @@ _ARTIFACT_KINDS = {
     PortType.AUDIO,
     PortType.VIDEO,
 }
+_SHA256_HEX_LENGTH = 64
 
 
 @dataclass(frozen=True, slots=True)
 class ArtifactReference:
     """Stable reference to binary content managed by an artifact store.
 
-    Phase 9's artifact-storage work will resolve ``artifact_id`` into a signed
-    download. Defining the reference in the runtime envelope first keeps binary
-    bytes out of worker messages and database text columns from the start.
+    ``artifact_id`` resolves through the tenant-scoped artifact API into a
+    short-lived signed download. Binary bytes never enter worker messages or
+    database output columns.
     """
 
-    artifact_id: str
+    artifact_id: int
     mime_type: str
     size: int
     checksum: str
@@ -34,8 +37,8 @@ class ArtifactReference:
 
     def __post_init__(self) -> None:
         """Validate artifact identity and metadata."""
-        if not self.artifact_id.strip():
-            msg = "Artifact reference requires a non-empty artifact_id"
+        if self.artifact_id <= 0:
+            msg = "Artifact reference requires a positive artifact_id"
             raise ValueError(msg)
         if not self.mime_type.strip():
             msg = "Artifact reference requires a non-empty MIME type"
@@ -43,8 +46,10 @@ class ArtifactReference:
         if self.size < 0:
             msg = "Artifact reference size cannot be negative"
             raise ValueError(msg)
-        if not self.checksum.strip():
-            msg = "Artifact reference requires a non-empty checksum"
+        if len(self.checksum) != _SHA256_HEX_LENGTH or any(
+            character not in "0123456789abcdef" for character in self.checksum
+        ):
+            msg = "Artifact reference requires a lowercase SHA-256 checksum"
             raise ValueError(msg)
 
     def to_payload(self) -> dict[str, JSONValue]:
@@ -56,6 +61,31 @@ class ArtifactReference:
             "checksum": self.checksum,
             "filename": self.filename,
         }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, object]) -> "ArtifactReference":
+        """Validate and rebuild an artifact reference from persisted JSON."""
+        artifact_id = payload.get("artifact_id")
+        mime_type = payload.get("mime_type")
+        size = payload.get("size")
+        checksum = payload.get("checksum")
+        filename = payload.get("filename")
+        if (
+            not isinstance(artifact_id, int)
+            or not isinstance(mime_type, str)
+            or not isinstance(size, int)
+            or not isinstance(checksum, str)
+            or not isinstance(filename, str | None)
+        ):
+            msg = "Persisted artifact reference has an invalid shape"
+            raise TypeError(msg)
+        return cls(
+            artifact_id=artifact_id,
+            mime_type=mime_type,
+            size=size,
+            checksum=checksum,
+            filename=filename,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +194,7 @@ class NodeValue:
         """Serialize an inline value for existing text DB/API boundaries.
 
         This is an explicit compatibility boundary, not a port coercion. Artifact
-        values cannot be represented safely until artifact persistence lands.
+        values are persisted via ``to_payload`` and cannot cross this text adapter.
         """
         if self.kind is PortType.TEXT:
             return self.require_text()
@@ -184,6 +214,43 @@ class NodeValue:
             "artifact": self.artifact.to_payload() if self.artifact else None,
             "metadata": self.metadata,
         }
+
+    @classmethod
+    def from_payload(cls, payload: Mapping[str, object]) -> "NodeValue":
+        """Validate and rebuild a typed value from a persisted envelope."""
+        raw_kind = payload.get("kind")
+        if not isinstance(raw_kind, str):
+            msg = "Persisted node value is missing its kind"
+            raise TypeError(msg)
+        try:
+            kind = PortType(raw_kind)
+        except ValueError as exc:
+            msg = f"Persisted node value has unsupported kind: {raw_kind}"
+            raise ValueError(msg) from exc
+
+        raw_metadata = payload.get("metadata", {})
+        if not isinstance(raw_metadata, dict):
+            msg = "Persisted node value metadata must be an object"
+            raise TypeError(msg)
+        raw_artifact = payload.get("artifact")
+        if raw_artifact is not None and not isinstance(raw_artifact, dict):
+            msg = "Persisted node value artifact must be an object"
+            raise TypeError(msg)
+        artifact = (
+            ArtifactReference.from_payload(cast("dict[str, object]", raw_artifact))
+            if raw_artifact is not None
+            else None
+        )
+        value = payload.get("value")
+        if not _is_json_value(value) or not _is_json_value(raw_metadata):
+            msg = "Persisted node value contains non-JSON data"
+            raise ValueError(msg)
+        return cls(
+            kind=kind,
+            value=cast("JSONValue", value),
+            artifact=artifact,
+            metadata=cast("dict[str, JSONValue]", raw_metadata),
+        )
 
 
 def _is_json_value(value: object) -> bool:

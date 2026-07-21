@@ -9,6 +9,7 @@ from arq import cron
 from croniter import CroniterError, croniter
 
 from api.metrics import record_execution
+from artifacts import artifact_store
 from constants import DEFAULT_TIMEOUT
 from db.repositories import (
     EmailAccountRepository,
@@ -45,9 +46,9 @@ from observability import init_sentry
 from rag.qdrant import get_qdrant_client
 from schemas import ExecutionCreate, ExecutionInputPayload
 from sessions import async_session
-from settings import redis_settings
+from settings import artifact_settings, redis_settings
 from streaming import publish_pull_progress, publish_token, publish_token_reset
-from usecases import ExecutionTrigger, ExecutionUsecase, VectorUsecase
+from usecases import ArtifactUsecase, ExecutionTrigger, ExecutionUsecase, VectorUsecase
 from utils.encryption import decrypt
 
 if TYPE_CHECKING:
@@ -73,6 +74,8 @@ _EMAIL_POLL_SECONDS = set(range(0, 60, 30))
 # so this keeps a due schedule's fire latency under 30 seconds without
 # polling much more often than that granularity warrants.
 _SCHEDULE_POLL_SECONDS = set(range(0, 60, 30))
+# Artifact retention cleanup runs once an hour in bounded batches.
+_ARTIFACT_GC_MINUTES = {17}
 
 
 async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
@@ -880,6 +883,18 @@ async def startup(ctx: dict[Any, Any]) -> None:
     del ctx
     configure_logging()
     init_sentry(component="worker")
+    await artifact_store.ensure_bucket()
+
+
+async def cleanup_expired_artifacts(*args: object, **kwargs: object) -> None:
+    """Delete one bounded batch of artifacts past their retention deadline."""
+    del args, kwargs
+    async with async_session() as session:
+        cleaned = await ArtifactUsecase(
+            store=artifact_store, settings=artifact_settings
+        ).cleanup_expired(session=session)
+    if cleaned:
+        logger.info("Deleted %s expired artifact(s)", cleaned)
 
 
 class WorkerSettings:
@@ -895,6 +910,7 @@ class WorkerSettings:
         cron(poll_telegram_updates, second=_TELEGRAM_POLL_SECONDS),
         cron(poll_email_updates, second=_EMAIL_POLL_SECONDS),
         cron(poll_scheduled_triggers, second=_SCHEDULE_POLL_SECONDS),
+        cron(cleanup_expired_artifacts, minute=_ARTIFACT_GC_MINUTES),
     ]
     redis_settings = redis_settings.arq
     on_startup = startup

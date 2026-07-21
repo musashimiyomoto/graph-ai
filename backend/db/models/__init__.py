@@ -1,5 +1,6 @@
 """Model exports for the backend."""
 
+from db.models.artifact import Artifact
 from db.models.audit_log import AuditLog
 from db.models.auth_action_token import AuthActionToken
 from db.models.auth_session import AuthSession
@@ -20,6 +21,7 @@ from db.models.workflow import Workflow
 from db.models.workflow_version import WorkflowVersion
 
 __all__ = [
+    "Artifact",
     "AuditLog",
     "AuthActionToken",
     "AuthSession",

@@ -43,6 +43,9 @@ is executed in the background, versioned, streamed token-by-token, and observabl
   password recovery, Fernet-encrypted secrets, per-user quotas (executions &
   tokens/day), an append-only audit log, and cost observability
   (tokens/latency per run).
+- **Artifact lifecycle** — tenant-scoped uploads backed by S3-compatible MinIO,
+  SHA-256 deduplication, byte quotas, retention/GC, short-lived signed downloads,
+  and safe image/audio/video previews in execution details.
 - **Observability** — Prometheus metrics (`/metrics`) and optional Sentry error
   tracking across both the API and the worker.
 
@@ -69,6 +72,8 @@ This copies `.env.example` → `.env` and runs `docker compose up --build`.
 | Metrics          | http://localhost:5000/metrics      |
 | ARQ dashboard    | http://localhost:8000              |
 | Qdrant dashboard | http://localhost:6333/dashboard    |
+| MinIO API        | http://localhost:9000              |
+| MinIO console    | http://localhost:9001              |
 | Ollama           | http://localhost:11434             |
 
 Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling.

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
-import type { PortType } from '../lib/types'
+import type { NodeValueEnvelope, PortType } from '../lib/types'
+import { ArtifactOutput } from './ArtifactOutput'
 
 function renderText(value: string): ReactNode {
   return <div className="whitespace-pre-wrap">{value}</div>
@@ -29,11 +30,24 @@ const RENDERERS: Partial<Record<PortType, (value: string) => ReactNode>> = {
 }
 
 interface OutputRendererProps {
-  value: string
+  value: string | null
   portType?: PortType | null
+  typedValue?: NodeValueEnvelope | null
 }
 
-export function OutputRenderer({ value, portType }: OutputRendererProps) {
-  const renderer = (portType && RENDERERS[portType]) ?? renderText
-  return <>{renderer(value)}</>
+export function OutputRenderer({ value, portType, typedValue }: OutputRendererProps) {
+  if (typedValue?.artifact) {
+    return <ArtifactOutput artifact={typedValue.artifact} kind={typedValue.kind} />
+  }
+
+  const resolvedPort = typedValue?.kind ?? portType
+  const inlineValue =
+    typedValue?.kind === 'text' && typeof typedValue.value === 'string'
+      ? typedValue.value
+      : value
+  if (inlineValue === null) {
+    return null
+  }
+  const renderer = (resolvedPort && RENDERERS[resolvedPort]) ?? renderText
+  return <>{renderer(inlineValue)}</>
 }

@@ -1,5 +1,6 @@
 """Usecase package for business logic."""
 
+from usecases.artifact import ArtifactUsecase
 from usecases.audit import AuditEvent, AuditUsecase
 from usecases.auth import AuthUsecase
 from usecases.edge import EdgeUsecase
@@ -20,6 +21,7 @@ from usecases.workflow import WorkflowUsecase
 from usecases.workflow_transfer import WorkflowTransferUsecase
 
 __all__ = [
+    "ArtifactUsecase",
     "AuditEvent",
     "AuditUsecase",
     "AuthUsecase",

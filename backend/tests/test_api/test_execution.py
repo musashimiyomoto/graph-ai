@@ -998,6 +998,14 @@ class TestNodeExecutionList(BaseTestCase):
             pytest.fail("Expected all node executions to be SUCCESS")
         if not any(item["output"] == "hello" for item in data):
             pytest.fail("Expected a node execution to carry the propagated output")
+        expected_value = {
+            "kind": "text",
+            "value": "hello",
+            "artifact": None,
+            "metadata": {},
+        }
+        if any(item["output_value"] != expected_value for item in data):
+            pytest.fail("Typed node output envelopes were not persisted and exposed")
 
     @pytest.mark.asyncio
     async def test_records_failed_node(self) -> None:
@@ -2517,6 +2525,32 @@ class TestExecutionParallel(BaseTestCase):
 class TestExecutionApproval(BaseTestCase):
     """Tests for approval pause, decision, and checkpoint resume."""
 
+    async def _downgrade_input_checkpoint(
+        self, execution_id: int, input_node_id: int
+    ) -> NodeExecutionRepository:
+        """Convert one typed checkpoint into its pre-JSONB legacy shape."""
+        repository = NodeExecutionRepository()
+        checkpoints = await repository.get_all(
+            session=self.session,
+            execution_id=execution_id,
+        )
+        input_checkpoint = next(
+            (row for row in checkpoints if row.node_id == input_node_id),
+            None,
+        )
+        if input_checkpoint is None:
+            message = "Expected an Input checkpoint before compatibility test"
+            raise AssertionError(message)
+        if input_checkpoint.output_value is None:
+            pytest.fail("Expected a typed Input checkpoint before compatibility test")
+        await repository.update_by(
+            session=self.session,
+            id=input_checkpoint.id,
+            data={"output_value": None},
+        )
+        await self.session.commit()
+        return repository
+
     async def _create_workflow(self, user_id: int) -> tuple[int, dict[str, int]]:
         """Create a linear Input -> Approval -> Output workflow."""
         workflow = await WorkflowFactory.create_async(
@@ -2560,7 +2594,7 @@ class TestExecutionApproval(BaseTestCase):
     async def test_approve_resumes_without_reexecuting_completed_nodes(
         self, test_engine: AsyncEngine
     ) -> None:
-        """Approve queues a continuation that consumes durable checkpoints."""
+        """Approval resumes from typed and legacy-compatible checkpoints."""
         user, headers = await self.create_user_and_get_token()
         workflow_id, node_ids = await self._create_workflow(user["id"])
         created_response = await self.client.post(
@@ -2586,6 +2620,12 @@ class TestExecutionApproval(BaseTestCase):
         if waiting.approval_input != "hello":
             pytest.fail("Paused execution should expose the upstream value")
 
+        # Simulate a checkpoint created before output_value JSONB existed. A
+        # rolling deployment must still resume it through the legacy text field.
+        repository = await self._downgrade_input_checkpoint(
+            execution_id=created["id"], input_node_id=node_ids["input"]
+        )
+
         approve_response = await self.client.post(
             url=f"/executions/{created['id']}/approve",
             headers=headers,
@@ -2606,7 +2646,7 @@ class TestExecutionApproval(BaseTestCase):
         if finalized.output_data != {"value": "hello"}:
             pytest.fail("Approval should pass its upstream value through unchanged")
 
-        rows = await NodeExecutionRepository().get_all(
+        rows = await repository.get_all(
             session=self.session,
             execution_id=created["id"],
         )

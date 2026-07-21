@@ -1,5 +1,6 @@
 """Repository interfaces for database access."""
 
+from db.repositories.artifact import ArtifactRepository
 from db.repositories.audit_log import AuditLogRepository
 from db.repositories.auth_action_token import AuthActionTokenRepository
 from db.repositories.auth_session import AuthSessionRepository
@@ -19,6 +20,7 @@ from db.repositories.workflow import WorkflowRepository
 from db.repositories.workflow_version import WorkflowVersionRepository
 
 __all__ = [
+    "ArtifactRepository",
     "AuditLogRepository",
     "AuthActionTokenRepository",
     "AuthSessionRepository",

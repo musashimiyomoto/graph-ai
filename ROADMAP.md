@@ -12,7 +12,8 @@ against the actual code as of this writing (not carried forward from stale notes
   execution, durable workflow/node execution history and checkpoints, rotating
   browser sessions, email verification/password recovery, encrypted connection
   secrets, quotas/audit logs, workflow versioning, and tenant-owned LLM, Telegram,
-  email, PostgreSQL, and MCP connection records.
+  email, PostgreSQL, and MCP connection records, plus tenant-scoped S3-compatible
+  artifact storage with signed downloads, quotas, retention and garbage collection.
 - **Frontend** — React 19 + React Flow graph editor, catalog-driven node inspector
   and node-creation dialog, undo/redo/copy-paste/multi-select/auto-layout, scoped
   loop editing, a Test Runs / Activity Log split, per-node execution details,
@@ -34,12 +35,12 @@ against the actual code as of this writing (not carried forward from stale notes
 
 ## Key limitations driving priorities
 
-1. **Typed runtime values are not yet persisted or exposed end to end.** Handlers
-   and schedulers now exchange a tagged `NodeValue`, but every registered node
-   still exposes text ports and existing DB/API boundaries deliberately serialize
-   through the legacy text adapter. Artifact storage, envelope persistence and real
-   JSON/file/media ports are the next steps before non-text values can survive
-   checkpoints and travel through user-built graphs.
+1. **Graph definitions still expose text-only runtime ports.** Handlers and
+   schedulers exchange a tagged `NodeValue`; complete envelopes now survive JSONB
+   checkpoints and file/image/audio/video values reference tenant-owned artifacts.
+   However, every registered user-facing node still declares text ports. Real
+   structured JSON/list/file/media ports, named handles and explicit coercions are
+   the next steps before non-text values can travel through user-built graphs.
 2. **Channels are not plugin-driven.** Input/Output expose a growing format enum,
    while Telegram/email/webhook polling and delivery are separate worker branches.
    Adding Slack, WhatsApp, Discord, or voice this way would multiply orchestration
@@ -904,16 +905,22 @@ for existing text-only workflow versions.
       propagation, Call Workflow, Loop, retries and checkpoint restoration now
       exchange `NodeValue`; every existing text handler uses explicit text accessors
       and constructors, so a future structured value cannot be silently coerced.
-      Current execution input/output and `node_executions.output` remain backward-
-      compatible text boundaries through `NodeValue.to_legacy_text()` until the
-      following artifact/persistence work lands. Added unit coverage for envelope
+      `node_executions.output` remains a backward-compatible text mirror while the
+      complete envelope is persisted independently. Added unit coverage for
       validation, structured compatibility serialization, media references and
-      non-text rejection; the complete 418-test backend suite remains green.
-- [ ] **Artifact storage and lifecycle** — add an S3-compatible backend (MinIO in
-      local Docker Compose), tenant-scoped upload/download APIs, signed short-lived
-      URLs, content-addressed deduplication, quotas, retention and garbage
-      collection. `node_executions` stores stable artifact references rather than
-      database-sized blobs, and execution details render safe previews/downloads.
+      non-text rejection.
+- [x] **Artifact storage and lifecycle** — MinIO provides the local S3-compatible
+      byte store while PostgreSQL owns tenant-scoped metadata. Authenticated upload,
+      list, signed-download and delete APIs enforce per-file/per-user byte limits;
+      SHA-256 content addressing deduplicates within each tenant, and signed links
+      cannot outlive retention. An hourly bounded GC removes expired objects and
+      rows. `node_executions.output_value` now stores the complete `NodeValue` JSONB
+      envelope (with fallback for legacy text checkpoints), keeping file/media bytes
+      out of PostgreSQL and worker messages. Execution details resolve authenticated
+      signed URLs on demand and render only safe image/audio/video elements or a
+      download link for generic files. Storage adapter, API ownership/quota/dedup/
+      expiry, envelope persistence/legacy resume and frontend preview coverage were
+      added; all 427 backend and 72 frontend tests pass.
 - [ ] **Real typed ports and explicit coercions** — allow definitions to expose
       typed named inputs/outputs, validate every edge against a small declared
       conversion table, and show inserted/required conversions in the editor.

@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 
 from api.metrics import http_request_duration_seconds, http_requests_total
 from api.routers import (
+    artifact,
     auth,
     edge,
     email_account,
@@ -31,6 +32,7 @@ from api.routers import (
     workflow,
     workflow_template,
 )
+from artifacts import artifact_store
 from exceptions import BaseError
 from logging_config import configure_logging
 from observability import init_sentry
@@ -57,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         port=redis_settings.port,
         db=redis_settings.db,
     )
+    await artifact_store.ensure_bucket()
     try:
         yield
     finally:
@@ -124,6 +127,7 @@ async def handle_base_error(_: Request, exc: BaseError) -> JSONResponse:
 
 
 app.include_router(router=health.router)
+app.include_router(router=artifact.router)
 app.include_router(router=auth.router)
 app.include_router(router=user.router)
 app.include_router(router=workflow.router)

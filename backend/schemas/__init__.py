@@ -1,5 +1,12 @@
 """Pydantic schemas for API inputs and outputs."""
 
+from schemas.artifact import (
+    ArtifactDownloadResponse,
+    ArtifactReferencePayload,
+    ArtifactResponse,
+    ArtifactUploadResponse,
+    NodeValuePayload,
+)
 from schemas.auth import (
     AuthSessionResponse,
     EmailActionRequest,
@@ -103,6 +110,10 @@ from schemas.workflow import (
 from schemas.workflow_version import WorkflowVersionResponse
 
 __all__ = [
+    "ArtifactDownloadResponse",
+    "ArtifactReferencePayload",
+    "ArtifactResponse",
+    "ArtifactUploadResponse",
     "AuditLogResponse",
     "AuthSessionResponse",
     "ChatMessage",
@@ -152,6 +163,7 @@ __all__ = [
     "NodeGraphSpec",
     "NodeResponse",
     "NodeUpdate",
+    "NodeValuePayload",
     "OllamaCatalogEntry",
     "OllamaCatalogTag",
     "OllamaModelPullRequest",

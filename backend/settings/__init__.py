@@ -1,5 +1,6 @@
 """Settings exports."""
 
+from settings.artifact import artifact_settings
 from settings.auth import auth_settings
 from settings.auth_email import auth_email_settings
 from settings.cors import cors_settings
@@ -13,6 +14,7 @@ from settings.redis import redis_settings
 from settings.sentry import sentry_settings
 
 __all__ = [
+    "artifact_settings",
     "auth_email_settings",
     "auth_settings",
     "cors_settings",

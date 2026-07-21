@@ -1,5 +1,13 @@
 """Custom exception types for the API."""
 
+from exceptions.artifact import (
+    ArtifactExpiredError,
+    ArtifactNotFoundError,
+    ArtifactQuotaExceededError,
+    ArtifactStorageError,
+    ArtifactTooLargeError,
+    EmptyArtifactError,
+)
 from exceptions.auth import (
     AuthActionTokenError,
     AuthCredentialsError,
@@ -74,6 +82,11 @@ from exceptions.workflow import (
 )
 
 __all__ = [
+    "ArtifactExpiredError",
+    "ArtifactNotFoundError",
+    "ArtifactQuotaExceededError",
+    "ArtifactStorageError",
+    "ArtifactTooLargeError",
     "AuthActionTokenError",
     "AuthCredentialsError",
     "AuthSessionNotFoundError",
@@ -90,6 +103,7 @@ __all__ = [
     "EmailAccountNotFoundError",
     "EmailConnectionError",
     "EmailNotVerifiedError",
+    "EmptyArtifactError",
     "EmptyDocumentError",
     "ExecutionApprovalNotPendingError",
     "ExecutionGraphValidationError",

@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from enums import ExecutionSource, ExecutionStatus, NodeType
+from schemas.artifact import NodeValuePayload
 
 
 class ExecutionInputPayload(BaseModel):
@@ -131,6 +132,9 @@ class NodeExecutionResponse(BaseModel):
     )
     status: ExecutionStatus = Field(default=..., description="Node execution status")
     output: str | None = Field(default=None, description="Node output text")
+    output_value: NodeValuePayload | None = Field(
+        default=None, description="Typed node output envelope"
+    )
     error: str | None = Field(default=None, description="Error message")
     prompt_tokens: int | None = Field(
         default=None, description="LLM prompt tokens, if this node called an LLM"

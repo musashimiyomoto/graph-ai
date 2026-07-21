@@ -80,8 +80,12 @@ function NodeResultRow({
         <span className={STATUS_COLORS[nodeResult.status]}>{nodeResult.status}</span>
         {duration ? <span>{duration}</span> : null}
       </div>
-      {nodeResult.output !== null ? (
-        <OutputRenderer value={nodeResult.output} portType={meta?.portType ?? null} />
+      {nodeResult.output !== null || nodeResult.output_value !== null ? (
+        <OutputRenderer
+          value={nodeResult.output}
+          typedValue={nodeResult.output_value}
+          portType={meta?.portType ?? null}
+        />
       ) : null}
       {nodeResult.status === 'waiting_delay' && nodeResult.wait_until ? (
         <div className="text-[var(--muted)]">

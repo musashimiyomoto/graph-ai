@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import Enum, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models import BaseWithID
@@ -50,6 +51,10 @@ class NodeExecution(BaseWithID):
     )
     output: Mapped[str | None] = mapped_column(
         Text, comment="Node output text if the node succeeded"
+    )
+    output_value: Mapped[dict | None] = mapped_column(
+        JSONB,
+        comment="Typed NodeValue envelope; NULL for legacy checkpoint rows",
     )
     error: Mapped[str | None] = mapped_column(
         Text, comment="Error message if the node failed"

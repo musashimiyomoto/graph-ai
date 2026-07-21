@@ -23,6 +23,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      minio:
+        condition: service_healthy
     ports:
       - "5000:5000"
     volumes:
@@ -42,6 +44,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+      minio:
+        condition: service_healthy
     volumes:
       - fastembed_cache:/tmp/fastembed_cache
     command: [ "arq", "worker.WorkerSettings" ]
@@ -119,9 +123,28 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  minio:
+    image: ${ARTIFACT_MINIO_IMAGE}
+    restart: always
+    command: [ "server", "/data", "--console-address", ":9001" ]
+    environment:
+      MINIO_ROOT_USER: ${ARTIFACT_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${ARTIFACT_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "mc", "ready", "local" ]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+
 volumes:
   postgres_data:
   ollama_data:
   redis_data:
   qdrant_data:
   fastembed_cache:
+  minio_data:

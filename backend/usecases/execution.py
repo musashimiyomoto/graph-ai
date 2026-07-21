@@ -1733,7 +1733,16 @@ class ExecutionUsecase:
         node_execution: "NodeExecution",
     ) -> NodeExecutionResult:
         """Rebuild an in-memory result from a durable successful checkpoint."""
-        output = node_execution.output or ""
+        if node_execution.output_value is not None:
+            try:
+                output_value = NodeValue.from_payload(node_execution.output_value)
+            except (TypeError, ValueError) as exc:
+                raise ExecutionGraphValidationError(
+                    message="Stored node output envelope is invalid"
+                ) from exc
+        else:
+            output_value = NodeValue.text(node_execution.output or "")
+        output = output_value.require_text()
         selected_handle: str | None = None
         if node.type is NodeType.CONDITION:
             try:
@@ -1755,8 +1764,8 @@ class ExecutionUsecase:
                 selected_handle = select_switch_handle(node.data, output)
             except ValueError as exc:
                 raise ExecutionGraphValidationError(message=str(exc)) from exc
-        return NodeExecutionResult.text(
-            output=output,
+        return NodeExecutionResult(
+            output=output_value,
             selected_handle=selected_handle,
         )
 
@@ -2736,9 +2745,12 @@ class ExecutionUsecase:
                 inside a Loop node's body) iteration index.
 
         """
-        stored_output = (
-            outcome.output.to_legacy_text() if outcome.output is not None else None
-        )
+        stored_output = None
+        output_value = None
+        if outcome.output is not None:
+            output_value = outcome.output.to_payload()
+            if outcome.output.artifact is None:
+                stored_output = outcome.output.to_legacy_text()
         await self._node_execution_repository.create(
             session=session,
             data={
@@ -2749,6 +2761,7 @@ class ExecutionUsecase:
                 "iteration": outcome.iteration,
                 "status": outcome.status,
                 "output": _truncate_for_storage(stored_output),
+                "output_value": output_value,
                 "error": outcome.error,
                 "prompt_tokens": (
                     outcome.usage.prompt_tokens if outcome.usage else None

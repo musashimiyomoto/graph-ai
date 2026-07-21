@@ -436,11 +436,32 @@ export interface NodeExecutionResult {
   node_label: string | null
   status: ExecutionStatus
   output: string | null
+  output_value: NodeValueEnvelope | null
   error: string | null
   started_at: string
   finished_at: string | null
   wait_until: string | null
   iteration: number | null
+}
+
+export interface ArtifactReference {
+  artifact_id: number
+  mime_type: string
+  size: number
+  checksum: string
+  filename: string | null
+}
+
+export interface NodeValueEnvelope {
+  kind: PortType
+  value: unknown
+  artifact: ArtifactReference | null
+  metadata: Record<string, unknown>
+}
+
+export interface ArtifactDownload {
+  url: string
+  expires_at: string
 }
 
 export interface VectorCollection {
