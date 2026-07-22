@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
+import { useChannelCatalog } from '../hooks/useChannelCatalog'
 import type { ApiError } from '../lib/types'
 import { AccountSecuritySettings } from './AccountSecuritySettings'
 import { EmailSettings } from './EmailSettings'
@@ -25,24 +26,50 @@ interface SettingsSection {
   }) => React.JSX.Element
 }
 
-// Adding a future integration means adding one entry here — no new header
-// button, no new modal.
-const SECTIONS: SettingsSection[] = [
+const CORE_SECTIONS_BEFORE_CHANNELS: SettingsSection[] = [
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
   { id: 'account', label: 'Account Security', Component: AccountSecuritySettings },
-  { id: 'telegram', label: 'Telegram Bots', Component: TelegramSettings },
-  { id: 'email', label: 'Email Accounts', Component: EmailSettings },
+]
+
+const CORE_SECTIONS_AFTER_CHANNELS: SettingsSection[] = [
   { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },
   { id: 'mcp', label: 'MCP Servers', Component: MCPServerSettings },
   { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
 ]
+
+const CHANNEL_SETTINGS_COMPONENTS: Partial<
+  Record<string, SettingsSection['Component']>
+> = {
+  telegram: TelegramSettings,
+  email: EmailSettings,
+}
 
 export function SettingsModal({
   onClose,
   onError,
   onPasswordChanged,
 }: SettingsModalProps) {
-  const [activeSectionId, setActiveSectionId] = useState<string>(SECTIONS[0].id)
+  const [activeSectionId, setActiveSectionId] = useState<string>(
+    CORE_SECTIONS_BEFORE_CHANNELS[0].id,
+  )
+  const { channelCatalog } = useChannelCatalog({ handleError: onError })
+  const sections = useMemo<SettingsSection[]>(() => {
+    const channelSections = channelCatalog.flatMap((channel) => {
+      const settings = channel.settings
+      if (!settings) {
+        return []
+      }
+      const Component = CHANNEL_SETTINGS_COMPONENTS[settings.component_key]
+      return Component
+        ? [{ id: settings.key, label: settings.label, Component }]
+        : []
+    })
+    return [
+      ...CORE_SECTIONS_BEFORE_CHANNELS,
+      ...channelSections,
+      ...CORE_SECTIONS_AFTER_CHANNELS,
+    ]
+  }, [channelCatalog])
 
   return (
     <Modal onClose={onClose} maxWidth="max-w-2xl">
@@ -55,7 +82,7 @@ export function SettingsModal({
 
       <div className="flex gap-4">
         <div className="flex w-40 shrink-0 flex-col gap-1">
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <button
               key={section.id}
               type="button"
@@ -77,7 +104,7 @@ export function SettingsModal({
               empty state to loaded content each time. Mounting once and just
               toggling visibility keeps switches instant and jump-free after
               the first load. */}
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <div key={section.id} className={section.id === activeSectionId ? '' : 'hidden'}>
               <section.Component
                 onError={onError}

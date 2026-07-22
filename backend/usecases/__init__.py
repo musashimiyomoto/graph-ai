@@ -3,6 +3,7 @@
 from usecases.artifact import ArtifactUsecase
 from usecases.audit import AuditEvent, AuditUsecase
 from usecases.auth import AuthUsecase
+from usecases.channel import ChannelUsecase
 from usecases.edge import EdgeUsecase
 from usecases.email_account import EmailAccountUsecase
 from usecases.execution import ExecutionListFilter, ExecutionTrigger, ExecutionUsecase
@@ -25,6 +26,7 @@ __all__ = [
     "AuditEvent",
     "AuditUsecase",
     "AuthUsecase",
+    "ChannelUsecase",
     "EdgeUsecase",
     "EmailAccountUsecase",
     "ExecutionListFilter",

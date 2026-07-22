@@ -4,6 +4,7 @@
 // resource instead of each hook hand-rolling its own key shape.
 export const queryKeys = {
   nodeCatalog: () => ['node-catalog'] as const,
+  channelCatalog: () => ['channel-catalog'] as const,
   workflows: () => ['workflows'] as const,
   authSessions: () => ['auth-sessions'] as const,
   workflowTemplates: () => ['workflow-templates'] as const,
@@ -19,6 +20,6 @@ export const queryKeys = {
   vectorCollections: () => ['vector-collections'] as const,
   vectorDocuments: (collection: string) =>
     ['vector-collections', collection, 'documents'] as const,
-  activityLog: (workflowId: number) =>
-    ['executions', workflowId, 'activity-log'] as const,
+  activityLog: (workflowId: number, sources: string[]) =>
+    ['executions', workflowId, 'activity-log', sources] as const,
 }

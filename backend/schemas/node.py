@@ -51,6 +51,10 @@ class NodeFieldUI(BaseModel):
     label: str = Field(default=..., description="Display label")
     placeholder: str | None = Field(default=None, description="Input placeholder")
     help: str | None = Field(default=None, description="Help text")
+    options: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional select value to human-readable label mapping",
+    )
     step: float | None = Field(
         default=None,
         description="Numeric stepper increment; use 1 for integer fields "
@@ -386,6 +390,10 @@ class NodeCatalogFieldUIResponse(BaseModel):
     label: str = Field(default=..., description="UI label")
     placeholder: str | None = Field(default=None, description="Input placeholder")
     help: str | None = Field(default=None, description="Field help text")
+    options: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional select value labels",
+    )
     step: float | None = Field(default=None, description="Numeric stepper increment")
 
 

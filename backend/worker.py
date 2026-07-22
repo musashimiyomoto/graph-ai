@@ -1,106 +1,43 @@
 """ARQ worker for background workflow execution."""
 
 import logging
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from arq import cron
-from croniter import CroniterError, croniter
+from arq.typing import WorkerCoroutine
 
 from api.metrics import record_execution
 from artifacts import artifact_store
+from channels import (
+    ChannelDefinition,
+    deliver_execution,
+    polling_channel_definitions,
+    receive_channel,
+)
 from constants import DEFAULT_TIMEOUT
-from db.repositories import (
-    EmailAccountRepository,
-    ExecutionRepository,
-    NodeRepository,
-    NodeScheduleRepository,
-    TelegramBotRepository,
-    WorkflowRepository,
-)
-from enums import (
-    ExecutionSource,
-    ExecutionStatus,
-    InputNodeFormat,
-    NodeType,
-    OutputNodeFormat,
-    PortType,
-)
-from exceptions import (
-    BaseError,
-    EmailConnectionError,
-    TelegramAPIError,
-    WebhookConnectionError,
-)
-from integrations.email import (
-    EmailConnectionConfig,
-    InboundEmail,
-    fetch_messages,
-    send_email,
-)
-from integrations.telegram import get_updates, send_message
-from integrations.webhook import send_webhook
+from enums import ExecutionSource, ExecutionStatus
+from exceptions import BaseError
 from llm.ollama import OllamaClient
 from logging_config import configure_logging
 from observability import init_sentry
 from rag.qdrant import get_qdrant_client
-from schemas import (
-    ExecutionCreate,
-    ExecutionInputPayload,
-    NodeValuePayload,
-    TriggerActor,
-    TriggerConversation,
-    TriggerEvent,
-)
 from sessions import async_session
 from settings import artifact_settings, redis_settings
 from streaming import publish_pull_progress, publish_token, publish_token_reset
-from usecases import ArtifactUsecase, ExecutionTrigger, ExecutionUsecase, VectorUsecase
-from utils.encryption import decrypt
+from usecases import ArtifactUsecase, ExecutionUsecase, VectorUsecase
 
 if TYPE_CHECKING:
     from arq import ArqRedis
     from redis.asyncio import Redis
-    from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.models import EmailAccount, Node, NodeSchedule, TelegramBot
     from schemas import ExecutionResponse
 
 logger = logging.getLogger(__name__)
 
-EnqueueCallback = Callable[[int], Awaitable[None]]
-
 # Reap stuck executions every 5 minutes.
 _REAPER_MINUTES = set(range(0, 60, 5))
-# Short-poll Telegram for new messages every 10 seconds.
-_TELEGRAM_POLL_SECONDS = set(range(0, 60, 10))
-# Email polling opens an IMAP connection per active account, so keep it less
-# frequent than Telegram's lightweight HTTP short poll.
-_EMAIL_POLL_SECONDS = set(range(0, 60, 30))
-# Poll cron schedules twice a minute — cron's finest granularity is 1 minute,
-# so this keeps a due schedule's fire latency under 30 seconds without
-# polling much more often than that granularity warrants.
-_SCHEDULE_POLL_SECONDS = set(range(0, 60, 30))
 # Artifact retention cleanup runs once an hour in bounded batches.
 _ARTIFACT_GC_MINUTES = {17}
-
-
-@dataclass(frozen=True)
-class _TelegramInboundMessage:
-    """Normalized Telegram message retained without the raw provider payload."""
-
-    update_id: int
-    chat_id: int
-    text: str
-    occurred_at: datetime
-    message_id: int | None = None
-    thread_id: int | None = None
-    sender_id: int | None = None
-    sender_name: str | None = None
-    sender_username: str | None = None
-    locale: str | None = None
 
 
 async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
@@ -145,9 +82,7 @@ async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
                 _defer_until=result.wait_until,
             )
             return
-        await _reply_via_telegram(session=session, execution_id=execution_id)
-        await _reply_via_email(session=session, execution_id=execution_id)
-        await _deliver_via_webhook(session=session, execution_id=execution_id)
+        await deliver_execution(session=session, execution_id=execution_id)
 
     _record_execution_metrics(result)
 
@@ -257,401 +192,15 @@ async def pull_ollama_model_task(
     )
 
 
-async def _reply_via_telegram(session: "AsyncSession", execution_id: int) -> None:
-    """Send a finished execution's result back to Telegram, if configured to.
-
-    The workflow's Output node must have ``format=telegram`` and a
-    ``telegram_bot_id`` set. The destination chat is either the Output node's
-    own pinned ``telegram_chat_id`` (so this also works for manual, non-
-    Telegram-triggered runs) or, absent that, the chat that triggered the run.
-    Best-effort: a Telegram delivery failure must not surface as a failure of
-    an already-completed execution.
-
-    Args:
-        session: Database session.
-        execution_id: The finished execution.
-
-    """
-    execution = await ExecutionRepository().get_by(session=session, id=execution_id)
-    if execution is None:
-        return
-
-    output_node = await NodeRepository().get_by(
-        session=session, workflow_id=execution.workflow_id, type=NodeType.OUTPUT
-    )
-    if output_node is None:
-        return
-
-    if output_node.data.get("format") != OutputNodeFormat.TELEGRAM.value:
-        return
-
-    bot = await _resolve_telegram_bot(session=session, node_data=output_node.data)
-    if bot is None:
-        return
-
-    chat_id = _resolve_reply_chat_id(
-        node_data=output_node.data, trigger_event=execution.trigger_event
-    )
-    if chat_id is None:
-        return
-
-    if execution.status is ExecutionStatus.SUCCESS:
-        output = execution.output_data or {}
-        text = output.get("value", "") if isinstance(output, dict) else ""
-    elif execution.status is ExecutionStatus.FAILED:
-        text = f"Execution failed: {execution.error or 'unknown error'}"
-    else:
-        return
-
-    try:
-        await send_message(
-            bot_token=decrypt(bot.bot_token),
-            chat_id=chat_id,
-            text=text or "(empty output)",
-        )
-    except TelegramAPIError:
-        logger.exception(
-            "Failed to deliver Telegram reply for execution %s", execution_id
-        )
-
-
-def _resolve_reply_chat_id(
-    node_data: dict[str, Any], trigger_event: dict[str, Any]
-) -> int | None:
-    """Pick the chat to reply to: a pinned chat ID, else the triggering chat.
-
-    Args:
-        node_data: The Output node's configuration data.
-        trigger_event: The canonical event that triggered the execution.
-
-    Returns:
-        The chat ID to reply to, or ``None`` if neither is available.
-
-    """
-    pinned_chat_id = node_data.get("telegram_chat_id")
-    if isinstance(pinned_chat_id, int):
-        return pinned_chat_id
-
-    conversation = trigger_event.get("conversation")
-    if not isinstance(conversation, dict):
-        return None
-    conversation_id = conversation.get("id")
-    if not isinstance(conversation_id, str):
-        return None
-    try:
-        return int(conversation_id)
-    except ValueError:
-        return None
-
-
-async def _resolve_telegram_bot(
-    session: "AsyncSession", node_data: dict[str, Any]
-) -> "TelegramBot | None":
-    """Look up the Telegram bot referenced by a node's ``telegram_bot_id`` field.
-
-    Args:
-        session: Database session.
-        node_data: The node's configuration data.
-
-    Returns:
-        The bot, or ``None`` if unreferenced or since deleted.
-
-    """
-    bot_id = node_data.get("telegram_bot_id")
-    if not isinstance(bot_id, int):
-        return None
-
-    return await TelegramBotRepository().get_by(session=session, id=bot_id)
-
-
-def _email_config(account: "EmailAccount") -> EmailConnectionConfig:
-    """Build decrypted integration config from a persisted account."""
-    return EmailConnectionConfig(
-        email_address=account.email_address,
-        username=account.username,
-        password=decrypt(account.password),
-        imap_host=account.imap_host,
-        imap_port=account.imap_port,
-        imap_use_ssl=account.imap_use_ssl,
-        smtp_host=account.smtp_host,
-        smtp_port=account.smtp_port,
-        smtp_use_tls=account.smtp_use_tls,
-        smtp_use_ssl=account.smtp_use_ssl,
-    )
-
-
-def _email_reply_subject(configured: object, triggered: str | None) -> str:
-    """Resolve a fixed subject or derive a conventional reply subject."""
-    if isinstance(configured, str) and configured.strip():
-        return configured.strip()
-    if triggered:
-        return triggered if triggered.lower().startswith("re:") else f"Re: {triggered}"
-    return "Workflow result"
-
-
-def _event_sender_address(trigger_event: dict[str, Any]) -> str | None:
-    """Return the best reply address from a canonical trigger event."""
-    sender = trigger_event.get("sender")
-    if not isinstance(sender, dict):
-        return None
-    for field in ("address", "id"):
-        value = sender.get(field)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def _event_subject(trigger_event: dict[str, Any]) -> str | None:
-    """Return the incoming subject from a canonical trigger event."""
-    metadata = trigger_event.get("metadata")
-    if not isinstance(metadata, dict):
-        return None
-    subject = metadata.get("subject")
-    return subject if isinstance(subject, str) else None
-
-
-async def _reply_via_email(session: "AsyncSession", execution_id: int) -> None:
-    """Deliver a finished execution through an email-formatted Output node."""
-    execution_repository = ExecutionRepository()
-    execution = await execution_repository.get_by(session=session, id=execution_id)
-    if execution is None:
-        return
-
-    output_node = await NodeRepository().get_by(
-        session=session, workflow_id=execution.workflow_id, type=NodeType.OUTPUT
-    )
-    if output_node is None or output_node.data.get("format") != OutputNodeFormat.EMAIL:
-        return
-
-    workflow = await WorkflowRepository().get_by(
-        session=session, id=execution.workflow_id
-    )
-    account_id = output_node.data.get("email_account_id")
-    if workflow is None or not isinstance(account_id, int):
-        return
-    account = await EmailAccountRepository().get_by(
-        session=session, id=account_id, user_id=workflow.owner_id
-    )
-    if account is None:
-        return
-
-    configured_recipient = output_node.data.get("email_to")
-    recipient = (
-        configured_recipient.strip()
-        if isinstance(configured_recipient, str) and configured_recipient.strip()
-        else _event_sender_address(execution.trigger_event)
-    )
-    if not recipient:
-        return
-
-    if execution.status is ExecutionStatus.SUCCESS:
-        output = execution.output_data or {}
-        text = output.get("value", "") if isinstance(output, dict) else ""
-    elif execution.status is ExecutionStatus.FAILED:
-        text = f"Execution failed: {execution.error or 'unknown error'}"
-    else:
-        return
-
-    try:
-        await send_email(
-            config=_email_config(account),
-            recipient=recipient,
-            subject=_email_reply_subject(
-                output_node.data.get("email_subject"),
-                _event_subject(execution.trigger_event),
-            ),
-            text=text or "(empty output)",
-        )
-    except EmailConnectionError:
-        logger.exception("Failed to deliver email reply for execution %s", execution_id)
-
-
-async def _deliver_via_webhook(session: "AsyncSession", execution_id: int) -> None:
-    """POST a finished execution to a webhook-formatted Output node."""
-    execution = await ExecutionRepository().get_by(session=session, id=execution_id)
-    if execution is None:
-        return
-
-    output_node = await NodeRepository().get_by(
-        session=session, workflow_id=execution.workflow_id, type=NodeType.OUTPUT
-    )
-    if (
-        output_node is None
-        or output_node.data.get("format") != OutputNodeFormat.WEBHOOK
-    ):
-        return
-
-    url = output_node.data.get("webhook_url")
-    if not isinstance(url, str) or not url.strip():
-        return
-
-    try:
-        await send_webhook(
-            url=url.strip(),
-            payload={
-                "execution_id": execution.id,
-                "workflow_id": execution.workflow_id,
-                "status": execution.status.value,
-                "output": execution.output_data,
-                "error": execution.error,
-            },
-        )
-    except WebhookConnectionError:
-        logger.exception(
-            "Failed to deliver webhook result for execution %s", execution_id
-        )
-
-
-def _email_nodes_triggered_by(
-    account: "EmailAccount", input_nodes: list["Node"]
-) -> list["Node"]:
-    """Filter email Input nodes that reference an account."""
-    return [
-        node
-        for node in input_nodes
-        if node.data.get("format") == InputNodeFormat.EMAIL
-        and node.data.get("email_account_id") == account.id
-    ]
-
-
-def _email_input_value(message: InboundEmail) -> str:
-    """Compose subject and body into the engine's text input contract."""
-    value = (
-        f"Subject: {message.subject}\n\n{message.body}"
-        if message.subject
-        else message.body
-    )
-    return value[:50_000]
-
-
-async def _trigger_email_executions(
-    session: "AsyncSession",
-    account: "EmailAccount",
-    node: "Node",
-    messages: list[InboundEmail],
-    enqueue: EnqueueCallback,
+async def poll_registered_channel(
+    ctx: dict[Any, Any],
+    source: ExecutionSource,
+    *args: object,
+    **kwargs: object,
 ) -> None:
-    """Create one execution per incoming email for one Input node."""
-    workflow = await WorkflowRepository().get_by(session=session, id=node.workflow_id)
-    if workflow is None or workflow.owner_id != account.user_id:
-        return
-
-    usecase = ExecutionUsecase()
-    for message in messages:
-        if not message.sender:
-            continue
-        try:
-            await usecase.create_execution(
-                session=session,
-                user_id=workflow.owner_id,
-                data=ExecutionCreate(
-                    workflow_id=node.workflow_id,
-                    input_data=ExecutionInputPayload(value=_email_input_value(message)),
-                ),
-                enqueue=enqueue,
-                trigger=ExecutionTrigger(
-                    source=ExecutionSource.EMAIL,
-                    event=TriggerEvent(
-                        channel=ExecutionSource.EMAIL,
-                        external_event_id=(f"account:{account.id}:uid:{message.uid}"),
-                        sender=TriggerActor(
-                            id=message.sender,
-                            address=message.sender,
-                        ),
-                        conversation=TriggerConversation(
-                            id=(
-                                message.thread_id
-                                or message.message_id
-                                or f"account:{account.id}:uid:{message.uid}"
-                            )
-                        ),
-                        locale=message.locale,
-                        message=NodeValuePayload(
-                            kind=PortType.TEXT,
-                            value=_email_input_value(message),
-                        ),
-                        occurred_at=message.sent_at or datetime.now(tz=UTC),
-                        metadata={
-                            "account_id": account.id,
-                            "message_id": message.message_id,
-                            "subject": message.subject,
-                        },
-                    ),
-                ),
-            )
-        except BaseError:
-            logger.exception(
-                "Failed to create execution from email for workflow %s",
-                node.workflow_id,
-            )
-
-
-async def poll_email_updates(
-    ctx: dict[Any, Any], *args: object, **kwargs: object
-) -> None:
-    """Poll enabled IMAP accounts and enqueue runs for new messages."""
+    """Run one polling channel through the generic receive/acknowledge runtime."""
     del args, kwargs
     redis: ArqRedis = ctx["redis"]
-
-    async def enqueue(execution_id: int) -> None:
-        """Enqueue a deduplicated execution job."""
-        await redis.enqueue_job(
-            "run_execution_task", execution_id, _job_id=f"execution:{execution_id}"
-        )
-
-    account_repository = EmailAccountRepository()
-    async with async_session() as session:
-        accounts = await account_repository.get_all(session=session, enabled=True)
-        input_nodes = await NodeRepository().get_all(
-            session=session, type=NodeType.INPUT
-        )
-        for account in accounts:
-            nodes = _email_nodes_triggered_by(account, input_nodes)
-            if not nodes:
-                continue
-            try:
-                messages = await fetch_messages(
-                    config=_email_config(account), last_uid=account.last_uid
-                )
-            except EmailConnectionError:
-                logger.exception("Failed to poll email account %s", account.id)
-                continue
-
-            for node in nodes:
-                await _trigger_email_executions(
-                    session=session,
-                    account=account,
-                    node=node,
-                    messages=messages,
-                    enqueue=enqueue,
-                )
-            if messages:
-                await account_repository.update_by(
-                    session=session,
-                    data={"last_uid": max(message.uid for message in messages)},
-                    id=account.id,
-                )
-                await session.commit()
-
-
-async def poll_telegram_updates(
-    ctx: dict[Any, Any], *args: object, **kwargs: object
-) -> None:
-    """Poll every enabled Telegram bot and enqueue executions for new messages.
-
-    Every workflow whose Input node has ``format=telegram`` and references a
-    polled bot gets one execution per new message sent to that bot.
-
-    Args:
-        ctx: ARQ job context.
-        args: Unused positional arguments (ARQ coroutine protocol).
-        kwargs: Unused keyword arguments (ARQ coroutine protocol).
-
-    """
-    del args, kwargs
-    redis: ArqRedis = ctx["redis"]
-    telegram_bot_repository = TelegramBotRepository()
-    node_repository = NodeRepository()
 
     async def enqueue(execution_id: int) -> None:
         """Enqueue the execution job, deduplicated by execution ID."""
@@ -660,397 +209,42 @@ async def poll_telegram_updates(
         )
 
     async with async_session() as session:
-        bots = await telegram_bot_repository.get_all(session=session, enabled=True)
-        input_nodes = await node_repository.get_all(
-            session=session, type=NodeType.INPUT
-        )
-
-        for bot in bots:
-            triggered_nodes = _nodes_triggered_by(bot=bot, input_nodes=input_nodes)
-            if not triggered_nodes:
-                continue
-
-            messages, max_update_id = await _fetch_new_messages(bot=bot)
-            if messages is None:
-                continue
-
-            for node in triggered_nodes:
-                await _trigger_executions(
-                    session=session,
-                    bot=bot,
-                    node=node,
-                    messages=messages,
-                    enqueue=enqueue,
-                )
-
-            if max_update_id != bot.last_update_id:
-                await telegram_bot_repository.update_by(
-                    session=session,
-                    data={"last_update_id": max_update_id},
-                    id=bot.id,
-                )
-                await session.commit()
-
-
-def _nodes_triggered_by(bot: "TelegramBot", input_nodes: list["Node"]) -> list["Node"]:
-    """Filter Input nodes wired to poll a given bot.
-
-    Args:
-        bot: The Telegram bot.
-        input_nodes: All Input nodes across every workflow.
-
-    Returns:
-        The Input nodes with ``format=telegram`` referencing this bot.
-
-    """
-    return [
-        node
-        for node in input_nodes
-        if node.data.get("format") == InputNodeFormat.TELEGRAM.value
-        and node.data.get("telegram_bot_id") == bot.id
-    ]
-
-
-async def _fetch_new_messages(
-    bot: "TelegramBot",
-) -> tuple[list[_TelegramInboundMessage] | None, int]:
-    """Fetch and parse new messages for a bot since its last poll offset.
-
-    Args:
-        bot: The Telegram bot to poll.
-
-    Returns:
-        A ``(messages, max_update_id)`` tuple. ``messages`` is ``None`` if the
-        poll request itself failed (offset should then stay put).
-
-    """
-    try:
-        updates = await get_updates(
-            bot_token=decrypt(bot.bot_token), offset=bot.last_update_id + 1
-        )
-    except TelegramAPIError:
-        logger.exception("Failed to poll Telegram updates for bot %s", bot.id)
-        return None, bot.last_update_id
-
-    max_update_id = bot.last_update_id
-    messages: list[_TelegramInboundMessage] = []
-    for update in updates:
-        update_id = update.get("update_id")
-        if isinstance(update_id, int):
-            max_update_id = max(max_update_id, update_id)
-
-        message = _extract_message(update)
-        if message is not None:
-            messages.append(message)
-
-    return messages, max_update_id
-
-
-async def _trigger_executions(
-    session: "AsyncSession",
-    bot: "TelegramBot",
-    node: "Node",
-    messages: list[_TelegramInboundMessage],
-    enqueue: EnqueueCallback,
-) -> None:
-    """Create one execution per new message for a Telegram-triggered Input node.
-
-    Args:
-        session: Database session.
-        bot: Telegram bot that received the updates.
-        node: The triggered Input node.
-        messages: Normalized messages fetched for the node's bot.
-        enqueue: Callback that schedules an execution for background running.
-
-    """
-    workflow = await WorkflowRepository().get_by(session=session, id=node.workflow_id)
-    if workflow is None:
-        return
-
-    execution_usecase = ExecutionUsecase()
-    for message in messages:
-        try:
-            await execution_usecase.create_execution(
-                session=session,
-                user_id=workflow.owner_id,
-                data=ExecutionCreate(
-                    workflow_id=node.workflow_id,
-                    input_data=ExecutionInputPayload(value=message.text),
-                ),
-                enqueue=enqueue,
-                trigger=ExecutionTrigger(
-                    source=ExecutionSource.TELEGRAM,
-                    event=TriggerEvent(
-                        channel=ExecutionSource.TELEGRAM,
-                        external_event_id=(f"bot:{bot.id}:update:{message.update_id}"),
-                        sender=(
-                            TriggerActor(
-                                id=str(message.sender_id),
-                                display_name=message.sender_name,
-                                address=(
-                                    f"@{message.sender_username}"
-                                    if message.sender_username
-                                    else None
-                                ),
-                            )
-                            if message.sender_id is not None
-                            else None
-                        ),
-                        conversation=TriggerConversation(
-                            id=str(message.chat_id),
-                            thread_id=(
-                                str(message.thread_id)
-                                if message.thread_id is not None
-                                else None
-                            ),
-                        ),
-                        locale=message.locale,
-                        message=NodeValuePayload(
-                            kind=PortType.TEXT,
-                            value=message.text,
-                        ),
-                        occurred_at=message.occurred_at,
-                        metadata={
-                            "bot_id": bot.id,
-                            "message_id": message.message_id,
-                        },
-                    ),
-                ),
-            )
-        except BaseError:
-            logger.exception(
-                "Failed to create execution from Telegram message for workflow %s",
-                node.workflow_id,
-            )
-
-
-def _extract_message(update: dict[str, Any]) -> _TelegramInboundMessage | None:
-    """Pull a chat ID and text out of a Telegram update, if present.
-
-    Args:
-        update: A raw Telegram update object.
-
-    Returns:
-        A normalized message, or ``None`` when the update is malformed.
-
-    """
-    message = update.get("message")
-    if not isinstance(message, dict):
-        return None
-
-    update_id = update.get("update_id")
-
-    text = message.get("text")
-    chat = message.get("chat")
-    chat_id = chat.get("id") if isinstance(chat, dict) else None
-
-    if (
-        not isinstance(update_id, int)
-        or not isinstance(text, str)
-        or not text
-        or not isinstance(chat_id, int)
-    ):
-        return None
-
-    sender = message.get("from")
-    sender_id = sender.get("id") if isinstance(sender, dict) else None
-    first_name = sender.get("first_name") if isinstance(sender, dict) else None
-    last_name = sender.get("last_name") if isinstance(sender, dict) else None
-    sender_name = " ".join(
-        part for part in (first_name, last_name) if isinstance(part, str) and part
-    )
-    timestamp = message.get("date")
-    occurred_at = (
-        datetime.fromtimestamp(timestamp, tz=UTC)
-        if isinstance(timestamp, int | float)
-        else datetime.now(tz=UTC)
-    )
-    return _TelegramInboundMessage(
-        update_id=update_id,
-        chat_id=chat_id,
-        text=text,
-        occurred_at=occurred_at,
-        message_id=(
-            message_id
-            if isinstance((message_id := message.get("message_id")), int)
-            else None
-        ),
-        thread_id=(
-            thread_id
-            if isinstance((thread_id := message.get("message_thread_id")), int)
-            else None
-        ),
-        sender_id=sender_id if isinstance(sender_id, int) else None,
-        sender_name=sender_name or None,
-        sender_username=(
-            username
-            if isinstance(
-                (
-                    username := sender.get("username")
-                    if isinstance(sender, dict)
-                    else None
-                ),
-                str,
-            )
-            else None
-        ),
-        locale=(
-            locale
-            if isinstance(
-                (
-                    locale := sender.get("language_code")
-                    if isinstance(sender, dict)
-                    else None
-                ),
-                str,
-            )
-            else None
-        ),
-    )
-
-
-async def poll_scheduled_triggers(
-    ctx: dict[Any, Any], *args: object, **kwargs: object
-) -> None:
-    """Fire due cron schedules, enqueuing one execution per due schedule.
-
-    Every Input node with ``format=schedule`` has a ``NodeSchedule`` row
-    (kept in sync with the node by ``NodeUsecase._sync_node_schedule``). A
-    schedule is due once its cron expression's next boundary after
-    ``last_fired_at`` has passed. ``last_fired_at`` is then reset to the
-    wall-clock check time (not the matched boundary), so a worker that was
-    down across several missed boundaries fires once on wake-up and resumes
-    from "now" rather than replaying every boundary it missed — the same
-    "skip, don't stack" choice as the stuck-execution reaper, and distinct
-    from Telegram's offset-based catch-up (safe to replay: relaying an old
-    message costs one extra reply, replaying a missed schedule could mean
-    hours of stacked LLM calls).
-
-    Args:
-        ctx: ARQ job context.
-        args: Unused positional arguments (ARQ coroutine protocol).
-        kwargs: Unused keyword arguments (ARQ coroutine protocol).
-
-    """
-    del args, kwargs
-    redis: ArqRedis = ctx["redis"]
-    node_schedule_repository = NodeScheduleRepository()
-    node_repository = NodeRepository()
-    now = datetime.now(tz=UTC)
-
-    async def enqueue(execution_id: int) -> None:
-        """Enqueue the execution job, deduplicated by execution ID."""
-        await redis.enqueue_job(
-            "run_execution_task", execution_id, _job_id=f"execution:{execution_id}"
-        )
-
-    async with async_session() as session:
-        schedules = await node_schedule_repository.get_all(session=session)
-
-        for schedule in schedules:
-            due_at = _schedule_due_at(schedule=schedule, now=now)
-            if due_at is None:
-                continue
-
-            node = await node_repository.get_by(session=session, id=schedule.node_id)
-            if node is not None and node.type is NodeType.INPUT:
-                await _trigger_scheduled_execution(
-                    session=session,
-                    node=node,
-                    schedule=schedule,
-                    due_at=due_at,
-                    enqueue=enqueue,
-                )
-
-            await node_schedule_repository.update_by(
-                session=session, data={"last_fired_at": now}, id=schedule.id
-            )
-            await session.commit()
-
-
-def _schedule_due_at(schedule: "NodeSchedule", now: datetime) -> datetime | None:
-    """Return the due cron boundary, or ``None`` when not due/invalid.
-
-    Args:
-        schedule: The schedule to check.
-        now: The current time.
-
-    Returns:
-        The stable boundary used as the event ID, or ``None``.
-
-    """
-    try:
-        upcoming = croniter(schedule.cron_expression, schedule.last_fired_at).get_next(
-            datetime
-        )
-    except CroniterError:
-        logger.exception(
-            "Invalid cron expression for schedule %s; skipping", schedule.id
-        )
-        return None
-    return upcoming if upcoming <= now else None
-
-
-async def _trigger_scheduled_execution(
-    session: "AsyncSession",
-    node: "Node",
-    schedule: "NodeSchedule",
-    due_at: datetime,
-    enqueue: EnqueueCallback,
-) -> None:
-    """Create one execution for a due scheduled Input node.
-
-    A scheduled run has no incoming message, so it carries the node's fixed
-    ``scheduled_value`` text (empty if unset) as its input — same shape as a
-    manual run, just triggered by the clock instead of a user click.
-
-    Args:
-        session: Database session.
-        node: The Input node the schedule fired for.
-        schedule: Durable schedule record that became due.
-        due_at: Exact cron boundary used for deterministic idempotency.
-        enqueue: Callback that schedules an execution for background running.
-
-    """
-    workflow = await WorkflowRepository().get_by(session=session, id=node.workflow_id)
-    if workflow is None:
-        return
-
-    scheduled_value = node.data.get("scheduled_value")
-    if not isinstance(scheduled_value, str):
-        scheduled_value = ""
-
-    try:
-        await ExecutionUsecase().create_execution(
+        await receive_channel(
+            source=source,
             session=session,
-            user_id=workflow.owner_id,
-            data=ExecutionCreate(
-                workflow_id=node.workflow_id,
-                input_data=ExecutionInputPayload(value=scheduled_value),
-            ),
             enqueue=enqueue,
-            trigger=ExecutionTrigger(
-                source=ExecutionSource.SCHEDULE,
-                event=TriggerEvent(
-                    channel=ExecutionSource.SCHEDULE,
-                    external_event_id=(f"schedule:{schedule.id}:{due_at.isoformat()}"),
-                    message=NodeValuePayload(
-                        kind=PortType.TEXT,
-                        value=scheduled_value,
-                    ),
-                    occurred_at=due_at,
-                    metadata={
-                        "node_id": node.id,
-                        "schedule_id": schedule.id,
-                        "cron_expression": schedule.cron_expression,
-                    },
-                ),
-            ),
+            continue_on_error=True,
         )
-    except BaseError:
-        logger.exception(
-            "Failed to create scheduled execution for workflow %s", node.workflow_id
+
+
+def _build_channel_poll_job(
+    definition: ChannelDefinition,
+) -> WorkerCoroutine:
+    """Bind one registered source to an ARQ-compatible polling coroutine."""
+
+    async def poll_channel_job(
+        ctx: dict[Any, Any], *args: object, **kwargs: object
+    ) -> None:
+        """Poll the channel captured by the registry job factory."""
+        await poll_registered_channel(
+            ctx,
+            definition.source,
+            *args,
+            **kwargs,
         )
+
+    poll_channel_job.__name__ = f"poll_{definition.source.value}_channel"
+    return poll_channel_job
+
+
+_CHANNEL_POLL_JOBS = tuple(
+    (
+        _build_channel_poll_job(definition),
+        set(definition.poll_seconds or ()),
+        f"poll_{definition.source.value}_channel",
+    )
+    for definition in polling_channel_definitions()
+)
 
 
 async def reap_stuck_executions(
@@ -1113,9 +307,10 @@ class WorkerSettings:
     ]
     cron_jobs: ClassVar[list] = [
         cron(reap_stuck_executions, minute=_REAPER_MINUTES),
-        cron(poll_telegram_updates, second=_TELEGRAM_POLL_SECONDS),
-        cron(poll_email_updates, second=_EMAIL_POLL_SECONDS),
-        cron(poll_scheduled_triggers, second=_SCHEDULE_POLL_SECONDS),
+        *(
+            cron(job, name=name, second=seconds)
+            for job, seconds, name in _CHANNEL_POLL_JOBS
+        ),
         cron(cleanup_expired_artifacts, minute=_ARTIFACT_GC_MINUTES),
     ]
     redis_settings = redis_settings.arq

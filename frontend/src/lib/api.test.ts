@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   approveExecution,
   cancelExecution,
+  getChannelCatalog,
   getWorkflows,
   login,
   publicWebhookUrl,
@@ -100,6 +101,15 @@ describe('api request()', () => {
 
     const [, options] = fetchMock.mock.calls[0]
     expect(options.headers['Authorization']).toBe('Bearer abc123')
+  })
+
+  it('loads the plugin-driven channel catalog', async () => {
+    const catalog = [{ source: 'telegram', label: 'Telegram' }]
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(catalog))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getChannelCatalog()).resolves.toEqual(catalog)
+    expect(fetchMock).toHaveBeenCalledWith('/api/channels/catalog', expect.anything())
   })
 
   it('cancels an execution with a POST request', async () => {

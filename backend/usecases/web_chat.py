@@ -1,32 +1,15 @@
 """Public embedded web-chat use case."""
 
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Workflow
-from db.repositories import ExecutionRepository, NodeRepository, WorkflowRepository
-from enums import (
-    ExecutionSource,
-    InputNodeFormat,
-    NodeType,
-    OutputNodeFormat,
-    PortType,
-)
+from channels import receive_channel
+from channels.web_chat import WEB_CHAT_ADAPTER, WebChatReceivePayload
+from db.repositories import ExecutionRepository
+from enums import ExecutionSource
 from exceptions import WebChatNotFoundError
-from schemas import (
-    ExecutionCreate,
-    ExecutionInputPayload,
-    ExecutionResponse,
-    NodeValuePayload,
-    TriggerActor,
-    TriggerConversation,
-    TriggerEvent,
-    WebChatMessage,
-)
-from usecases.execution import ExecutionTrigger, ExecutionUsecase
-from utils.web_chat import parse_web_chat_token
+from schemas import ExecutionResponse, WebChatMessage
 
 
 class WebChatUsecase:
@@ -34,45 +17,7 @@ class WebChatUsecase:
 
     def __init__(self) -> None:
         """Initialize repositories and execution orchestration."""
-        self._workflow_repository = WorkflowRepository()
-        self._node_repository = NodeRepository()
         self._execution_repository = ExecutionRepository()
-        self._execution_usecase = ExecutionUsecase()
-
-    async def _get_enabled_workflow(
-        self, session: AsyncSession, token: str
-    ) -> Workflow:
-        """Resolve a token and require matching web-chat Input and Output nodes."""
-        workflow_id = parse_web_chat_token(token)
-        if workflow_id is None:
-            raise WebChatNotFoundError
-
-        workflow = await self._workflow_repository.get_by(
-            session=session, id=workflow_id
-        )
-        if workflow is None:
-            raise WebChatNotFoundError
-
-        input_node = await self._node_repository.get_by(
-            session=session,
-            workflow_id=workflow_id,
-            type=NodeType.INPUT,
-            parent_node_id=None,
-        )
-        output_node = await self._node_repository.get_by(
-            session=session,
-            workflow_id=workflow_id,
-            type=NodeType.OUTPUT,
-            parent_node_id=None,
-        )
-        if (
-            input_node is None
-            or input_node.data.get("format") != InputNodeFormat.WEB_CHAT.value
-            or output_node is None
-            or output_node.data.get("format") != OutputNodeFormat.WEB_CHAT.value
-        ):
-            raise WebChatNotFoundError
-        return workflow
 
     async def create_execution(
         self,
@@ -83,31 +28,16 @@ class WebChatUsecase:
         enqueue: Callable[[int], Awaitable[None]],
     ) -> ExecutionResponse:
         """Queue one visitor message as a web-chat execution."""
-        workflow = await self._get_enabled_workflow(session=session, token=token)
-        return await self._execution_usecase.create_execution(
+        responses = await receive_channel(
+            source=ExecutionSource.WEB_CHAT,
             session=session,
-            user_id=workflow.owner_id,
-            data=ExecutionCreate(
-                workflow_id=workflow.id,
-                input_data=ExecutionInputPayload(value=message.value),
-            ),
             enqueue=enqueue,
-            trigger=ExecutionTrigger(
-                source=ExecutionSource.WEB_CHAT,
-                event=TriggerEvent(
-                    channel=ExecutionSource.WEB_CHAT,
-                    external_event_id=message.event_id,
-                    sender=TriggerActor(id=message.conversation_id),
-                    conversation=TriggerConversation(id=message.conversation_id),
-                    locale=message.locale,
-                    message=NodeValuePayload(
-                        kind=PortType.TEXT,
-                        value=message.value,
-                    ),
-                    occurred_at=datetime.now(tz=UTC),
-                ),
-            ),
+            payload=WebChatReceivePayload(token=token, message=message),
         )
+        if len(responses) != 1:
+            message_text = "Web-chat adapter must produce exactly one execution"
+            raise RuntimeError(message_text)
+        return responses[0]
 
     async def get_execution(
         self,
@@ -117,7 +47,7 @@ class WebChatUsecase:
         execution_id: int,
     ) -> ExecutionResponse:
         """Return a public execution only when it belongs to the signed workflow."""
-        workflow = await self._get_enabled_workflow(session=session, token=token)
+        workflow = await WEB_CHAT_ADAPTER.enabled_workflow(session=session, token=token)
         execution = await self._execution_repository.get_by(
             session=session, id=execution_id, workflow_id=workflow.id
         )
@@ -133,7 +63,7 @@ class WebChatUsecase:
         execution_id: int,
     ) -> int:
         """Validate public stream access and return the workflow owner ID."""
-        workflow = await self._get_enabled_workflow(session=session, token=token)
+        workflow = await WEB_CHAT_ADAPTER.enabled_workflow(session=session, token=token)
         execution = await self._execution_repository.get_by(
             session=session, id=execution_id, workflow_id=workflow.id
         )

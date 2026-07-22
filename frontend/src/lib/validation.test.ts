@@ -28,6 +28,7 @@ function makeField(
       placeholder: null,
       help: null,
       step: null,
+      options: {},
     },
     default: undefined,
     datasource: null,

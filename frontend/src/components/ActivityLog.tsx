@@ -9,6 +9,7 @@ interface ActivityLogProps {
   executions: Execution[]
   loading: boolean
   decidingExecutionId: number | null
+  sourceLabels: Record<string, string>
   nodeMetaByNodeId: Map<number, NodeMeta>
   onApprove: (executionId: number) => void
   onReject: (executionId: number) => void
@@ -23,6 +24,7 @@ export function ActivityLog({
   executions,
   loading,
   decidingExecutionId,
+  sourceLabels,
   nodeMetaByNodeId,
   onApprove,
   onReject,
@@ -89,7 +91,7 @@ export function ActivityLog({
                     {execution.status}
                   </span>
                   <span className="pixel-pill text-[10px] normal-case">
-                    {execution.source}
+                    {sourceLabels[execution.source] ?? execution.source}
                   </span>
                   {execution.trigger_event.sender ? (
                     <span className="normal-case">

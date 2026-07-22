@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { useChannelCatalog } from './useChannelCatalog'
 import {
   approveExecution,
   getExecutions,
@@ -19,21 +20,11 @@ interface UseActivityLogResult {
   executions: Execution[]
   loading: boolean
   decidingExecutionId: number | null
+  sourceLabels: Record<string, string>
   handleApprove: (executionId: number) => Promise<void>
   handleReject: (executionId: number) => Promise<void>
   refresh: () => Promise<void>
 }
-
-// Real inbound traffic (channel messages and scheduled runs), kept separate
-// from useExecutions' manual test runs. Approval decisions remain actionable
-// here because these executions belong to real production-facing channels.
-const ACTIVITY_LOG_SOURCES: ExecutionSource[] = [
-  'telegram',
-  'schedule',
-  'email',
-  'webhook',
-  'web_chat',
-]
 
 export function useActivityLog({
   token,
@@ -43,12 +34,19 @@ export function useActivityLog({
   const active = token !== null && activeWorkflowId !== null
   const resolvedWorkflowId = activeWorkflowId ?? 0
   const [decidingExecutionId, setDecidingExecutionId] = useState<number | null>(null)
+  const { channelCatalog, loading: catalogLoading, sourceLabels } = useChannelCatalog({
+    handleError,
+  })
+  const activitySources = useMemo<ExecutionSource[]>(
+    () => channelCatalog.filter((channel) => channel.activity).map((channel) => channel.source),
+    [channelCatalog],
+  )
 
   const query = useQuery({
-    queryKey: queryKeys.activityLog(resolvedWorkflowId),
-    queryFn: () => getExecutions(resolvedWorkflowId, ACTIVITY_LOG_SOURCES),
-    enabled: active,
-    refetchInterval: active ? 3000 : false,
+    queryKey: queryKeys.activityLog(resolvedWorkflowId, activitySources),
+    queryFn: () => getExecutions(resolvedWorkflowId, activitySources),
+    enabled: active && activitySources.length > 0,
+    refetchInterval: active && activitySources.length > 0 ? 3000 : false,
   })
 
   useEffect(() => {
@@ -78,8 +76,9 @@ export function useActivityLog({
 
   return {
     executions: active ? (query.data ?? []) : [],
-    loading: active && query.isLoading,
+    loading: active && (catalogLoading || query.isLoading),
     decidingExecutionId,
+    sourceLabels,
     handleApprove: async (executionId: number) => {
       await decideApproval(executionId, true)
     },

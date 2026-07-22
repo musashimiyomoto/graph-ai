@@ -16,6 +16,11 @@ from schemas.auth import (
     PasswordResetRequest,
     TokenActionRequest,
 )
+from schemas.channel import (
+    ChannelCapabilitiesResponse,
+    ChannelCatalogItemResponse,
+    ChannelSettingsResponse,
+)
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
 from schemas.email_account import (
     EmailAccountCreate,
@@ -118,6 +123,9 @@ __all__ = [
     "ArtifactUploadResponse",
     "AuditLogResponse",
     "AuthSessionResponse",
+    "ChannelCapabilitiesResponse",
+    "ChannelCatalogItemResponse",
+    "ChannelSettingsResponse",
     "ChatMessage",
     "ChatResponse",
     "ChatStreamChunk",

@@ -171,6 +171,7 @@ export function App() {
     executions: activityLogExecutions,
     loading: activityLogLoading,
     decidingExecutionId: activityDecidingExecutionId,
+    sourceLabels: activitySourceLabels,
     handleApprove: handleActivityApprove,
     handleReject: handleActivityReject,
   } = useActivityLog({
@@ -671,6 +672,7 @@ export function App() {
               executions={activityLogExecutions}
               loading={activityLogLoading}
               decidingExecutionId={activityDecidingExecutionId}
+              sourceLabels={activitySourceLabels}
               nodeMetaByNodeId={nodeMetaByNodeId}
               onApprove={handleActivityApprove}
               onReject={handleActivityReject}

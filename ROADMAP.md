@@ -964,11 +964,20 @@ permanent format-specific runtime fields or adapter branches.
       Activity Log exposes normalized sender/thread context, and web chat generates
       stable client event/conversation IDs. All 446 backend and 77 frontend tests
       pass; clean upgrade/downgrade/re-upgrade and `alembic check` report no drift.
-- [ ] **Plugin-driven channel registry** — define declarative channel/account
-      metadata plus `receive`/`acknowledge`/`deliver` adapter contracts, moving
-      Telegram/email/webhook behavior out of format-specific worker branches.
-      Input/Output field definitions, Settings forms and activity-log labels derive
-      from the same backend catalog, following the existing node registry pattern.
+- [x] **Plugin-driven channel registry** — `ChannelDefinition` now co-locates each
+      channel's source/formats, account-settings metadata, Input/Output fields,
+      activity label, polling cadence and explicit `receive`/`acknowledge`/`deliver`
+      adapter capabilities. Telegram, email and schedule polling normalize batches
+      and durable cursors through one runtime; webhook/web-chat push inputs use the
+      same receive path; Telegram/email/webhook delivery is selected by Output
+      format without worker branches. ARQ cron jobs are generated from registered
+      polling plugins, and the old format-specific worker functions were removed.
+      Input/Output node catalogs are assembled from the registry, including display
+      labels, while `GET /channels/catalog` drives frontend Settings channel tabs,
+      Activity Log sources and source labels. Registry completeness tests require
+      every execution source and node format exactly once and every polling plugin
+      to implement acknowledgement. No schema migration was needed; all 450 backend
+      and 78 frontend tests pass, alongside lint, typecheck and production build.
 - [ ] **Durable conversations and scoped state** — add conversation/session records
       keyed by `(workflow, channel, external_thread)` and a typed state store with
       `execution`, `conversation`, `user` and `workflow` scopes, TTL, optimistic

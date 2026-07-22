@@ -2,6 +2,7 @@ import type {
   ApiError,
   ArtifactDownload,
   AuthSession,
+  ChannelCatalogItem,
   EdgeCreatePayload,
   EdgeResponse,
   EmailAccount,
@@ -325,6 +326,10 @@ export async function deleteNode(nodeId: number): Promise<void> {
 
 export async function getNodeCatalog(): Promise<NodeCatalogItem[]> {
   return request<NodeCatalogItem[]>('/nodes/catalog')
+}
+
+export async function getChannelCatalog(): Promise<ChannelCatalogItem[]> {
+  return request<ChannelCatalogItem[]>('/channels/catalog')
 }
 
 export async function getEdges(

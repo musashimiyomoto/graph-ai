@@ -39,7 +39,10 @@ is executed in the background, versioned, streamed token-by-token, and observabl
   `.pdf`/`.docx`/`.txt`/`.md` documents and search them from a workflow.
 - **Channels & triggers** — web chat, Telegram bots, email, signed inbound/outbound
   webhooks, and cron schedules. Every run retains a provider-neutral trigger event
-  with sender/conversation metadata and stable event-ID deduplication.
+  with sender/conversation metadata and stable event-ID deduplication. A shared
+  channel registry owns Input/Output fields, settings metadata, activity labels,
+  polling schedules, and `receive`/`acknowledge`/`deliver` adapters; the frontend
+  consumes the same catalog from `GET /channels/catalog`.
 - **Multi-tenant hardening** — verified-email accounts, rotating refresh sessions,
   password recovery, Fernet-encrypted secrets, per-user quotas (executions &
   tokens/day), an append-only audit log, and cost observability

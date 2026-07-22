@@ -117,10 +117,12 @@ function OptionalNumberField({
 function SelectField({
   value,
   options,
+  optionLabels,
   onChange,
 }: {
   value: unknown
   options: string[]
+  optionLabels: Record<string, string>
   onChange: (value: string) => void
 }) {
   return (
@@ -131,7 +133,7 @@ function SelectField({
     >
       {options.map((option) => (
         <option key={option} value={option}>
-          {option}
+          {optionLabels[option] ?? option}
         </option>
       ))}
     </select>
@@ -643,6 +645,7 @@ export function NodeFieldsForm({
         <SelectField
           value={value}
           options={field.validators.select ?? []}
+          optionLabels={field.ui.options}
           onChange={(selected) => updateField(field.name, selected)}
         />
       )

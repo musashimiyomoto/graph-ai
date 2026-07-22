@@ -21,13 +21,7 @@ export const ACTIVE_STATUSES: ExecutionStatus[] = [
 // traffic (channel messages or a cron schedule firing). Lets the UI split
 // "Test Runs" (a sandbox for trying the flow before it's relied on) from
 // "Activity Log" (real usage) instead of merging them into one list.
-export type ExecutionSource =
-  | 'manual'
-  | 'telegram'
-  | 'schedule'
-  | 'email'
-  | 'webhook'
-  | 'web_chat'
+export type ExecutionSource = string
 
 export interface RunInputPayload {
   value: string
@@ -313,6 +307,7 @@ export interface NodeCatalogFieldUI {
   placeholder: string | null
   help: string | null
   step: number | null
+  options: Record<string, string>
 }
 
 export interface NodeCatalogFieldDataSource {
@@ -342,6 +337,32 @@ export interface NodeCatalogItem {
   icon_key: string
   graph: NodeCatalogGraph
   fields: NodeCatalogField[]
+}
+
+export interface ChannelCapabilities {
+  receive: boolean
+  acknowledge: boolean
+  deliver: boolean
+}
+
+export interface ChannelSettings {
+  key: string
+  label: string
+  component_key: string
+}
+
+export interface ChannelCatalogItem {
+  source: ExecutionSource
+  label: string
+  icon_key: string
+  input_format: string | null
+  output_format: string | null
+  activity: boolean
+  capabilities: ChannelCapabilities
+  poll_seconds: number[] | null
+  settings: ChannelSettings | null
+  input_fields: NodeCatalogField[]
+  output_fields: NodeCatalogField[]
 }
 
 export interface LlmProvider {

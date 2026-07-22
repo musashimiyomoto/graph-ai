@@ -14,6 +14,7 @@ from api.metrics import http_request_duration_seconds, http_requests_total
 from api.routers import (
     artifact,
     auth,
+    channel,
     edge,
     email_account,
     execution,
@@ -129,6 +130,7 @@ async def handle_base_error(_: Request, exc: BaseError) -> JSONResponse:
 app.include_router(router=health.router)
 app.include_router(router=artifact.router)
 app.include_router(router=auth.router)
+app.include_router(router=channel.router)
 app.include_router(router=user.router)
 app.include_router(router=workflow.router)
 app.include_router(router=workflow_template.router)

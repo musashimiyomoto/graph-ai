@@ -6,6 +6,9 @@ from typing import Any, ClassVar
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+import channels.email as email_channel
+import channels.telegram as telegram_channel
+import channels.webhook as webhook_channel
 import worker as worker_module
 from db.repositories import (
     EmailAccountRepository,
@@ -154,7 +157,7 @@ class _FakeSendWebhook:
 
 
 class TestPollTelegramUpdates(BaseTestCase):
-    """Tests for ``worker.poll_telegram_updates``."""
+    """Tests for the registered Telegram receiver."""
 
     @pytest.mark.asyncio
     async def test_creates_execution_and_advances_offset(
@@ -165,7 +168,7 @@ class TestPollTelegramUpdates(BaseTestCase):
             bind=test_engine, expire_on_commit=False
         )
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
-        monkeypatch.setattr(worker_module, "get_updates", _fake_get_updates)
+        monkeypatch.setattr(telegram_channel, "get_updates", _fake_get_updates)
 
         user = await UserFactory.create_async(session=self.session)
         bot = await TelegramBotFactory.create_async(
@@ -196,7 +199,9 @@ class TestPollTelegramUpdates(BaseTestCase):
         workflow_id = workflow.id
         bot_id = bot.id
 
-        await worker_module.poll_telegram_updates({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.TELEGRAM
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(
@@ -236,12 +241,14 @@ class TestPollTelegramUpdates(BaseTestCase):
             del args, kwargs
             pytest.fail("get_updates should not be called for an unreferenced bot")
 
-        monkeypatch.setattr(worker_module, "get_updates", _fail_if_called)
+        monkeypatch.setattr(telegram_channel, "get_updates", _fail_if_called)
 
         user = await UserFactory.create_async(session=self.session)
         await TelegramBotFactory.create_async(session=self.session, user_id=user.id)
 
-        await worker_module.poll_telegram_updates({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.TELEGRAM
+        )
 
 
 class TestDelayScheduling(BaseTestCase):
@@ -333,7 +340,7 @@ class TestTelegramReply(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
         fake_send_message = _FakeSendMessage()
         _FakeSendMessage.calls = []
-        monkeypatch.setattr(worker_module, "send_message", fake_send_message)
+        monkeypatch.setattr(telegram_channel, "send_message", fake_send_message)
 
         user = await UserFactory.create_async(session=self.session)
         bot = await TelegramBotFactory.create_async(
@@ -406,7 +413,7 @@ class TestTelegramReply(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
         fake_send_message = _FakeSendMessage()
         _FakeSendMessage.calls = []
-        monkeypatch.setattr(worker_module, "send_message", fake_send_message)
+        monkeypatch.setattr(telegram_channel, "send_message", fake_send_message)
 
         user = await UserFactory.create_async(session=self.session)
         bot = await TelegramBotFactory.create_async(
@@ -476,7 +483,7 @@ class TestTelegramReply(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
         fake_send_message = _FakeSendMessage()
         _FakeSendMessage.calls = []
-        monkeypatch.setattr(worker_module, "send_message", fake_send_message)
+        monkeypatch.setattr(telegram_channel, "send_message", fake_send_message)
 
         user = await UserFactory.create_async(session=self.session)
         workflow = await WorkflowFactory.create_async(
@@ -522,7 +529,7 @@ class TestTelegramReply(BaseTestCase):
 
 
 class TestPollEmailUpdates(BaseTestCase):
-    """Tests for ``worker.poll_email_updates``."""
+    """Tests for the registered email receiver."""
 
     async def test_creates_email_execution_and_advances_uid(
         self, test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
@@ -532,7 +539,7 @@ class TestPollEmailUpdates(BaseTestCase):
             bind=test_engine, expire_on_commit=False
         )
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
-        monkeypatch.setattr(worker_module, "fetch_messages", _fake_fetch_messages)
+        monkeypatch.setattr(email_channel, "fetch_messages", _fake_fetch_messages)
 
         user = await UserFactory.create_async(session=self.session)
         account = await EmailAccountFactory.create_async(
@@ -566,7 +573,9 @@ class TestPollEmailUpdates(BaseTestCase):
         workflow_id = workflow.id
         account_id = account.id
 
-        await worker_module.poll_email_updates({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.EMAIL
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(
@@ -608,7 +617,7 @@ class TestEmailReply(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
         fake_send_email = _FakeSendEmail()
         _FakeSendEmail.calls = []
-        monkeypatch.setattr(worker_module, "send_email", fake_send_email)
+        monkeypatch.setattr(email_channel, "send_email", fake_send_email)
 
         user = await UserFactory.create_async(session=self.session)
         account = await EmailAccountFactory.create_async(
@@ -691,7 +700,7 @@ class TestWebhookDelivery(BaseTestCase):
         monkeypatch.setattr(worker_module, "async_session", worker_sessionmaker)
         fake_send_webhook = _FakeSendWebhook()
         _FakeSendWebhook.calls = []
-        monkeypatch.setattr(worker_module, "send_webhook", fake_send_webhook)
+        monkeypatch.setattr(webhook_channel, "send_webhook", fake_send_webhook)
 
         user = await UserFactory.create_async(session=self.session)
         workflow = await WorkflowFactory.create_async(
@@ -749,7 +758,7 @@ class TestWebhookDelivery(BaseTestCase):
 
 
 class TestPollScheduledTriggers(BaseTestCase):
-    """Tests for ``worker.poll_scheduled_triggers``."""
+    """Tests for the registered schedule receiver."""
 
     async def _create_scheduled_workflow(
         self,
@@ -816,7 +825,9 @@ class TestPollScheduledTriggers(BaseTestCase):
             last_fired_at=datetime.now(tz=UTC) - timedelta(minutes=2),
         )
 
-        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.SCHEDULE
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(session=self.session)
@@ -854,7 +865,9 @@ class TestPollScheduledTriggers(BaseTestCase):
             scheduled_value="latest AI news",
         )
 
-        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.SCHEDULE
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(session=self.session)
@@ -881,7 +894,9 @@ class TestPollScheduledTriggers(BaseTestCase):
             last_fired_at=anchor,
         )
 
-        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.SCHEDULE
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(session=self.session)
@@ -912,7 +927,9 @@ class TestPollScheduledTriggers(BaseTestCase):
         )
 
         # Must not raise.
-        await worker_module.poll_scheduled_triggers({"redis": _FakeRedis()})
+        await worker_module.poll_registered_channel(
+            {"redis": _FakeRedis()}, ExecutionSource.SCHEDULE
+        )
 
         self.session.expire_all()
         executions = await ExecutionRepository().get_all(session=self.session)
