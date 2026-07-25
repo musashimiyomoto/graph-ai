@@ -36,7 +36,7 @@ const CORE_SECTIONS_BEFORE_CHANNELS: SettingsSection[] = [
 const CORE_SECTIONS_AFTER_CHANNELS: SettingsSection[] = [
   { id: 'postgres', label: 'PostgreSQL', Component: PostgresConnectionSettings },
   { id: 'mcp', label: 'MCP Servers', Component: MCPServerSettings },
-  { id: 'vectors', label: 'Vector Collections', Component: VectorCollectionSettings },
+  { id: 'vectors', label: 'Knowledge Sources', Component: VectorCollectionSettings },
 ]
 
 const CHANNEL_SETTINGS_COMPONENTS: Partial<

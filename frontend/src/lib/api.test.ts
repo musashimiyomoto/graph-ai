@@ -14,6 +14,8 @@ import {
   revokeConnection,
   setToken,
   startConnectionOAuth,
+  updateVectorSyncState,
+  uploadVectorDocument,
   rejectExecution,
   webChatEmbedSnippet,
 } from './api'
@@ -215,6 +217,54 @@ describe('api request()', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/connections/7/${action}`,
       expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('serializes knowledge source revision, ACL, and retention metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ job_id: 'knowledge:1:job', source: 'page' }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await uploadVectorDocument(
+      'research',
+      new File(['hello'], 'page.txt', { type: 'text/plain' }),
+      'page',
+      {
+        source_type: 'notion',
+        external_id: 'page-42',
+        revision: 'etag-v1',
+        acl_visibility: 'shared',
+        acl_readers: ['team:research'],
+        retention_days: 30,
+        metadata: { space: 'engineering' },
+      },
+    )
+
+    const [, options] = fetchMock.mock.calls[0]
+    const body = options.body as FormData
+    expect(body.get('source_type')).toBe('notion')
+    expect(body.get('revision')).toBe('etag-v1')
+    expect(body.get('acl_readers')).toBe('team:research')
+    expect(body.get('retention_days')).toBe('30')
+    expect(body.get('metadata_json')).toBe('{"space":"engineering"}')
+    expect(options.headers['Content-Type']).toBeUndefined()
+  })
+
+  it('checkpoints a knowledge collection sync cursor', async () => {
+    const collection = { name: 'research', sync_cursor: 'next-page' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(collection))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(updateVectorSyncState('research', 'next-page')).resolves.toEqual(
+      collection,
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/vector-collections/research/sync-state',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ sync_cursor: 'next-page' }),
+      }),
     )
   })
 })

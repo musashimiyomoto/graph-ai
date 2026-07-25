@@ -109,9 +109,13 @@ from schemas.usage import (
 )
 from schemas.user import UserCreate, UserResponse
 from schemas.vector import (
+    KnowledgeACL,
+    KnowledgeIngestOptions,
+    KnowledgeUploadTask,
     VectorCollectionResponse,
     VectorDocumentResponse,
     VectorJobStatusResponse,
+    VectorSyncStateUpdate,
     VectorUploadJobResponse,
     VectorUploadResponse,
 )
@@ -163,6 +167,9 @@ __all__ = [
     "ExecutionResponse",
     "GenerationParams",
     "HealthResponse",
+    "KnowledgeACL",
+    "KnowledgeIngestOptions",
+    "KnowledgeUploadTask",
     "LLMModel",
     "LLMProviderCreate",
     "LLMProviderModelResponse",
@@ -223,6 +230,7 @@ __all__ = [
     "VectorCollectionResponse",
     "VectorDocumentResponse",
     "VectorJobStatusResponse",
+    "VectorSyncStateUpdate",
     "VectorUploadJobResponse",
     "VectorUploadResponse",
     "WebChatExecutionResponse",

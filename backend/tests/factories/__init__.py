@@ -7,6 +7,8 @@ from tests.factories.conversation import ConversationFactory
 from tests.factories.edge import EdgeFactory
 from tests.factories.email_account import EmailAccountFactory
 from tests.factories.execution import ExecutionFactory
+from tests.factories.knowledge_collection import KnowledgeCollectionFactory
+from tests.factories.knowledge_source import KnowledgeSourceFactory
 from tests.factories.llm_provider import LLMProviderFactory
 from tests.factories.node import NodeFactory
 from tests.factories.node_execution import NodeExecutionFactory
@@ -24,6 +26,8 @@ __all__ = [
     "EdgeFactory",
     "EmailAccountFactory",
     "ExecutionFactory",
+    "KnowledgeCollectionFactory",
+    "KnowledgeSourceFactory",
     "LLMProviderFactory",
     "NodeExecutionFactory",
     "NodeFactory",

@@ -47,6 +47,15 @@ function VectorDocumentList({
             <div className="text-sm">{doc.source}</div>
             <div className="text-xs text-[var(--muted)]">
               {doc.chunk_count} chunk{doc.chunk_count === 1 ? '' : 's'}
+              {' · '}
+              {doc.source_type}
+              {doc.revision ? ` · rev ${doc.revision}` : ''}
+            </div>
+            <div className="text-xs text-[var(--muted)]">
+              {doc.acl.visibility}
+              {doc.expires_at
+                ? ` · expires ${new Date(doc.expires_at).toLocaleString()}`
+                : ' · retained'}
             </div>
           </div>
           {confirmDeleteSource === doc.source ? (
@@ -89,6 +98,10 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
   const [confirmDeleteName, setConfirmDeleteName] = useState<string | null>(null)
   const [uploadCollection, setUploadCollection] = useState('')
   const [uploadSource, setUploadSource] = useState('')
+  const [uploadSourceType, setUploadSourceType] = useState('upload')
+  const [uploadExternalId, setUploadExternalId] = useState('')
+  const [uploadRevision, setUploadRevision] = useState('')
+  const [uploadRetentionDays, setUploadRetentionDays] = useState(0)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -135,12 +148,21 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
         collection,
         uploadFile,
         uploadSource.trim() || undefined,
+        {
+          source_type: uploadSourceType.trim() || 'upload',
+          external_id: uploadExternalId.trim() || undefined,
+          revision: uploadRevision.trim() || undefined,
+          retention_days:
+            uploadRetentionDays > 0 ? uploadRetentionDays : undefined,
+        },
       )
       // Ingestion continues on the worker; track the job and clear the form so
       // the user can queue the next file without waiting.
       trackUpload({ jobId: job.job_id, source: job.source, collection })
       setUploadFile(null)
       setUploadSource('')
+      setUploadExternalId('')
+      setUploadRevision('')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -246,6 +268,44 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
               value={uploadSource}
               onChange={(e) => setUploadSource(e.target.value)}
               placeholder="Defaults to the file name"
+            />
+          </label>
+          <label className="pixel-label">
+            Source type
+            <input
+              className="pixel-input"
+              value={uploadSourceType}
+              onChange={(e) => setUploadSourceType(e.target.value.toLowerCase())}
+              placeholder="upload, drive, notion, confluence"
+            />
+          </label>
+          <label className="pixel-label">
+            External ID (optional)
+            <input
+              className="pixel-input"
+              value={uploadExternalId}
+              onChange={(e) => setUploadExternalId(e.target.value)}
+              placeholder="Provider object ID"
+            />
+          </label>
+          <label className="pixel-label">
+            Revision / ETag (optional)
+            <input
+              className="pixel-input"
+              value={uploadRevision}
+              onChange={(e) => setUploadRevision(e.target.value)}
+              placeholder="Unchanged revisions skip embedding"
+            />
+          </label>
+          <label className="pixel-label">
+            Retention days
+            <input
+              className="pixel-input"
+              type="number"
+              min={0}
+              max={36500}
+              value={uploadRetentionDays}
+              onChange={(e) => setUploadRetentionDays(Number(e.target.value))}
             />
           </label>
           <button

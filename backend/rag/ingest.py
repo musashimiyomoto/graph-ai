@@ -5,6 +5,8 @@ endpoint.
 """
 
 from asyncio import to_thread
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from qdrant_client import AsyncQdrantClient
@@ -14,8 +16,28 @@ from rag.embeddings import embed_texts
 from rag.qdrant import chunk_text, delete_by_source, ensure_collection
 
 
+@dataclass(frozen=True)
+class ChunkPayload:
+    """Source metadata duplicated onto every Qdrant chunk."""
+
+    owner_id: int
+    logical_collection: str
+    source_type: str
+    external_id: str | None
+    revision: str | None
+    content_hash: str
+    acl: dict
+    metadata: dict
+    expires_at: datetime | None
+
+
 async def ingest_document(
-    client: AsyncQdrantClient, collection: str, text: str, source: str
+    client: AsyncQdrantClient,
+    collection: str,
+    text: str,
+    source: str,
+    *,
+    payload: ChunkPayload,
 ) -> int:
     """Chunk, embed, and store a document's text under a given source.
 
@@ -29,6 +51,7 @@ async def ingest_document(
         text: The document's full text.
         source: Identifies this document within the collection — reused to
             replace its chunks on a later re-ingest.
+        payload: Source metadata duplicated into each chunk for filtering.
 
     Returns:
         The number of chunks ingested (0 if `text` had no content to chunk).
@@ -47,9 +70,26 @@ async def ingest_document(
             PointStruct(
                 id=str(uuid4()),
                 vector=vector,
-                payload={"text": chunk, "source": source},
+                payload={
+                    "text": chunk,
+                    "owner_id": payload.owner_id,
+                    "collection": payload.logical_collection,
+                    "source": source,
+                    "source_type": payload.source_type,
+                    "external_id": payload.external_id,
+                    "revision": payload.revision,
+                    "content_hash": payload.content_hash,
+                    "acl": payload.acl,
+                    "metadata": payload.metadata,
+                    "expires_at": (
+                        payload.expires_at.isoformat() if payload.expires_at else None
+                    ),
+                    "ingested_at": datetime.now(tz=UTC).isoformat(),
+                    "chunk_index": index,
+                    "chunk_count": len(chunks),
+                },
             )
-            for vector, chunk in zip(vectors, chunks, strict=True)
+            for index, (vector, chunk) in enumerate(zip(vectors, chunks, strict=True))
         ],
     )
     return len(chunks)

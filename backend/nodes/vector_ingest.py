@@ -5,8 +5,8 @@ Chunks the upstream text, embeds each chunk locally via fastembed
 (``rag.ingest``). Pairs with the Vector Search node, which reads back from
 the same collection, and with the Vector Collections Settings tab, which
 lets a document ingested here be browsed/deleted (and lets documents be
-uploaded directly, bypassing the graph). Collection names are free text and
-shared globally — no per-user/per-workflow namespacing.
+uploaded directly, bypassing the graph). Logical names resolve through a
+tenant-owned SQL registry to opaque physical Qdrant namespaces.
 """
 
 from enums import NodeType, PortType, ValidatorType
@@ -14,9 +14,9 @@ from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
 from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import upstream_text
-from rag.ingest import ingest_document
 from rag.qdrant import get_qdrant_client
 from schemas import (
+    KnowledgeIngestOptions,
     NodeFieldDataSource,
     NodeFieldDataSourceKind,
     NodeFieldSpec,
@@ -24,6 +24,7 @@ from schemas import (
     NodeFieldWidget,
     NodeGraphSpec,
 )
+from usecases.vector import VectorUsecase
 
 
 class VectorIngestNodeHandler:
@@ -55,21 +56,41 @@ class VectorIngestNodeHandler:
 
         client = get_qdrant_client()
         try:
-            chunks_ingested = await ingest_document(
-                client=client,
+            retention_days = context.node_data.get("retention_days")
+            if not isinstance(retention_days, int) or retention_days <= 0:
+                retention_days = None
+            result = await VectorUsecase(client).ingest_text(
+                session=context.session,
+                user_id=context.workflow_owner_id,
                 collection=collection,
                 text=upstream_text(context),
                 source=source,
+                options=KnowledgeIngestOptions(
+                    source_type="workflow",
+                    revision=(
+                        revision.strip()
+                        if isinstance(
+                            revision := context.node_data.get("revision"), str
+                        )
+                        and revision.strip()
+                        else None
+                    ),
+                    retention_days=retention_days,
+                    metadata={"node_label": context.node_data.get("label", "")},
+                ),
             )
         finally:
             await client.close()
 
-        if chunks_ingested == 0:
+        if result.chunks_ingested == 0:
             message = "Vector Ingest node received no text to ingest"
             raise ExecutionGraphValidationError(message=message)
 
         return NodeExecutionResult.text(
-            output=f"Ingested {chunks_ingested} chunk(s) into '{collection}'."
+            output=(
+                f"{'Kept' if result.unchanged else 'Ingested'} "
+                f"{result.chunks_ingested} chunk(s) in '{collection}'."
+            )
         )
 
 
@@ -116,6 +137,30 @@ DEFINITION = NodeDefinition(
                 kind=NodeFieldDataSourceKind.VECTOR_COLLECTION
             ),
             default="",
+        ),
+        NodeFieldSpec(
+            name="revision",
+            required=False,
+            validators={},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.TEXT,
+                label="Revision (optional)",
+                placeholder="Provider version or ETag",
+                help="An unchanged revision skips embedding and Qdrant writes.",
+            ),
+            default="",
+        ),
+        NodeFieldSpec(
+            name="retention_days",
+            required=False,
+            validators={ValidatorType.GE.value: 0, ValidatorType.LE.value: 36500},
+            ui=NodeFieldUI(
+                widget=NodeFieldWidget.NUMBER,
+                label="Retention days",
+                help="0 keeps the source until it is explicitly deleted.",
+                step=1,
+            ),
+            default=0,
         ),
         NodeFieldSpec(
             name="source",

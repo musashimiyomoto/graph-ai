@@ -12,6 +12,8 @@ from db.repositories.conversation import ConversationRepository
 from db.repositories.edge import EdgeRepository
 from db.repositories.email_account import EmailAccountRepository
 from db.repositories.execution import ExecutionRepository
+from db.repositories.knowledge_collection import KnowledgeCollectionRepository
+from db.repositories.knowledge_source import KnowledgeSourceRepository
 from db.repositories.llm_provider import LLMProviderRepository
 from db.repositories.mcp_server import MCPServerRepository
 from db.repositories.node import NodeRepository
@@ -39,6 +41,8 @@ __all__ = [
     "EdgeRepository",
     "EmailAccountRepository",
     "ExecutionRepository",
+    "KnowledgeCollectionRepository",
+    "KnowledgeSourceRepository",
     "LLMProviderRepository",
     "MCPServerRepository",
     "NodeExecutionRepository",

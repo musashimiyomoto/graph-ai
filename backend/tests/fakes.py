@@ -52,12 +52,32 @@ class FakeQdrantClient:
             store.append((point.vector, point.payload))
 
     async def query_points(
-        self, collection_name: str, query: list[float], limit: int
+        self,
+        collection_name: str,
+        query: list[float],
+        limit: int,
+        query_filter: Filter | None = None,
     ) -> _FakeQueryResponse:
         """Return the first `limit` stored points, ignoring the query vector."""
         del query
         store = self.collections.get(collection_name, [])
-        return _FakeQueryResponse([_FakePoint(payload) for _, payload in store[:limit]])
+        conditions = getattr(query_filter, "must", None) or []
+
+        def matches(payload: dict[str, Any]) -> bool:
+            for condition in conditions:
+                match = condition.match
+                expected = getattr(match, "value", None)
+                if expected is not None and payload.get(condition.key) != expected:
+                    return False
+                allowed = getattr(match, "any", None)
+                if allowed is not None and payload.get(condition.key) not in allowed:
+                    return False
+            return True
+
+        points = [_FakePoint(payload) for _, payload in store if matches(payload)][
+            :limit
+        ]
+        return _FakeQueryResponse(points)
 
     async def get_collections(self, **kwargs: object) -> SimpleNamespace:
         """List every collection name."""
@@ -96,6 +116,21 @@ class FakeQdrantClient:
             for vector, payload in store
             if not all(payload.get(c.key) == c.match.value for c in conditions)
         ]
+
+    async def set_payload(
+        self,
+        collection_name: str,
+        payload: dict[str, Any],
+        points: Filter,
+        **kwargs: object,
+    ) -> None:
+        """Merge payload fields into points matching a source filter."""
+        del kwargs
+        store = self.collections.get(collection_name, [])
+        conditions = getattr(points, "must", None) or []
+        for _, existing in store:
+            if all(existing.get(c.key) == c.match.value for c in conditions):
+                existing.update(payload)
 
     async def delete_collection(self, collection_name: str, **kwargs: object) -> bool:
         """Delete a collection outright."""

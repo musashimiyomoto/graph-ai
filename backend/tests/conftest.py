@@ -150,8 +150,8 @@ class _NoopArqPool:
 
     async def enqueue_job(self, *args: object, **kwargs: object) -> SimpleNamespace:
         """Accept an enqueue call and return a job stub carrying a job_id."""
-        del args, kwargs
-        return SimpleNamespace(job_id="test-job-id")
+        del args
+        return SimpleNamespace(job_id=kwargs.get("_job_id", "test-job-id"))
 
 
 class _NoopRedisClient:

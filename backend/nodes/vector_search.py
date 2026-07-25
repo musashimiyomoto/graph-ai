@@ -8,8 +8,10 @@ to feed downstream nodes (e.g. as LLM context).
 
 from asyncio import to_thread
 
+from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
+
 from enums import NodeType, PortType, ValidatorType
-from exceptions import ExecutionGraphValidationError
+from exceptions import ExecutionGraphValidationError, VectorCollectionNotFoundError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
 from nodes.definition import NodeDefinition, NodeHandlerDeps
 from nodes.rendering import upstream_text
@@ -23,6 +25,7 @@ from schemas import (
     NodeFieldWidget,
     NodeGraphSpec,
 )
+from usecases.vector import VectorUsecase
 
 _MIN_TOP_K = 1
 _MAX_TOP_K = 20
@@ -66,22 +69,46 @@ class VectorSearchNodeHandler:
             raise ExecutionGraphValidationError(message=message)
 
         client = get_qdrant_client()
-        if not await client.collection_exists(collection):
-            message = (
-                f"Collection '{collection}' does not exist — "
-                "ingest documents into it first."
+        try:
+            try:
+                physical_name, sources = await VectorUsecase(
+                    client
+                ).resolve_search_collection(
+                    session=context.session,
+                    user_id=context.workflow_owner_id,
+                    name=collection,
+                )
+            except VectorCollectionNotFoundError as exc:
+                message = (
+                    f"Collection '{collection}' does not exist — "
+                    "ingest documents into it first."
+                )
+                raise ExecutionGraphValidationError(message=message) from exc
+            if not sources:
+                return NodeExecutionResult.text(output="")
+            (vector,) = await to_thread(embed_texts, [query])
+            response = await client.query_points(
+                collection_name=physical_name,
+                query=vector,
+                query_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="owner_id",
+                            match=MatchValue(value=context.workflow_owner_id),
+                        ),
+                        FieldCondition(key="source", match=MatchAny(any=sources)),
+                    ]
+                ),
+                limit=top_k,
             )
-            raise ExecutionGraphValidationError(message=message)
-
-        (vector,) = await to_thread(embed_texts, [query])
-        response = await client.query_points(
-            collection_name=collection, query=vector, limit=top_k
-        )
-        return NodeExecutionResult.text(
-            output="\n\n---\n\n".join(
-                str((point.payload or {}).get("text", "")) for point in response.points
+            return NodeExecutionResult.text(
+                output="\n\n---\n\n".join(
+                    str((point.payload or {}).get("text", ""))
+                    for point in response.points
+                )
             )
-        )
+        finally:
+            await client.close()
 
 
 def _build_handler(deps: NodeHandlerDeps) -> VectorSearchNodeHandler:

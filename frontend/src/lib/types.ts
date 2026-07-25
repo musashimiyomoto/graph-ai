@@ -591,11 +591,38 @@ export interface ArtifactDownload {
 export interface VectorCollection {
   name: string
   point_count: number
+  sync_cursor: string | null
+  last_synced_at: string | null
+}
+
+export interface KnowledgeACL {
+  visibility: 'private' | 'shared'
+  readers: string[]
 }
 
 export interface VectorDocument {
   source: string
   chunk_count: number
+  source_type: string
+  external_id: string | null
+  revision: string | null
+  content_hash: string
+  acl: KnowledgeACL
+  metadata: Record<string, unknown>
+  expires_at: string | null
+  last_synced_at: string
+}
+
+export interface VectorUploadOptions {
+  source_type?: string
+  external_id?: string
+  revision?: string
+  acl_visibility?: KnowledgeACL['visibility']
+  acl_readers?: string[]
+  retention_days?: number
+  sync_cursor?: string
+  metadata?: Record<string, unknown>
+  force?: boolean
 }
 
 export interface VectorUploadJob {

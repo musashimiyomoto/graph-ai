@@ -1009,10 +1009,20 @@ permanent format-specific runtime fields or adapter branches.
       compatibility facades. Migration `a9c2e4f6b8d0` cleanly upgrades, checks,
       downgrades and re-upgrades without schema drift; all 459 backend and 83
       frontend tests pass alongside lint, typecheck and production build.
-- [ ] **Tenant-safe knowledge sources** — namespace Qdrant collections by owner,
-      migrate existing collections without data loss, attach source/revision/ACL
-      metadata, and add retention and incremental-sync primitives needed by Drive,
-      Notion and Confluence connectors.
+- [x] **Tenant-safe knowledge sources** — logical collection names now resolve
+      through a tenant-owned PostgreSQL registry to opaque, owner-specific Qdrant
+      namespaces; API job IDs, collection/document operations and Vector
+      Ingest/Search nodes are owner-scoped, with search also filtering chunk
+      payloads by owner and active source. Revision/content hashes skip duplicate
+      embedding while metadata-only retries refresh source type, external ID, ACL,
+      retention and connector metadata on existing chunks. Durable source records,
+      incremental-sync cursors and an hourly bounded retention cleanup provide the
+      primitives needed by Drive, Notion and Confluence. Settings exposes the new
+      source metadata and upload controls. Migration `b0d3f5a7c9e1` intentionally
+      creates a fresh tenant-safe schema without legacy Qdrant migration or
+      backfill; clean upgrade/check/downgrade/re-upgrade reports no drift. All 465
+      backend and 85 frontend tests pass, alongside lint, typecheck and production
+      build.
 - [ ] **Artifact/channel safety and observability** — MIME sniffing, file-size and
       decompression limits, malware-scanner hook, SSRF/egress policy, per-connection
       rate limits, redacted logs, channel delivery attempts, artifact bytes and

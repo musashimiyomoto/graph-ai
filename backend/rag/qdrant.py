@@ -121,6 +121,22 @@ async def delete_by_source(
     )
 
 
+async def update_source_payload(
+    client: AsyncQdrantClient,
+    collection: str,
+    source: str,
+    payload: dict,
+) -> None:
+    """Update metadata on every existing chunk without replacing vectors."""
+    await client.set_payload(
+        collection_name=collection,
+        payload=payload,
+        points=Filter(
+            must=[FieldCondition(key="source", match=MatchValue(value=source))]
+        ),
+    )
+
+
 async def delete_collection(client: AsyncQdrantClient, name: str) -> None:
     """Delete a Qdrant collection outright."""
     await client.delete_collection(collection_name=name)

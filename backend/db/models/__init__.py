@@ -10,6 +10,8 @@ from db.models.conversation import Conversation
 from db.models.edge import Edge
 from db.models.email_account import EmailAccount
 from db.models.execution import Execution
+from db.models.knowledge_collection import KnowledgeCollection
+from db.models.knowledge_source import KnowledgeSource
 from db.models.llm_provider import LLMProvider
 from db.models.mcp_server import MCPServer
 from db.models.node import Node
@@ -37,6 +39,8 @@ __all__ = [
     "Edge",
     "EmailAccount",
     "Execution",
+    "KnowledgeCollection",
+    "KnowledgeSource",
     "LLMProvider",
     "MCPServer",
     "Node",

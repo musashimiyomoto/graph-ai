@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, cast
 import pytest
 
 from enums import NodeType, PortCoercion, PortType
-from exceptions import ExecutionGraphValidationError
+from exceptions import ExecutionGraphValidationError, VectorCollectionNotFoundError
 from nodes import (
     NODE_DEFINITIONS,
     CodeTransformNodeHandler,
@@ -25,9 +25,12 @@ from nodes import (
     required_port_coercion,
 )
 from nodes.base import NodeExecutionContext
+from rag.ingest import ChunkPayload, ingest_document
+from schemas import KnowledgeIngestOptions, VectorUploadResponse
 from tests.fakes import FakeQdrantClient
 
 if TYPE_CHECKING:
+    from qdrant_client import AsyncQdrantClient
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -816,6 +819,66 @@ def _fake_embed_texts(texts: list[str]) -> list[list[float]]:
     return [[float(len(text))] for text in texts]
 
 
+class _NodeVectorUsecase:
+    """SQL-free adapter keeping node handler tests focused on node behavior."""
+
+    def __init__(self, client: FakeQdrantClient) -> None:
+        """Keep the test's in-memory Qdrant client."""
+        self._client = client
+
+    async def ingest_text(  # noqa: PLR0913
+        self,
+        *,
+        session: object,
+        user_id: int,
+        collection: str,
+        text: str,
+        source: str,
+        options: KnowledgeIngestOptions,
+    ) -> VectorUploadResponse:
+        """Ingest chunks without exercising the SQL registry in node unit tests."""
+        del session
+        count = await ingest_document(
+            client=cast("AsyncQdrantClient", self._client),
+            collection=collection,
+            text=text,
+            source=source,
+            payload=ChunkPayload(
+                owner_id=user_id,
+                logical_collection=collection,
+                source_type=options.source_type,
+                external_id=options.external_id,
+                revision=options.revision,
+                content_hash="0" * 64,
+                acl=options.acl.model_dump(),
+                metadata=options.metadata,
+                expires_at=None,
+            ),
+        )
+        return VectorUploadResponse(source=source, chunks_ingested=count)
+
+    async def resolve_search_collection(
+        self, *, session: object, user_id: int, name: str
+    ) -> tuple[str, list[str]]:
+        """Resolve the literal fake collection and its source payload keys."""
+        del session, user_id
+        if not await self._client.collection_exists(name):
+            raise VectorCollectionNotFoundError
+        sources = {
+            str(payload.get("source", "doc"))
+            for _, payload in self._client.collections[name]
+        }
+        return name, sorted(sources)
+
+
+@pytest.fixture
+def node_vector_usecase(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace SQL-backed vector orchestration in direct node unit tests."""
+    monkeypatch.setattr("nodes.vector_ingest.VectorUsecase", _NodeVectorUsecase)
+    monkeypatch.setattr("nodes.vector_search.VectorUsecase", _NodeVectorUsecase)
+
+
+@pytest.mark.usefixtures("node_vector_usecase")
 class TestVectorIngestNode:
     """Tests for the vector-ingest node handler."""
 
@@ -836,10 +899,13 @@ class TestVectorIngestNode:
             )
         )
 
-        if result.output.require_text() != "Ingested 1 chunk(s) into 'docs'.":
+        if result.output.require_text() != "Ingested 1 chunk(s) in 'docs'.":
             pytest.fail("Unexpected confirmation message")
         stored_payload = client.collections["docs"][0][1]
-        if stored_payload != {"text": "hello world", "source": "doc-a"}:
+        if (
+            stored_payload["text"] != "hello world"
+            or stored_payload["source"] != "doc-a"
+        ):
             pytest.fail("Chunk text/source was not stored in the collection")
 
     @pytest.mark.asyncio
@@ -927,6 +993,7 @@ class TestVectorIngestNode:
             pytest.fail("Expected the node label to be used as the source")
 
 
+@pytest.mark.usefixtures("node_vector_usecase")
 class TestVectorSearchNode:
     """Tests for the vector-search node handler."""
 
@@ -937,9 +1004,9 @@ class TestVectorSearchNode:
         """Search returns up to top_k stored chunks joined by a separator."""
         client = FakeQdrantClient()
         client.collections["docs"] = [
-            ([1.0], {"text": "chunk one"}),
-            ([2.0], {"text": "chunk two"}),
-            ([3.0], {"text": "chunk three"}),
+            ([1.0], {"text": "chunk one", "owner_id": 1, "source": "doc"}),
+            ([2.0], {"text": "chunk two", "owner_id": 1, "source": "doc"}),
+            ([3.0], {"text": "chunk three", "owner_id": 1, "source": "doc"}),
         ]
         monkeypatch.setattr("nodes.vector_search.embed_texts", _fake_embed_texts)
         monkeypatch.setattr("nodes.vector_search.get_qdrant_client", lambda: client)

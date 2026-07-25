@@ -40,6 +40,7 @@ import type {
   VectorDocument,
   VectorJobStatus,
   VectorUploadJob,
+  VectorUploadOptions,
   Workflow,
   WorkflowExport,
   WorkflowGraphTransfer,
@@ -719,15 +720,56 @@ export async function uploadVectorDocument(
   collection: string,
   file: File,
   source?: string,
+  options: VectorUploadOptions = {},
 ): Promise<VectorUploadJob> {
   const formData = new FormData()
   formData.append('file', file)
   if (source) {
     formData.append('source', source)
   }
+  if (options.source_type) {
+    formData.append('source_type', options.source_type)
+  }
+  if (options.external_id) {
+    formData.append('external_id', options.external_id)
+  }
+  if (options.revision) {
+    formData.append('revision', options.revision)
+  }
+  if (options.acl_visibility) {
+    formData.append('acl_visibility', options.acl_visibility)
+  }
+  if (options.acl_readers?.length) {
+    formData.append('acl_readers', options.acl_readers.join(','))
+  }
+  if (options.retention_days !== undefined) {
+    formData.append('retention_days', String(options.retention_days))
+  }
+  if (options.sync_cursor) {
+    formData.append('sync_cursor', options.sync_cursor)
+  }
+  if (options.metadata) {
+    formData.append('metadata_json', JSON.stringify(options.metadata))
+  }
+  if (options.force) {
+    formData.append('force', 'true')
+  }
   return request<VectorUploadJob>(
     `/vector-collections/${encodeURIComponent(collection)}/documents`,
     { method: 'POST', body: formData },
+  )
+}
+
+export async function updateVectorSyncState(
+  collection: string,
+  syncCursor: string | null,
+): Promise<VectorCollection> {
+  return request<VectorCollection>(
+    `/vector-collections/${encodeURIComponent(collection)}/sync-state`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ sync_cursor: syncCursor }),
+    },
   )
 }
 

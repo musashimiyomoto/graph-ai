@@ -21,6 +21,7 @@ from llm.ollama import OllamaClient
 from logging_config import configure_logging
 from observability import init_sentry
 from rag.qdrant import get_qdrant_client
+from schemas import KnowledgeUploadTask
 from sessions import async_session
 from settings import artifact_settings, redis_settings
 from streaming import publish_pull_progress, publish_token, publish_token_reset
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 _REAPER_MINUTES = set(range(0, 60, 5))
 # Artifact retention cleanup runs once an hour in bounded batches.
 _ARTIFACT_GC_MINUTES = {17}
+# Knowledge retention cleanup is offset from artifact cleanup.
+_KNOWLEDGE_GC_MINUTES = {37}
 
 
 async def run_execution_task(ctx: dict[Any, Any], execution_id: int) -> None:
@@ -108,10 +111,7 @@ def _record_execution_metrics(result: "ExecutionResponse") -> None:
 
 async def ingest_document_task(
     ctx: dict[Any, Any],
-    collection: str,
-    filename: str,
-    content: bytes,
-    source: str | None,
+    task_payload: dict[str, object],
 ) -> dict[str, Any]:
     """Extract, chunk, embed, and store an uploaded document in the background.
 
@@ -122,10 +122,7 @@ async def ingest_document_task(
 
     Args:
         ctx: ARQ job context.
-        collection: Collection to store chunks in. Created if missing.
-        filename: The uploaded file's original name.
-        content: The file's raw bytes.
-        source: Document identifier to use instead of the filename, if given.
+        task_payload: Versionable owner, content, revision, ACL, and retention data.
 
     Returns:
         The ingest result (``source`` and ``chunks_ingested``) as a dict, which
@@ -133,15 +130,16 @@ async def ingest_document_task(
 
     """
     del ctx
-    logger.info("Ingesting %r into collection %r", filename, collection)
+    task = KnowledgeUploadTask.model_validate(task_payload)
+    logger.info("Ingesting %r into collection %r", task.filename, task.collection)
     client = get_qdrant_client()
     try:
-        result = await VectorUsecase(client).upload_document(
-            collection=collection,
-            filename=filename,
-            content=content,
-            source_override=source,
-        )
+        async with async_session() as session:
+            result = await VectorUsecase(client).upload_document(
+                session=session,
+                user_id=task.owner_id,
+                task=task,
+            )
     finally:
         await client.close()
     return result.model_dump()
@@ -297,6 +295,19 @@ async def cleanup_expired_artifacts(*args: object, **kwargs: object) -> None:
         logger.info("Deleted %s expired artifact(s)", cleaned)
 
 
+async def cleanup_expired_knowledge_sources(*args: object, **kwargs: object) -> None:
+    """Delete one bounded batch of knowledge sources past retention."""
+    del args, kwargs
+    client = get_qdrant_client()
+    try:
+        async with async_session() as session:
+            cleaned = await VectorUsecase(client).cleanup_expired(session=session)
+    finally:
+        await client.close()
+    if cleaned:
+        logger.info("Deleted %s expired knowledge source(s)", cleaned)
+
+
 class WorkerSettings:
     """ARQ worker configuration."""
 
@@ -312,6 +323,7 @@ class WorkerSettings:
             for job, seconds, name in _CHANNEL_POLL_JOBS
         ),
         cron(cleanup_expired_artifacts, minute=_ARTIFACT_GC_MINUTES),
+        cron(cleanup_expired_knowledge_sources, minute=_KNOWLEDGE_GC_MINUTES),
     ]
     redis_settings = redis_settings.arq
     on_startup = startup
