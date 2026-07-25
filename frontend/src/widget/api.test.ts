@@ -16,7 +16,7 @@ describe('web-chat public API', () => {
       'https://graph.example/api/web-chat/token',
       'Hello',
       'message-1',
-      'visitor-1',
+      null,
     )
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -26,7 +26,7 @@ describe('web-chat public API', () => {
         body: JSON.stringify({
           value: 'Hello',
           event_id: 'message-1',
-          conversation_id: 'visitor-1',
+          session_id: null,
           locale: navigator.language || null,
         }),
       }),
@@ -51,10 +51,15 @@ describe('web-chat public API', () => {
     await streamWebChatExecution(
       'https://graph.example/api/web-chat/token',
       9,
+      'session-12345678',
       onEvent,
       new AbortController().signal,
     )
 
+    expect(fetch).toHaveBeenCalledWith(
+      'https://graph.example/api/web-chat/token/executions/9/stream?session_id=session-12345678',
+      expect.any(Object),
+    )
     expect(onEvent).toHaveBeenCalledWith({
       type: 'token',
       node_id: 3,

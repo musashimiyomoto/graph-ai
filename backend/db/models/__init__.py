@@ -5,6 +5,7 @@ from db.models.audit_log import AuditLog
 from db.models.auth_action_token import AuthActionToken
 from db.models.auth_session import AuthSession
 from db.models.base import Base, BaseWithDate, BaseWithID
+from db.models.conversation import Conversation
 from db.models.edge import Edge
 from db.models.email_account import EmailAccount
 from db.models.execution import Execution
@@ -14,6 +15,7 @@ from db.models.node import Node
 from db.models.node_execution import NodeExecution
 from db.models.node_schedule import NodeSchedule
 from db.models.postgres_connection import PostgresConnection
+from db.models.state_entry import StateEntry, StateEntryHistory
 from db.models.telegram_bot import TelegramBot
 from db.models.usage_record import UsageRecord
 from db.models.user import User
@@ -28,6 +30,7 @@ __all__ = [
     "Base",
     "BaseWithDate",
     "BaseWithID",
+    "Conversation",
     "Edge",
     "EmailAccount",
     "Execution",
@@ -37,6 +40,8 @@ __all__ = [
     "NodeExecution",
     "NodeSchedule",
     "PostgresConnection",
+    "StateEntry",
+    "StateEntryHistory",
     "TelegramBot",
     "UsageRecord",
     "User",

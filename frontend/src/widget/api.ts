@@ -1,4 +1,8 @@
-import type { ApiError, Execution, ExecutionStreamEvent } from '../lib/types'
+import type {
+  ApiError,
+  ExecutionStreamEvent,
+  WebChatExecution,
+} from '../lib/types'
 
 async function publicRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
   let response: Response
@@ -27,14 +31,14 @@ export async function createWebChatExecution(
   endpoint: string,
   value: string,
   eventId: string,
-  conversationId: string,
-): Promise<Execution> {
-  return publicRequest<Execution>(`${endpoint}/executions`, {
+  sessionId: string | null,
+): Promise<WebChatExecution> {
+  return publicRequest<WebChatExecution>(`${endpoint}/executions`, {
     method: 'POST',
     body: JSON.stringify({
       value,
       event_id: eventId,
-      conversation_id: conversationId,
+      session_id: sessionId,
       locale: navigator.language || null,
     }),
   })
@@ -43,19 +47,26 @@ export async function createWebChatExecution(
 export async function getWebChatExecution(
   endpoint: string,
   executionId: number,
-): Promise<Execution> {
-  return publicRequest<Execution>(`${endpoint}/executions/${executionId}`)
+  sessionId: string,
+): Promise<WebChatExecution> {
+  const query = new URLSearchParams({ session_id: sessionId })
+  return publicRequest<WebChatExecution>(
+    `${endpoint}/executions/${executionId}?${query.toString()}`,
+  )
 }
 
 export async function streamWebChatExecution(
   endpoint: string,
   executionId: number,
+  sessionId: string,
   onEvent: (event: ExecutionStreamEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${endpoint}/executions/${executionId}/stream`, {
-    signal,
-  })
+  const query = new URLSearchParams({ session_id: sessionId })
+  const response = await fetch(
+    `${endpoint}/executions/${executionId}/stream?${query.toString()}`,
+    { signal },
+  )
   if (!response.ok || !response.body) {
     throw { message: 'Stream failed.', status: response.status } as ApiError
   }

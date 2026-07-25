@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,11 @@ from channels.base import (
     ChannelReceiveContext,
 )
 from db.models import Workflow
-from db.repositories import NodeRepository, WorkflowRepository
+from db.repositories import (
+    ConversationRepository,
+    NodeRepository,
+    WorkflowRepository,
+)
 from enums import (
     ExecutionSource,
     InputNodeFormat,
@@ -84,6 +89,11 @@ class WebChatChannelAdapter:
             session=context.session, token=payload.token
         )
         message = payload.message
+        external_thread, actor_id = await self._session_identity(
+            session=context.session,
+            workflow_id=workflow.id,
+            message=message,
+        )
         return (
             ChannelReceiveBatch(
                 events=(
@@ -94,10 +104,8 @@ class WebChatChannelAdapter:
                         event=TriggerEvent(
                             channel=ExecutionSource.WEB_CHAT,
                             external_event_id=message.event_id,
-                            sender=TriggerActor(id=message.conversation_id),
-                            conversation=TriggerConversation(
-                                id=message.conversation_id
-                            ),
+                            sender=TriggerActor(id=actor_id),
+                            conversation=TriggerConversation(id=external_thread),
                             locale=message.locale,
                             message=NodeValuePayload(
                                 kind=PortType.TEXT,
@@ -109,6 +117,32 @@ class WebChatChannelAdapter:
                 )
             ),
         )
+
+    async def _session_identity(
+        self,
+        *,
+        session: AsyncSession,
+        workflow_id: int,
+        message: WebChatMessage,
+    ) -> tuple[str, str]:
+        """Resolve a server-issued session or seed a backwards-compatible one."""
+        if message.session_id is not None:
+            conversation = await ConversationRepository().get_by(
+                session=session,
+                workflow_id=workflow_id,
+                channel=ExecutionSource.WEB_CHAT,
+                public_id=message.session_id,
+            )
+            if conversation is None:
+                raise WebChatNotFoundError
+            return (
+                conversation.external_conversation_id,
+                conversation.actor_id or conversation.public_id,
+            )
+        if message.conversation_id is not None:
+            return message.conversation_id, message.conversation_id
+        seed = uuid4().hex
+        return seed, seed
 
 
 WEB_CHAT_ADAPTER = WebChatChannelAdapter()

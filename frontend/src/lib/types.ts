@@ -126,6 +126,10 @@ export interface Execution {
   finished_at: string | null
 }
 
+export interface WebChatExecution extends Execution {
+  session_id: string
+}
+
 export interface NodeMeta {
   type: string
   label: string

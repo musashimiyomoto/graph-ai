@@ -978,11 +978,22 @@ permanent format-specific runtime fields or adapter branches.
       every execution source and node format exactly once and every polling plugin
       to implement acknowledgement. No schema migration was needed; all 450 backend
       and 78 frontend tests pass, alongside lint, typecheck and production build.
-- [ ] **Durable conversations and scoped state** — add conversation/session records
-      keyed by `(workflow, channel, external_thread)` and a typed state store with
-      `execution`, `conversation`, `user` and `workflow` scopes, TTL, optimistic
-      concurrency and audit history. Public web chat receives an opaque session ID;
-      cross-channel identity linking stays opt-in.
+- [x] **Durable conversations and scoped state** — executions with normalized
+      trigger conversations now resolve to durable `(workflow, channel,
+      external_thread)` `Conversation` records and carry `conversation_id` for
+      downstream authorization. Public web chat no longer trusts a client-created
+      conversation ID: the first message receives a server-issued opaque
+      `session_id`, later messages reuse it through `sessionStorage`, and public
+      execution reads/streams require that session to own the run. Added a typed
+      `StateEntry` store scoped to `execution`, `conversation`, `user` and
+      `workflow`, using serialized `NodeValue` envelopes, TTL, advisory-lock-backed
+      optimistic concurrency (`expected_version`, including create-only `0`),
+      append-only mutation history and tenant audit events. User scope remains
+      channel-local (`channel:sender`) so cross-channel identity linking is still
+      opt-in. Migration `f8d1b3c5e7a9` backfills conversations from existing trigger
+      envelopes and clean upgrade/check/downgrade/re-upgrade reports no schema
+      drift. All 455 backend and 78 frontend tests pass, alongside lint,
+      typecheck and the production build.
 - [ ] **Unified connections and OAuth foundation** — evolve one-off provider/bot/
       account settings toward a common encrypted Connection model supporting API
       keys, OAuth 2.0 authorization-code refresh, health checks, scopes, ownership,

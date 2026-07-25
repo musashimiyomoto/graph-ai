@@ -71,6 +71,11 @@ from exceptions.rag import (
     VectorDocumentNotFoundError,
 )
 from exceptions.rate_limit import RateLimitExceededError
+from exceptions.state import (
+    StateEntryNotFoundError,
+    StateScopeUnavailableError,
+    StateVersionConflictError,
+)
 from exceptions.telegram import TelegramAPIError, TelegramBotNotFoundError
 from exceptions.user import UserAlreadyExistsError, UserNotFoundError
 from exceptions.web_chat import WebChatNotFoundError
@@ -126,6 +131,9 @@ __all__ = [
     "PostgresConnectionNotFoundError",
     "QuotaExceededError",
     "RateLimitExceededError",
+    "StateEntryNotFoundError",
+    "StateScopeUnavailableError",
+    "StateVersionConflictError",
     "TableSourceError",
     "TelegramAPIError",
     "TelegramBotNotFoundError",

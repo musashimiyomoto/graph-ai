@@ -94,6 +94,7 @@ from schemas import (
 )
 from streaming import subscribe_tokens
 from usecases.audit import AuditEvent, AuditUsecase
+from usecases.conversation import ConversationUsecase
 from usecases.usage import UsageUsecase
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,7 @@ class ExecutionUsecase:
         )
         self._usage_usecase = UsageUsecase()
         self._audit_usecase = AuditUsecase()
+        self._conversation_usecase = ConversationUsecase()
 
     async def create_execution(
         self,
@@ -394,11 +396,18 @@ class ExecutionUsecase:
         # Validate the snapshot up front (fail-fast); the worker reuses it at run time.
         self._build_graph_from_snapshot(version.graph)
 
+        conversation = await self._conversation_usecase.resolve_trigger(
+            session=session,
+            owner_id=user_id,
+            workflow_id=data.workflow_id,
+            event=trigger_event,
+        )
         execution = await self._execution_repository.create(
             session=session,
             data={
                 "workflow_id": data.workflow_id,
                 "version_id": version.id,
+                "conversation_id": conversation.id if conversation else None,
                 "input_data": data.input_data.model_dump(),
                 "trigger_event": trigger_event.model_dump(mode="json"),
                 "trigger_external_id": trigger_event.external_event_id,

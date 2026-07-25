@@ -56,6 +56,7 @@ describe('WidgetApp', () => {
       prefect_flow_run_id: null,
       started_at: '2026-07-18T00:00:00Z',
       finished_at: null,
+      session_id: 'session-12345678',
     }
     const finished = {
       ...created,
@@ -64,7 +65,7 @@ describe('WidgetApp', () => {
       finished_at: '2026-07-18T00:00:01Z',
     }
     createMock.mockResolvedValue(created)
-    streamMock.mockImplementation(async (_endpoint, _id, onEvent) => {
+    streamMock.mockImplementation(async (_endpoint, _id, _sessionId, onEvent) => {
       onEvent({ type: 'status', execution: finished })
     })
 
@@ -77,7 +78,7 @@ describe('WidgetApp', () => {
       'https://graph.example/api/web-chat/token',
       'Hello',
       expect.any(String),
-      expect.any(String),
+      null,
     )
     expect(getMock).not.toHaveBeenCalled()
   })

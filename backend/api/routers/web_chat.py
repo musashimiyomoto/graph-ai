@@ -5,13 +5,13 @@ from http import HTTPStatus
 from typing import Annotated
 
 from arq import ArqRedis
-from fastapi import APIRouter, Body, Depends, Path
+from fastapi import APIRouter, Body, Depends, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from api.dependencies import db, queue, web_chat
 from api.dependencies.execution import get_execution_usecase
-from schemas import ExecutionResponse, WebChatMessage
+from schemas import WebChatExecutionResponse, WebChatMessage
 from usecases import ExecutionUsecase
 
 router = APIRouter(prefix="/web-chat", tags=["Web Chat"])
@@ -60,7 +60,7 @@ async def create_web_chat_execution(
         Depends(dependency=web_chat.get_web_chat_usecase),
     ],
     pool: Annotated[ArqRedis, Depends(dependency=queue.get_arq_pool)],
-) -> ExecutionResponse:
+) -> WebChatExecutionResponse:
     """Queue a visitor message for the embedded chat."""
 
     async def enqueue(execution_id: int) -> None:
@@ -80,15 +80,19 @@ async def create_web_chat_execution(
 async def get_web_chat_execution(
     token: Annotated[str, Path(description="Signed workflow web-chat token")],
     execution_id: Annotated[int, Path(gt=0)],
+    session_id: Annotated[str, Query(min_length=16, max_length=64)],
     session: Annotated[AsyncSession, Depends(dependency=db.get_session)],
     usecase: Annotated[
         web_chat.WebChatUsecase,
         Depends(dependency=web_chat.get_web_chat_usecase),
     ],
-) -> ExecutionResponse:
+) -> WebChatExecutionResponse:
     """Return the current state of a public web-chat execution."""
     return await usecase.get_execution(
-        session=session, token=token, execution_id=execution_id
+        session=session,
+        token=token,
+        execution_id=execution_id,
+        session_id=session_id,
     )
 
 
@@ -96,6 +100,7 @@ async def get_web_chat_execution(
 async def stream_web_chat_execution(
     token: Annotated[str, Path(description="Signed workflow web-chat token")],
     execution_id: Annotated[int, Path(gt=0)],
+    session_id: Annotated[str, Query(min_length=16, max_length=64)],
     dependencies: Annotated[
         _StreamDependencies, Depends(dependency=_get_stream_dependencies)
     ],
@@ -103,7 +108,10 @@ async def stream_web_chat_execution(
     """Stream public web-chat execution status and LLM tokens as SSE."""
     async with dependencies.session_factory() as session:
         owner_id = await dependencies.web_chat_usecase.authorize_stream(
-            session=session, token=token, execution_id=execution_id
+            session=session,
+            token=token,
+            execution_id=execution_id,
+            session_id=session_id,
         )
     return StreamingResponse(
         dependencies.execution_usecase.stream_execution(

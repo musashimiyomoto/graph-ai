@@ -4,6 +4,7 @@ from usecases.artifact import ArtifactUsecase
 from usecases.audit import AuditEvent, AuditUsecase
 from usecases.auth import AuthUsecase
 from usecases.channel import ChannelUsecase
+from usecases.conversation import ConversationUsecase
 from usecases.edge import EdgeUsecase
 from usecases.email_account import EmailAccountUsecase
 from usecases.execution import ExecutionListFilter, ExecutionTrigger, ExecutionUsecase
@@ -12,6 +13,7 @@ from usecases.llm_provider import LLMProviderUsecase
 from usecases.mcp_server import MCPServerUsecase
 from usecases.node import NodeUsecase
 from usecases.postgres_connection import PostgresConnectionUsecase
+from usecases.state import StateAccess, StateUsecase
 from usecases.telegram_bot import TelegramBotUsecase
 from usecases.usage import UsageUsecase
 from usecases.user import UserUsecase
@@ -27,6 +29,7 @@ __all__ = [
     "AuditUsecase",
     "AuthUsecase",
     "ChannelUsecase",
+    "ConversationUsecase",
     "EdgeUsecase",
     "EmailAccountUsecase",
     "ExecutionListFilter",
@@ -37,6 +40,8 @@ __all__ = [
     "MCPServerUsecase",
     "NodeUsecase",
     "PostgresConnectionUsecase",
+    "StateAccess",
+    "StateUsecase",
     "TelegramBotUsecase",
     "UsageUsecase",
     "UserUsecase",

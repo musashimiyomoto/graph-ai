@@ -27,6 +27,12 @@ class Execution(BaseWithID):
         index=True,
         comment="Pinned workflow version snapshot",
     )
+    conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Durable normalized conversation for this run",
+    )
 
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(ExecutionStatus),

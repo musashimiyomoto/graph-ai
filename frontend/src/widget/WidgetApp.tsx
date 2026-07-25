@@ -31,6 +31,26 @@ function createPublicId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+function sessionStorageKey(endpoint: string): string {
+  return `graph-ai:web-chat:${endpoint}`
+}
+
+function readSession(endpoint: string): string | null {
+  try {
+    return window.sessionStorage.getItem(sessionStorageKey(endpoint))
+  } catch {
+    return null
+  }
+}
+
+function storeSession(endpoint: string, sessionId: string): void {
+  try {
+    window.sessionStorage.setItem(sessionStorageKey(endpoint), sessionId)
+  } catch {
+    // A privacy-restricted embed can still keep the session for this mount.
+  }
+}
+
 function finalText(execution: Execution): string {
   if (execution.status === 'cancelled') {
     return 'Execution cancelled.'
@@ -49,7 +69,7 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const nextId = useRef(1)
-  const conversationId = useRef(createPublicId())
+  const sessionId = useRef<string | null>(readSession(endpoint))
   const controller = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -76,10 +96,17 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
     )
   }
 
-  async function pollUntilFinished(executionId: number): Promise<Execution> {
+  async function pollUntilFinished(
+    executionId: number,
+    publicSessionId: string,
+  ): Promise<Execution> {
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, POLL_INTERVAL_MS))
-      const execution = await getWebChatExecution(endpoint, executionId)
+      const execution = await getWebChatExecution(
+        endpoint,
+        executionId,
+        publicSessionId,
+      )
       if (
         execution.status === 'success' ||
         execution.status === 'failed' ||
@@ -112,8 +139,10 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
         endpoint,
         value,
         createPublicId(),
-        conversationId.current,
+        sessionId.current,
       )
+      sessionId.current = execution.session_id
+      storeSession(endpoint, execution.session_id)
       const tokenText = new Map<number, string>()
       let terminal: Execution | null = null
       const abortController = new AbortController()
@@ -123,6 +152,7 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
         await streamWebChatExecution(
           endpoint,
           execution.id,
+          execution.session_id,
           (streamEvent) => {
             if (streamEvent.type === 'token') {
               tokenText.set(
@@ -154,7 +184,7 @@ export function WidgetApp({ endpoint, title }: WidgetAppProps) {
         // The status endpoint below is the source-of-truth fallback.
       }
 
-      terminal ??= await pollUntilFinished(execution.id)
+      terminal ??= await pollUntilFinished(execution.id, execution.session_id)
       updateAssistant(assistantId, finalText(terminal), {
         pending: false,
         failed: terminal.status === 'failed',

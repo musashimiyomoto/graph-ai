@@ -17,6 +17,7 @@ from enums.node import (
     PortType,
     TableSource,
 )
+from enums.state import StateHistoryOperation, StateScope
 from enums.validator import ValidatorType
 
 __all__ = [
@@ -35,6 +36,8 @@ __all__ = [
     "OutputNodeFormat",
     "PortCoercion",
     "PortType",
+    "StateHistoryOperation",
+    "StateScope",
     "TableSource",
     "ValidatorType",
 ]
