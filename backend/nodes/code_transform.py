@@ -21,13 +21,12 @@ from RestrictedPython.Guards import guarded_iter_unpack_sequence, safer_getattr
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.value import JSONValue, NodeValue
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 _OUTPUT_VAR = "output"
@@ -100,8 +99,8 @@ class CodeTransformNodeHandler:
 
     @staticmethod
     def _configured_type(context: NodeExecutionContext, field: str) -> PortType:
-        """Read one configurable structured port type with legacy fallback."""
-        raw_type = context.node_data.get(field, PortType.TEXT.value)
+        """Read one required configurable structured port type."""
+        raw_type = context.node_data.get(field)
         try:
             port_type = PortType(raw_type)
         except ValueError as exc:
@@ -231,15 +230,13 @@ DEFINITION = NodeDefinition(
     type=NodeType.CODE_TRANSFORM,
     label="Code / Transform",
     icon_key="code_transform",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
-        input_port_field="input_type",
-        output_port_field="output_type",
-        input_port_options=_STRUCTURED_PORT_TYPES,
-        output_port_options=_STRUCTURED_PORT_TYPES,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
+        input_type_field="input_type",
+        output_type_field="output_type",
+        input_allowed_types=_STRUCTURED_PORT_TYPES,
+        output_allowed_types=_STRUCTURED_PORT_TYPES,
     ),
     fields=(
         NodeFieldSpec(

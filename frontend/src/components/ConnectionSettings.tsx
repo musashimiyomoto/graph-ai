@@ -73,7 +73,9 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
     authType === 'oauth2' &&
     Boolean(authorizationUrl.trim() && tokenUrl.trim() && clientId.trim())
   const formValid =
-    Boolean(name.trim()) && providerValid && (apiKeyFieldsValid || oauthFieldsValid)
+    Boolean(name.trim()) &&
+    providerValid &&
+    (authType === 'none' || apiKeyFieldsValid || oauthFieldsValid)
 
   function resetForm(): void {
     setName('')
@@ -99,7 +101,9 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
       health_url: healthUrl.trim() || undefined,
     }
     const payload: ConnectionCreatePayload =
-      authType === 'api_key'
+      authType === 'none'
+        ? common
+        : authType === 'api_key'
         ? {
             ...common,
             api_key: apiKey.trim(),
@@ -325,6 +329,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
             >
               <option value="api_key">API key</option>
               <option value="oauth2">OAuth 2.0 + PKCE</option>
+              <option value="none">No authentication</option>
             </select>
           </label>
           <label className="pixel-label">
@@ -367,7 +372,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
                 />
               </label>
             </>
-          ) : (
+          ) : authType === 'oauth2' ? (
             <>
               <label className="pixel-label">
                 Authorization URL
@@ -417,7 +422,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
                 />
               </label>
             </>
-          )}
+          ) : null}
 
           <label className="pixel-label">
             Health URL (optional)

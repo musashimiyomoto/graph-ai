@@ -88,16 +88,10 @@ function NodeResultRow({
               <div className="mb-1 text-[10px] uppercase tracking-wide text-[var(--muted)]">
                 {handle}
               </div>
-              <OutputRenderer value={null} typedValue={typedValue} />
+              <OutputRenderer typedValue={typedValue} />
             </div>
           ))}
         </div>
-      ) : nodeResult.output !== null || nodeResult.output_value !== null ? (
-        <OutputRenderer
-          value={nodeResult.output}
-          typedValue={nodeResult.output_value}
-          portType={meta?.portType ?? null}
-        />
       ) : null}
       {nodeResult.status === 'waiting_delay' && nodeResult.wait_until ? (
         <div className="text-[var(--muted)]">

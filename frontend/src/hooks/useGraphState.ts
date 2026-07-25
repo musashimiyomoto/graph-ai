@@ -129,7 +129,7 @@ function toFlowNode(
   nodeCatalogByType: Record<string, NodeCatalogItem>,
 ): FlowNode {
   const catalogNode = nodeCatalogByType[node.type]
-  const graph = catalogNode?.graph ?? { has_input: true, has_output: true }
+  const graph = catalogNode?.graph ?? { inputs: [], outputs: [], output_handles: null }
   const resolvedGraph =
     node.type === 'switch'
       ? { ...graph, output_handles: switchOutputHandles(node.data?.branches) }

@@ -12,7 +12,7 @@ from nodes.mcp_tool import MCPToolNodeHandler
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.repositories import MCPServerRepository
+    from db.repositories import ConnectionRepository, MCPServerRepository
 
 
 class _Repository:
@@ -22,8 +22,16 @@ class _Repository:
         """Return encrypted server metadata."""
         return SimpleNamespace(
             url="https://mcp.example.com/mcp",
-            headers="encrypted",
+            connection_id=2,
         )
+
+
+class _ConnectionRepository:
+    """Return one owned unified credential row."""
+
+    async def get_by(self, **_kwargs: object) -> SimpleNamespace:
+        """Return encrypted connection metadata."""
+        return SimpleNamespace(credentials="encrypted")
 
 
 @pytest.mark.asyncio
@@ -37,10 +45,13 @@ async def test_mcp_tool_renders_arguments_and_returns_output(
         captured.update(kwargs)
         return "tool result"
 
-    monkeypatch.setattr("nodes.mcp_tool.decrypt", lambda _value: "{}")
+    monkeypatch.setattr("nodes.mcp_tool.connection_secret", lambda _value: "{}")
     monkeypatch.setattr("nodes.mcp_tool.blocked_url_reason", lambda _url: _none())
     monkeypatch.setattr("nodes.mcp_tool.call_mcp_tool", fake_call)
-    handler = MCPToolNodeHandler(cast("MCPServerRepository", _Repository()))
+    handler = MCPToolNodeHandler(
+        cast("MCPServerRepository", _Repository()),
+        cast("ConnectionRepository", _ConnectionRepository()),
+    )
     result = await handler.execute(
         NodeExecutionContext(
             session=cast("AsyncSession", None),

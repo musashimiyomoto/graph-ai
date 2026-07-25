@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from db.repositories import (
+    ConnectionRepository,
     LLMProviderRepository,
     MCPServerRepository,
     PostgresConnectionRepository,
@@ -34,8 +35,57 @@ class NodeHandlerDeps:
     """Dependencies available to node handler factories."""
 
     llm_provider_repository: LLMProviderRepository
+    connection_repository: ConnectionRepository
     postgres_connection_repository: PostgresConnectionRepository
     mcp_server_repository: MCPServerRepository
+
+
+def graph_spec(  # noqa: PLR0913
+    *,
+    input_type: PortType | None = None,
+    output_type: PortType | None = None,
+    input_name: str = "input",
+    output_name: str = "output",
+    input_label: str = "Input",
+    output_label: str = "Output",
+    input_type_field: str | None = None,
+    output_type_field: str | None = None,
+    input_allowed_types: tuple[PortType, ...] = (),
+    output_allowed_types: tuple[PortType, ...] = (),
+    additional_inputs: tuple[NodePortSpec, ...] = (),
+    additional_outputs: tuple[NodePortSpec, ...] = (),
+    output_handles: tuple[str, ...] | None = None,
+) -> NodeGraphSpec:
+    """Build declarative named port collections for a node definition."""
+    inputs = additional_inputs
+    if input_type is not None:
+        inputs = (
+            NodePortSpec(
+                name=input_name,
+                label=input_label,
+                type=input_type,
+                type_field=input_type_field,
+                allowed_types=input_allowed_types,
+            ),
+            *inputs,
+        )
+    outputs = additional_outputs
+    if output_type is not None:
+        outputs = (
+            NodePortSpec(
+                name=output_name,
+                label=output_label,
+                type=output_type,
+                type_field=output_type_field,
+                allowed_types=output_allowed_types,
+            ),
+            *outputs,
+        )
+    return NodeGraphSpec(
+        inputs=inputs,
+        outputs=outputs,
+        output_handles=output_handles,
+    )
 
 
 @dataclass(frozen=True)

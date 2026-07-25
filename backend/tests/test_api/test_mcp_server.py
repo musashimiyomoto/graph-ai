@@ -1,16 +1,12 @@
 """Saved MCP server API tests."""
 
 import json
-from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from db.repositories import MCPServerRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, MCPServerRepository
 from tests.test_api.base import BaseTestCase
-from utils.encryption import decrypt
-
-if TYPE_CHECKING:
-    from db.models import MCPServer
 
 
 class TestMCPServerApi(BaseTestCase):
@@ -40,10 +36,17 @@ class TestMCPServerApi(BaseTestCase):
         )
         if stored is None:
             pytest.fail("MCP server was not persisted")
-        encrypted_headers = cast("MCPServer", stored).headers
-        if encrypted_headers == json.dumps(secret_headers):
+            return
+        connection = await ConnectionRepository().get_by(
+            session=self.session, id=stored.connection_id
+        )
+        if connection is None:
+            pytest.fail("MCP credential connection was not persisted")
+            return
+        if json.dumps(secret_headers) in connection.credentials:
             pytest.fail("MCP headers were not encrypted")
-        if json.loads(decrypt(encrypted_headers)) != secret_headers:
+        secret = connection_secret(connection)
+        if secret is None or json.loads(secret) != secret_headers:
             pytest.fail("Encrypted MCP headers did not round-trip")
 
     async def test_tool_discovery_uses_owned_server(

@@ -23,7 +23,6 @@ from constants import (
     DEFAULT_PAGE_SIZE,
     MAX_LOOP_ITERATIONS,
     MAX_NODE_ATTEMPTS,
-    MAX_NODE_OUTPUT_CHARS,
     MAX_WORKFLOW_CALL_DEPTH,
     NODE_TIMEOUT_SECONDS,
     RETRY_BACKOFF_BASE_SECONDS,
@@ -33,6 +32,7 @@ from constants import (
     STUCK_EXECUTION_TIMEOUT_SECONDS,
 )
 from db.repositories import (
+    ConnectionRepository,
     EdgeRepository,
     ExecutionRepository,
     LLMProviderRepository,
@@ -147,18 +147,6 @@ def _edges_within_scope(
         for edge in edges
         if edge.source_node_id in node_ids and edge.target_node_id in node_ids
     ]
-
-
-def _truncate_for_storage(output: str | None) -> str | None:
-    """Cap a node's output before persisting it, with a visible marker.
-
-    Bounds `node_executions.output` storage (e.g. against a giant scraped
-    page or LLM response) without touching the in-memory value fed to
-    downstream nodes — only what's recorded for display/debugging.
-    """
-    if output is None or len(output) <= MAX_NODE_OUTPUT_CHARS:
-        return output
-    return f"{output[:MAX_NODE_OUTPUT_CHARS]}\n\n[truncated: {len(output)} chars total]"
 
 
 def _join_text_values(values: list[NodeValue], separator: str = "\n") -> str:
@@ -283,12 +271,14 @@ class ExecutionUsecase:
         self._edge_repository = EdgeRepository()
         self._node_execution_repository = NodeExecutionRepository()
         self._llm_provider_repository = LLMProviderRepository()
+        self._connection_repository = ConnectionRepository()
         self._postgres_connection_repository = PostgresConnectionRepository()
         self._mcp_server_repository = MCPServerRepository()
         self._workflow_version_repository = WorkflowVersionRepository()
         self._node_registry = NodeHandlerRegistry(
             NodeHandlerDeps(
                 llm_provider_repository=self._llm_provider_repository,
+                connection_repository=self._connection_repository,
                 postgres_connection_repository=self._postgres_connection_repository,
                 mcp_server_repository=self._mcp_server_repository,
             )
@@ -839,17 +829,14 @@ class ExecutionUsecase:
             ExecutionGraphValidationError: If the graph is invalid.
 
         """
-        if execution.version_id is not None:
-            version = await self._workflow_version_repository.get_by(
-                session=session, id=execution.version_id
-            )
-            if version is not None:
-                return self._build_graph_from_snapshot(version.graph)
-
-        # No pinned version (legacy execution) or it was removed: use the live graph.
-        return await self._load_graph(
-            session=session, workflow_id=execution.workflow_id
+        version = await self._workflow_version_repository.get_by(
+            session=session, id=execution.version_id
         )
+        if version is None:
+            raise ExecutionGraphValidationError(
+                message="Pinned workflow version is missing"
+            )
+        return self._build_graph_from_snapshot(version.graph)
 
     def _build_graph_from_snapshot(self, graph: dict[str, object]) -> _LoadedGraph:
         """Build the graph context from a stored version snapshot.
@@ -1359,7 +1346,11 @@ class ExecutionUsecase:
                 "status": (
                     ExecutionStatus.SUCCESS if approved else ExecutionStatus.REJECTED
                 ),
-                "output": approval_input if approved else None,
+                "output_values": (
+                    {"output": NodeValue.text(approval_input).to_payload()}
+                    if approved
+                    else None
+                ),
                 "error": None if approved else "Rejected by workflow owner",
                 "finished_at": datetime.now(tz=UTC),
             },
@@ -1672,7 +1663,7 @@ class ExecutionUsecase:
             )
 
         return ExecutionOutputPayload(
-            value=outputs_by_node[graph.output_node_id].to_legacy_text()
+            value=outputs_by_node[graph.output_node_id].require_text()
         )
 
     def _resolve_live_parents(  # noqa: PLR0913 - scheduler state is map-based
@@ -1826,30 +1817,26 @@ class ExecutionUsecase:
         node_execution: "NodeExecution",
     ) -> NodeExecutionResult:
         """Rebuild an in-memory result from a durable successful checkpoint."""
-        output_values: dict[str, NodeValue] = {}
-        if node_execution.output_values is not None:
-            try:
-                output_values = {
-                    name: NodeValue.from_payload(payload)
-                    for name, payload in node_execution.output_values.items()
-                }
-            except (TypeError, ValueError) as exc:
-                raise ExecutionGraphValidationError(
-                    message="Stored node output handle envelopes are invalid"
-                ) from exc
+        if node_execution.output_values is None:
+            raise ExecutionGraphValidationError(
+                message="Successful node checkpoint is missing typed outputs"
+            )
+        try:
+            output_values = {
+                name: NodeValue.from_payload(payload)
+                for name, payload in node_execution.output_values.items()
+            }
+        except (TypeError, ValueError) as exc:
+            raise ExecutionGraphValidationError(
+                message="Stored node output handle envelopes are invalid"
+            ) from exc
         primary_ports = get_node_definition(node.type).graph.outputs
         primary_name = primary_ports[0].name if primary_ports else "output"
-        if node_execution.output_value is not None:
-            try:
-                output_value = NodeValue.from_payload(node_execution.output_value)
-            except (TypeError, ValueError) as exc:
-                raise ExecutionGraphValidationError(
-                    message="Stored node output envelope is invalid"
-                ) from exc
-        elif primary_name in output_values:
-            output_value = output_values[primary_name]
-        else:
-            output_value = NodeValue.text(node_execution.output or "")
+        output_value = output_values.get(primary_name)
+        if output_value is None:
+            raise ExecutionGraphValidationError(
+                message="Successful node checkpoint is missing its primary output"
+            )
         additional_outputs = {
             name: value for name, value in output_values.items() if name != primary_name
         }
@@ -2555,7 +2542,7 @@ class ExecutionUsecase:
                     "node_label": node.data.get("label"),
                     "iteration": None,
                     "status": ExecutionStatus.WAITING_DELAY,
-                    "output": _truncate_for_storage(output),
+                    "output_values": {"output": NodeValue.text(output).to_payload()},
                     "error": None,
                     "started_at": now,
                     "finished_at": None,
@@ -2618,7 +2605,7 @@ class ExecutionUsecase:
                 "node_label": node.data.get("label"),
                 "iteration": None,
                 "status": ExecutionStatus.WAITING_APPROVAL,
-                "output": None,
+                "output_values": None,
                 "error": None,
                 "started_at": now,
                 "finished_at": None,
@@ -2682,18 +2669,9 @@ class ExecutionUsecase:
             )
         loaded = run_context.called_graphs.get(target_id)
         if loaded is None:
-            # Backward-compatible fallback for legacy workflow versions that
-            # predate embedded Call Workflow dependency snapshots.
-            target = await self._workflow_repository.get_by(
-                session=session,
-                id=target_id,
-                owner_id=run_context.workflow_owner_id,
+            raise ExecutionGraphValidationError(
+                message="Workflow snapshot is missing a called workflow dependency"
             )
-            if target is None:
-                raise ExecutionGraphValidationError(
-                    message="Referenced workflow does not exist"
-                )
-            loaded = await self._load_graph(session=session, workflow_id=target_id)
         nested_context = replace(
             run_context,
             workflow_id=target_id,
@@ -2950,19 +2928,14 @@ class ExecutionUsecase:
                 inside a Loop node's body) iteration index.
 
         """
-        stored_output = None
-        output_value = None
         output_values = None
         if outcome.output is not None:
-            output_value = outcome.output.to_payload()
             output_ports = get_node_definition(node.type).graph.outputs
             primary_name = output_ports[0].name if output_ports else "output"
             all_outputs = {primary_name: outcome.output, **(outcome.outputs or {})}
             output_values = {
                 name: value.to_payload() for name, value in all_outputs.items()
             }
-            if outcome.output.artifact is None:
-                stored_output = outcome.output.to_legacy_text()
         await self._node_execution_repository.create(
             session=session,
             data={
@@ -2972,8 +2945,6 @@ class ExecutionUsecase:
                 "node_label": node.data.get("label"),
                 "iteration": outcome.iteration,
                 "status": outcome.status,
-                "output": _truncate_for_storage(stored_output),
-                "output_value": output_value,
                 "output_values": output_values,
                 "error": outcome.error,
                 "prompt_tokens": (

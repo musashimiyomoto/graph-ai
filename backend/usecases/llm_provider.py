@@ -5,7 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from constants import DEFAULT_TIMEOUT
-from db.repositories import LLMProviderRepository
+from credentials import (
+    connection_secret,
+    create_profile_connection,
+    get_profile_connection,
+    update_profile_connection,
+)
+from db.repositories import ConnectionRepository, LLMProviderRepository
 from enums import LLMProviderType
 from exceptions import (
     BlockedURLError,
@@ -23,8 +29,12 @@ from schemas import (
     OllamaModelPullResponse,
 )
 from usecases.audit import AuditEvent, AuditUsecase
-from utils.encryption import decrypt, encrypt
 from utils.network import blocked_url_reason
+
+
+def _connection_provider(provider_type: LLMProviderType) -> str:
+    """Return the unified connection provider key for one LLM adapter."""
+    return f"llm_{provider_type.value}"
 
 
 async def _ensure_allowed_base_url(base_url: str) -> None:
@@ -77,13 +87,23 @@ class LLMProviderUsecase:
         """
         payload = data.model_dump(mode="json")
         await _ensure_allowed_base_url(payload["base_url"])
-        if payload.get("api_key") is not None:
-            payload["api_key"] = encrypt(payload["api_key"])
+        api_key = payload.pop("api_key", None)
 
         try:
+            connection = await create_profile_connection(
+                session=session,
+                user_id=user_id,
+                name=data.name,
+                provider=_connection_provider(data.type),
+                secret=api_key,
+            )
             created = await self._llm_provider_repository.create(
                 session=session,
-                data={**payload, "user_id": user_id},
+                data={
+                    **payload,
+                    "user_id": user_id,
+                    "connection_id": connection.id,
+                },
             )
         except IntegrityError as exc:
             await session.rollback()
@@ -172,9 +192,12 @@ class LLMProviderUsecase:
                 with this name.
 
         """
-        llm_provider = await self.get_llm_provider(
-            session=session, provider_id=provider_id, user_id=user_id
+        stored = await self._llm_provider_repository.get_by(
+            session=session, id=provider_id, user_id=user_id
         )
+        if stored is None:
+            raise LLMProviderNotFoundError
+        llm_provider = LLMProviderResponse.model_validate(stored)
 
         update_data = data.model_dump(exclude_none=True, mode="json")
         if not update_data:
@@ -183,8 +206,17 @@ class LLMProviderUsecase:
         if update_data.get("base_url"):
             await _ensure_allowed_base_url(update_data["base_url"])
 
-        if "api_key" in update_data:
-            update_data["api_key"] = encrypt(update_data["api_key"])
+        replace_secret = "api_key" in update_data
+        api_key = update_data.pop("api_key", None)
+        next_type = LLMProviderType(update_data.get("type", stored.type))
+        await update_profile_connection(
+            session=session,
+            connection_id=stored.connection_id,
+            name=update_data.get("name"),
+            provider=_connection_provider(next_type),
+            secret=api_key,
+            replace_secret=replace_secret,
+        )
 
         try:
             llm_provider = await self._llm_provider_repository.update_by(
@@ -213,11 +245,14 @@ class LLMProviderUsecase:
             LLMProviderNotFoundError: If the LLM provider is not found.
 
         """
-        deleted = await self._llm_provider_repository.delete_by(
+        provider = await self._llm_provider_repository.get_by(
             session=session, id=provider_id, user_id=user_id
         )
-        if not deleted:
+        if provider is None:
             raise LLMProviderNotFoundError
+        await ConnectionRepository().delete_by(
+            session=session, id=provider.connection_id, user_id=user_id
+        )
         await self._audit_usecase.record(
             session=session,
             event=AuditEvent(
@@ -256,7 +291,14 @@ class LLMProviderUsecase:
             raise LLMProviderNotFoundError
 
         await _ensure_allowed_base_url(llm_provider.base_url)
-        api_key = decrypt(llm_provider.api_key) if llm_provider.api_key else None
+        connection = await get_profile_connection(
+            session=session,
+            connection_id=llm_provider.connection_id,
+            user_id=user_id,
+        )
+        if connection is None:
+            raise LLMProviderNotFoundError
+        api_key = connection_secret(connection)
 
         return await create_llm_client(
             llm_provider=LLMProviderResponse.model_validate(llm_provider),

@@ -77,7 +77,7 @@ class TestConnectionAPI(BaseTestCase):
             return
         if raw_key in row.credentials:
             pytest.fail("API key was stored in plaintext")
-        if json.loads(decrypt(row.credentials))["api_key"] != raw_key:
+        if json.loads(decrypt(row.credentials))["secret"] != raw_key:
             pytest.fail("Encrypted API key could not be recovered internally")
 
         health = await self.client.post(

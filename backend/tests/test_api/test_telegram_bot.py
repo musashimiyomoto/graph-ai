@@ -4,10 +4,10 @@ import uuid
 
 import pytest
 
-from db.repositories import TelegramBotRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, TelegramBotRepository
 from tests.factories import TelegramBotFactory, UserFactory
 from tests.test_api.base import BaseTestCase
-from utils.encryption import decrypt
 
 
 class TestTelegramBotCreate(BaseTestCase):
@@ -56,9 +56,15 @@ class TestTelegramBotCreate(BaseTestCase):
         )
         if stored is None:
             pytest.fail("Expected the bot to persist")
-        elif stored.bot_token == plaintext:
+            return
+        connection = await ConnectionRepository().get_by(
+            session=self.session, id=stored.connection_id
+        )
+        if connection is None:
+            pytest.fail("Expected the bot credential connection to persist")
+        elif plaintext in connection.credentials:
             pytest.fail("Bot token must be stored encrypted, not as plaintext")
-        elif decrypt(stored.bot_token) != plaintext:
+        elif connection_secret(connection) != plaintext:
             pytest.fail("Stored bot token must decrypt back to the original value")
 
 

@@ -26,7 +26,7 @@ from streaming import (
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.repositories import LLMProviderRepository
+    from db.repositories import ConnectionRepository, LLMProviderRepository
 
 _EXECUTION_ID = 42
 _NODE_ID = 7
@@ -78,8 +78,17 @@ class _StubProviderRepository:
             type=LLMProviderType.OLLAMA,
             base_url="http://ollama:11434",
             config={},
-            api_key=None,
+            connection_id=2,
         )
+
+
+class _StubConnectionRepository:
+    """Repository stub returning one credential-free connection."""
+
+    async def get_by(self, *args: object, **kwargs: object) -> SimpleNamespace:
+        """Return a minimal unified connection row."""
+        del args, kwargs
+        return SimpleNamespace(credentials="encrypted")
 
 
 class TestNodeTokenSink:
@@ -95,6 +104,7 @@ class TestNodeTokenSink:
             "create_llm_client",
             lambda **_: _StubStreamingClient(_DELTAS),
         )
+        monkeypatch.setattr(llm_module, "connection_secret", lambda _value: None)
 
         collected: list[str] = []
 
@@ -105,7 +115,10 @@ class TestNodeTokenSink:
         handler = llm_module.LLMNodeHandler(
             llm_provider_repository=cast(
                 "LLMProviderRepository", _StubProviderRepository()
-            )
+            ),
+            connection_repository=cast(
+                "ConnectionRepository", _StubConnectionRepository()
+            ),
         )
         result = await handler.execute(
             NodeExecutionContext(

@@ -7,9 +7,9 @@ from typing import Any
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import upstream_text
-from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget, NodeGraphSpec
+from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget
 
 DEFAULT_SWITCH_HANDLE = "default"
 MIN_SWITCH_BRANCHES = 1
@@ -128,11 +128,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.SWITCH,
     label="Switch",
     icon_key="switch",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
         output_handles=(DEFAULT_SWITCH_HANDLE,),
     ),
     fields=(

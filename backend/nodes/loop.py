@@ -23,13 +23,12 @@ that explicit if the special-case branch is ever accidentally bypassed.
 from enums import ConditionType, LoopMode, NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldVisibility,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 
@@ -61,11 +60,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.LOOP,
     label="Loop",
     icon_key="loop",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

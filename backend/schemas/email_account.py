@@ -51,6 +51,7 @@ class EmailAccountResponse(BaseModel):
 
     id: int = Field(default=..., gt=0)
     user_id: int = Field(default=..., gt=0)
+    connection_id: int = Field(default=..., gt=0)
     name: str
     email_address: EmailStr
     username: str

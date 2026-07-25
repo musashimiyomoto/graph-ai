@@ -9,14 +9,13 @@ from constants.timeout import DEFAULT_TIMEOUT
 from enums import HttpMethod, NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError, HTTPRequestError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import render_input, render_input_url_encoded, upstream_text
 from nodes.value import JSONValue, NodeValue
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
     NodePortSpec,
 )
 from utils.network import blocked_url_reason
@@ -187,11 +186,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.HTTP_REQUEST,
     label="HTTP Request",
     icon_key="http_request",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
         output_name="body",
         output_label="Body",
         additional_inputs=(

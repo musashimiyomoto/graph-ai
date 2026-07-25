@@ -1,10 +1,11 @@
 """Telegram bot model factory."""
 
 from factory.declarations import LazyAttribute
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import TelegramBot
-from tests.factories.base import AsyncSQLAlchemyModelFactory, fake
-from utils.encryption import encrypt
+from tests.factories.base import AsyncSQLAlchemyModelFactory, ModelT, fake
+from tests.factories.connection import ConnectionFactory
 
 
 class TelegramBotFactory(AsyncSQLAlchemyModelFactory):
@@ -17,6 +18,16 @@ class TelegramBotFactory(AsyncSQLAlchemyModelFactory):
 
     user_id = None
     name = LazyAttribute(lambda _obj: f"bot-{fake.word()}")
-    bot_token = LazyAttribute(lambda _obj: encrypt(fake.uuid4()))
     last_update_id = 0
     enabled = True
+
+    @classmethod
+    async def create_async(cls, session: AsyncSession, **kwargs: object) -> ModelT:
+        """Create the unified credential row before the bot profile."""
+        connection = await ConnectionFactory.create_async(
+            session=session,
+            user_id=kwargs.get("user_id"),
+            provider="telegram",
+        )
+        kwargs["connection_id"] = connection.id
+        return await super().create_async(session=session, **kwargs)

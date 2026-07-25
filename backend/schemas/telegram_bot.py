@@ -33,5 +33,8 @@ class TelegramBotResponse(BaseModel):
 
     id: int = Field(default=..., description="Bot ID", gt=0)
     user_id: int = Field(default=..., description="Owner user ID", gt=0)
+    connection_id: int = Field(
+        default=..., description="Credential connection ID", gt=0
+    )
     name: str = Field(default=..., description="Bot display name")
     enabled: bool = Field(default=..., description="Whether polling is active")

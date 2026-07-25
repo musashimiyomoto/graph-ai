@@ -1,6 +1,6 @@
 """Saved MCP server model."""
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models import BaseWithID
@@ -20,10 +20,11 @@ class MCPServer(BaseWithID):
         index=True,
         comment="Owner user ID",
     )
+    connection_id: Mapped[int] = mapped_column(
+        ForeignKey("connections.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        comment="Unified credential connection ID",
+    )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    headers: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        comment="Encrypted JSON HTTP headers",
-    )

@@ -16,5 +16,5 @@ class NodeExecutionFactory(AsyncSQLAlchemyModelFactory):
     execution_id = None
     node_id = None
     status = ExecutionStatus.SUCCESS
-    output = None
+    output_values = None
     error = None

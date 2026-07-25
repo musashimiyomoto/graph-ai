@@ -3,7 +3,8 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.repositories import PostgresConnectionRepository
+from credentials import create_profile_connection
+from db.repositories import ConnectionRepository, PostgresConnectionRepository
 from exceptions import (
     BlockedURLError,
     PostgresConnectionAlreadyExistsError,
@@ -11,7 +12,6 @@ from exceptions import (
 )
 from schemas import PostgresConnectionCreate, PostgresConnectionResponse
 from usecases.audit import AuditEvent, AuditUsecase
-from utils.encryption import encrypt
 from utils.network import blocked_postgres_dsn_reason
 
 
@@ -31,9 +31,20 @@ class PostgresConnectionUsecase:
         if reason is not None:
             raise BlockedURLError(message=reason)
         try:
+            connection = await create_profile_connection(
+                session=session,
+                user_id=user_id,
+                name=data.name,
+                provider="postgres",
+                secret=data.dsn,
+            )
             created = await self._repository.create(
                 session=session,
-                data={"user_id": user_id, "name": data.name, "dsn": encrypt(data.dsn)},
+                data={
+                    "user_id": user_id,
+                    "name": data.name,
+                    "connection_id": connection.id,
+                },
             )
         except IntegrityError as exc:
             await session.rollback()
@@ -64,11 +75,14 @@ class PostgresConnectionUsecase:
         self, session: AsyncSession, user_id: int, connection_id: int
     ) -> None:
         """Delete an owned PostgreSQL connection."""
-        deleted = await self._repository.delete_by(
+        profile = await self._repository.get_by(
             session=session, id=connection_id, user_id=user_id
         )
-        if not deleted:
+        if profile is None:
             raise PostgresConnectionNotFoundError
+        await ConnectionRepository().delete_by(
+            session=session, id=profile.connection_id, user_id=user_id
+        )
         await self._audit_usecase.record(
             session=session,
             event=AuditEvent(

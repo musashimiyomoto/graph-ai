@@ -13,7 +13,7 @@ from nodes.table import TableNodeHandler, _google_sheets_csv_url
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from db.repositories import PostgresConnectionRepository
+    from db.repositories import ConnectionRepository, PostgresConnectionRepository
 
 
 class TestTableCsv:
@@ -80,12 +80,21 @@ class _Connection:
 
 
 class _Repository:
-    """Returns one owned encrypted connection row."""
+    """Returns one owned PostgreSQL profile."""
 
     async def get_by(self, *args: object, **kwargs: object) -> SimpleNamespace:
         """Return the saved connection."""
         del args, kwargs
-        return SimpleNamespace(dsn="encrypted")
+        return SimpleNamespace(connection_id=2)
+
+
+class _ConnectionRepository:
+    """Returns one owned unified credential row."""
+
+    async def get_by(self, *args: object, **kwargs: object) -> SimpleNamespace:
+        """Return the saved credential connection."""
+        del args, kwargs
+        return SimpleNamespace(credentials="encrypted")
 
 
 class TestTablePostgres:
@@ -107,9 +116,14 @@ class TestTablePostgres:
             """Allow the fake DSN."""
 
         monkeypatch.setattr("nodes.table.asyncpg.connect", connect)
-        monkeypatch.setattr("nodes.table.decrypt", lambda _value: "postgresql://db")
+        monkeypatch.setattr(
+            "nodes.table.connection_secret", lambda _value: "postgresql://db"
+        )
         monkeypatch.setattr("nodes.table.blocked_postgres_dsn_reason", allowed)
-        handler = TableNodeHandler(cast("PostgresConnectionRepository", _Repository()))
+        handler = TableNodeHandler(
+            cast("PostgresConnectionRepository", _Repository()),
+            cast("ConnectionRepository", _ConnectionRepository()),
+        )
         result = await handler.execute(
             NodeExecutionContext(
                 session=cast("AsyncSession", None),

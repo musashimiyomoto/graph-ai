@@ -9,11 +9,12 @@ import asyncpg
 import httpx
 
 from constants import DEFAULT_TIMEOUT
-from db.repositories import PostgresConnectionRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, PostgresConnectionRepository
 from enums import NodeType, PortType, TableSource, ValidatorType
 from exceptions import ExecutionGraphValidationError, TableSourceError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import render_input
 from schemas import (
     NodeFieldDataSource,
@@ -22,9 +23,7 @@ from schemas import (
     NodeFieldUI,
     NodeFieldVisibility,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
-from utils.encryption import decrypt
 from utils.network import blocked_postgres_dsn_reason, blocked_url_reason
 
 _MAX_ROWS = 500
@@ -77,10 +76,13 @@ class TableNodeHandler:
     """Handler for read-only tabular data sources."""
 
     def __init__(
-        self, postgres_connection_repository: PostgresConnectionRepository
+        self,
+        postgres_connection_repository: PostgresConnectionRepository,
+        connection_repository: ConnectionRepository,
     ) -> None:
         """Initialize handler dependencies."""
         self._postgres_connection_repository = postgres_connection_repository
+        self._connection_repository = connection_repository
 
     async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
         """Load and normalize rows from the configured source."""
@@ -182,7 +184,7 @@ class TableNodeHandler:
                 break
         return columns, rows
 
-    async def _load_postgres(
+    async def _load_postgres(  # noqa: C901
         self, context: NodeExecutionContext, max_rows: int
     ) -> tuple[list[str], list[list[object]]]:
         """Execute one read-only PostgreSQL query."""
@@ -210,7 +212,16 @@ class TableNodeHandler:
             raise ExecutionGraphValidationError(
                 message="Table node PostgreSQL query must be one SELECT statement"
             )
-        dsn = decrypt(saved.dsn)
+        credential = await self._connection_repository.get_by(
+            session=context.session,
+            id=saved.connection_id,
+            user_id=context.workflow_owner_id,
+        )
+        dsn = connection_secret(credential) if credential is not None else None
+        if dsn is None:
+            raise ExecutionGraphValidationError(
+                message="PostgreSQL credential connection does not exist"
+            )
         reason = await blocked_postgres_dsn_reason(dsn)
         if reason is not None:
             raise ExecutionGraphValidationError(message=reason)
@@ -240,18 +251,19 @@ class TableNodeHandler:
 
 def _build_handler(deps: NodeHandlerDeps) -> TableNodeHandler:
     """Build a Table node handler."""
-    return TableNodeHandler(deps.postgres_connection_repository)
+    return TableNodeHandler(
+        deps.postgres_connection_repository,
+        deps.connection_repository,
+    )
 
 
 DEFINITION = NodeDefinition(
     type=NodeType.TABLE,
     label="Table",
     icon_key="table",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

@@ -9,12 +9,11 @@ from constants.timeout import DEFAULT_TIMEOUT
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError, WebSearchConnectionError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 # DuckDuckGo's lite HTML endpoint returns real organic results (title, URL,
@@ -203,11 +202,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.WEB_SEARCH,
     label="Web Search",
     icon_key="web_search",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

@@ -3,10 +3,10 @@
 import pytest
 from fastapi import status
 
-from db.repositories import EmailAccountRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, EmailAccountRepository
 from tests.factories import EmailAccountFactory, UserFactory
 from tests.test_api.base import BaseTestCase
-from utils.encryption import decrypt
 
 
 def _payload() -> dict[str, object]:
@@ -48,9 +48,15 @@ class TestEmailAccountCreate(BaseTestCase):
         if stored is None:
             pytest.fail("Expected the email account to persist")
             return
-        if stored.password == payload["password"]:
+        connection = await ConnectionRepository().get_by(
+            session=self.session, id=stored.connection_id
+        )
+        if connection is None:
+            pytest.fail("Expected the email credential connection to persist")
+            return
+        if str(payload["password"]) in connection.credentials:
             pytest.fail("Email password was not stored encrypted")
-        if decrypt(stored.password) != payload["password"]:
+        if connection_secret(connection) != payload["password"]:
             pytest.fail("Encrypted password did not round-trip")
 
     async def test_rejects_conflicting_smtp_security_modes(self) -> None:

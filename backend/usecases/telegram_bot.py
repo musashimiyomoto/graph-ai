@@ -2,11 +2,11 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.repositories import TelegramBotRepository
+from credentials import create_profile_connection, update_profile_connection
+from db.repositories import ConnectionRepository, TelegramBotRepository
 from exceptions import TelegramBotNotFoundError
 from schemas import TelegramBotCreate, TelegramBotResponse, TelegramBotUpdate
 from usecases.audit import AuditEvent, AuditUsecase
-from utils.encryption import encrypt
 
 
 class TelegramBotUsecase:
@@ -34,12 +34,19 @@ class TelegramBotUsecase:
             The created Telegram bot.
 
         """
+        connection = await create_profile_connection(
+            session=session,
+            user_id=user_id,
+            name=data.name,
+            provider="telegram",
+            secret=data.bot_token,
+        )
         bot = await self._telegram_bot_repository.create(
             session=session,
             data={
                 "user_id": user_id,
                 "name": data.name,
-                "bot_token": encrypt(data.bot_token),
+                "connection_id": connection.id,
             },
         )
         await self._audit_usecase.record(
@@ -122,16 +129,26 @@ class TelegramBotUsecase:
             TelegramBotNotFoundError: If the bot is not found.
 
         """
-        bot = await self.get_telegram_bot(
-            session=session, bot_id=bot_id, user_id=user_id
+        stored = await self._telegram_bot_repository.get_by(
+            session=session, id=bot_id, user_id=user_id
         )
+        if stored is None:
+            raise TelegramBotNotFoundError
+        bot = TelegramBotResponse.model_validate(stored)
 
         update_data = data.model_dump(exclude_none=True)
         if not update_data:
             return bot
 
-        if "bot_token" in update_data:
-            update_data["bot_token"] = encrypt(update_data["bot_token"])
+        replace_secret = "bot_token" in update_data
+        bot_token = update_data.pop("bot_token", None)
+        await update_profile_connection(
+            session=session,
+            connection_id=stored.connection_id,
+            name=update_data.get("name"),
+            secret=bot_token,
+            replace_secret=replace_secret,
+        )
 
         updated = await self._telegram_bot_repository.update_by(
             session=session, data=update_data, id=bot_id
@@ -156,11 +173,14 @@ class TelegramBotUsecase:
             TelegramBotNotFoundError: If the bot is not found.
 
         """
-        deleted = await self._telegram_bot_repository.delete_by(
+        bot = await self._telegram_bot_repository.get_by(
             session=session, id=bot_id, user_id=user_id
         )
-        if not deleted:
+        if bot is None:
             raise TelegramBotNotFoundError
+        await ConnectionRepository().delete_by(
+            session=session, id=bot.connection_id, user_id=user_id
+        )
         await self._audit_usecase.record(
             session=session,
             event=AuditEvent(

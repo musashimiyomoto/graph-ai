@@ -2,9 +2,10 @@
 
 import pytest
 
-from db.repositories import PostgresConnectionRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, PostgresConnectionRepository
+from tests.factories import ConnectionFactory
 from tests.test_api.base import BaseTestCase
-from utils.encryption import decrypt
 
 
 class TestPostgresConnectionApi(BaseTestCase):
@@ -27,15 +28,30 @@ class TestPostgresConnectionApi(BaseTestCase):
         )
         if stored is None:
             pytest.fail("Connection was not persisted")
-        elif stored.dsn == dsn or decrypt(stored.dsn) != dsn:
+            return
+        credential = await ConnectionRepository().get_by(
+            session=self.session, id=stored.connection_id
+        )
+        if (
+            credential is None
+            or dsn in credential.credentials
+            or connection_secret(credential) != dsn
+        ):
             pytest.fail("Connection DSN was not encrypted correctly")
 
     async def test_list_and_delete_are_owner_scoped(self) -> None:
         """An account sees and deletes only its own saved connections."""
         user, headers = await self.create_user_and_get_token()
+        credential = await ConnectionFactory.create_async(
+            session=self.session, user_id=user["id"], provider="postgres"
+        )
         created = await PostgresConnectionRepository().create(
             session=self.session,
-            data={"user_id": user["id"], "name": "Warehouse", "dsn": "encrypted"},
+            data={
+                "user_id": user["id"],
+                "name": "Warehouse",
+                "connection_id": credential.id,
+            },
         )
         await self.session.commit()
         response = await self.client.get(self.url, headers=headers)

@@ -12,14 +12,13 @@ import re
 from enums import ConditionBranch, ConditionType, NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import upstream_text
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldVisibility,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 
@@ -130,11 +129,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.CONDITION,
     label="Condition / Router",
     icon_key="condition",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
         output_handles=(ConditionBranch.TRUE.value, ConditionBranch.FALSE.value),
     ),
     fields=(

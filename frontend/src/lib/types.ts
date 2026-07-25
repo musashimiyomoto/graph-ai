@@ -296,10 +296,6 @@ export interface NodePortSpec {
 }
 
 export interface NodeCatalogGraph {
-  has_input: boolean
-  has_output: boolean
-  input_port: PortType | null
-  output_port: PortType | null
   output_handles: string[] | null
   inputs: NodePortSpec[]
   outputs: NodePortSpec[]
@@ -467,7 +463,7 @@ export interface PostgresConnectionCreatePayload {
   dsn: string
 }
 
-export type ConnectionAuthType = 'api_key' | 'oauth2'
+export type ConnectionAuthType = 'none' | 'api_key' | 'oauth2'
 
 export type ConnectionStatus = 'pending' | 'active' | 'unhealthy' | 'revoked'
 
@@ -558,8 +554,6 @@ export interface NodeExecutionResult {
   node_type: NodeType | null
   node_label: string | null
   status: ExecutionStatus
-  output: string | null
-  output_value: NodeValueEnvelope | null
   output_values: Record<string, NodeValueEnvelope> | null
   error: string | null
   started_at: string

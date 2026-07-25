@@ -5,11 +5,11 @@ from http import HTTPStatus
 
 import pytest
 
-from db.repositories import LLMProviderRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, LLMProviderRepository
 from enums import LLMProviderType
 from tests.factories import LLMProviderFactory, UserFactory
 from tests.test_api.base import BaseTestCase
-from utils.encryption import decrypt
 
 
 class TestLLMProviderCreate(BaseTestCase):
@@ -65,11 +65,17 @@ class TestLLMProviderCreate(BaseTestCase):
         stored = await LLMProviderRepository().get_by(
             session=self.session, id=data["id"]
         )
-        if stored is None or stored.api_key is None:
-            pytest.fail("Expected the provider to persist an API key")
-        elif stored.api_key == plaintext:
+        if stored is None:
+            pytest.fail("Expected the provider to persist")
+            return
+        connection = await ConnectionRepository().get_by(
+            session=self.session, id=stored.connection_id
+        )
+        if connection is None:
+            pytest.fail("Expected the provider credential connection to persist")
+        elif plaintext in connection.credentials:
             pytest.fail("API key must be stored encrypted, not as plaintext")
-        elif decrypt(stored.api_key) != plaintext:
+        elif connection_secret(connection) != plaintext:
             pytest.fail("Stored API key must decrypt back to the original value")
 
     @pytest.mark.asyncio

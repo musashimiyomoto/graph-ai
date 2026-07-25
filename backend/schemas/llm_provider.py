@@ -160,6 +160,9 @@ class LLMProviderResponse(BaseModel):
 
     id: int = Field(default=..., description="Provider ID", gt=0)
     user_id: int = Field(default=..., description="Owner user ID", gt=0)
+    connection_id: int = Field(
+        default=..., description="Credential connection ID", gt=0
+    )
     name: str = Field(default=..., description="Provider name")
     type: LLMProviderType = Field(default=..., description="Provider type")
     base_url: str = Field(default=..., description="Custom base URL")

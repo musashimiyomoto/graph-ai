@@ -101,7 +101,7 @@ class ConnectionUsecase:
         config, credentials = self._creation_payload(data)
         status = (
             ConnectionStatus.ACTIVE
-            if data.auth_type is ConnectionAuthType.API_KEY
+            if data.auth_type is not ConnectionAuthType.OAUTH2
             else ConnectionStatus.PENDING
         )
         try:
@@ -418,6 +418,8 @@ class ConnectionUsecase:
     @staticmethod
     def _creation_payload(data: ConnectionCreate) -> tuple[dict, dict[str, str]]:
         """Split safe configuration from the encrypted credential envelope."""
+        if data.auth_type is ConnectionAuthType.NONE:
+            return ({"health_url": data.health_url}, {})
         if data.auth_type is ConnectionAuthType.API_KEY:
             if data.api_key is None:
                 message = "Validated API-key connection is missing api_key"
@@ -428,7 +430,7 @@ class ConnectionUsecase:
                     "prefix": data.prefix,
                     "health_url": data.health_url,
                 },
-                {"api_key": data.api_key.get_secret_value()},
+                {"secret": data.api_key.get_secret_value()},
             )
         return (
             {
@@ -578,8 +580,11 @@ class ConnectionUsecase:
     ) -> dict[str, str]:
         """Resolve auth headers, transparently refreshing expiring OAuth tokens."""
         credentials = self._credentials(connection)
+        if connection.auth_type is ConnectionAuthType.NONE:
+            connection.last_used_at = now
+            return {}
         if connection.auth_type is ConnectionAuthType.API_KEY:
-            api_key = credentials.get("api_key")
+            api_key = credentials.get("secret")
             if not isinstance(api_key, str):
                 raise ConnectionRevokedError
             prefix = connection.config.get("prefix")

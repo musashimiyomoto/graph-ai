@@ -3,13 +3,12 @@
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import render_input
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 
@@ -47,11 +46,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.TEMPLATE,
     label="Prompt / Template",
     icon_key="template",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

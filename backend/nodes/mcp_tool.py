@@ -3,7 +3,8 @@
 import json
 from typing import Any, cast
 
-from db.repositories import MCPServerRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, MCPServerRepository
 from enums import NodeType, PortType, ValidatorType
 from exceptions import (
     ExecutionGraphValidationError,
@@ -11,7 +12,7 @@ from exceptions import (
 )
 from integrations.mcp import call_mcp_tool
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import render_input
 from schemas import (
     NodeFieldDataSource,
@@ -19,18 +20,21 @@ from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
-from utils.encryption import decrypt
 from utils.network import blocked_url_reason
 
 
 class MCPToolNodeHandler:
     """Call a configured tool on an owned remote MCP server."""
 
-    def __init__(self, repository: MCPServerRepository) -> None:
+    def __init__(
+        self,
+        repository: MCPServerRepository,
+        connection_repository: ConnectionRepository,
+    ) -> None:
         """Store the MCP server repository."""
         self._repository = repository
+        self._connection_repository = connection_repository
 
     async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
         """Render arguments, invoke the tool, and return its text result."""
@@ -57,7 +61,13 @@ class MCPToolNodeHandler:
             raise ExecutionGraphValidationError(message=reason)
 
         arguments = self._read_arguments(context)
-        headers = cast("dict[str, str]", json.loads(decrypt(server.headers)))
+        connection = await self._connection_repository.get_by(
+            session=context.session,
+            id=server.connection_id,
+            user_id=context.workflow_owner_id,
+        )
+        secret = connection_secret(connection) if connection is not None else None
+        headers = cast("dict[str, str]", json.loads(secret)) if secret else {}
         output = await call_mcp_tool(
             url=server.url,
             headers=headers,
@@ -86,18 +96,19 @@ class MCPToolNodeHandler:
 
 def _build_handler(deps: NodeHandlerDeps) -> MCPToolNodeHandler:
     """Build an MCP Tool node handler."""
-    return MCPToolNodeHandler(deps.mcp_server_repository)
+    return MCPToolNodeHandler(
+        deps.mcp_server_repository,
+        deps.connection_repository,
+    )
 
 
 DEFINITION = NodeDefinition(
     type=NodeType.MCP_TOOL,
     label="MCP Tool",
     icon_key="mcp_tool",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

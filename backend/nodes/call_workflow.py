@@ -7,14 +7,13 @@ handler exists only so the registry remains complete for every NodeType.
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     NodeFieldDataSource,
     NodeFieldDataSourceKind,
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 
@@ -39,11 +38,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.CALL_WORKFLOW,
     label="Call Workflow",
     icon_key="call_workflow",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

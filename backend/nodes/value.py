@@ -190,22 +190,6 @@ class NodeValue:
             )
         return self.value
 
-    def to_legacy_text(self) -> str:
-        """Serialize an inline value for existing text DB/API boundaries.
-
-        This is an explicit compatibility boundary, not a port coercion. Artifact
-        values are persisted via ``to_payload`` and cannot cross this text adapter.
-        """
-        if self.kind is PortType.TEXT:
-            return self.require_text()
-        if self.kind in {PortType.JSON, PortType.LIST}:
-            return json.dumps(self.value, ensure_ascii=False)
-        raise ExecutionGraphValidationError(
-            message=(
-                f"Cannot serialize {self.kind.value} through a legacy text boundary"
-            )
-        )
-
     def to_payload(self) -> dict[str, JSONValue]:
         """Return a JSON-compatible representation of the complete envelope."""
         return {

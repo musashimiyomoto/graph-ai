@@ -2,11 +2,11 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.repositories import EmailAccountRepository
+from credentials import create_profile_connection, update_profile_connection
+from db.repositories import ConnectionRepository, EmailAccountRepository
 from exceptions import EmailAccountConfigError, EmailAccountNotFoundError
 from schemas import EmailAccountCreate, EmailAccountResponse, EmailAccountUpdate
 from usecases.audit import AuditEvent, AuditUsecase
-from utils.encryption import encrypt
 
 
 class EmailAccountUsecase:
@@ -22,7 +22,15 @@ class EmailAccountUsecase:
     ) -> EmailAccountResponse:
         """Create an email account with an encrypted password."""
         values = data.model_dump()
-        values.update(user_id=user_id, password=encrypt(data.password))
+        password = values.pop("password")
+        connection = await create_profile_connection(
+            session=session,
+            user_id=user_id,
+            name=data.name,
+            provider="email",
+            secret=password,
+        )
+        values.update(user_id=user_id, connection_id=connection.id)
         account = await self._repository.create(session=session, data=values)
         await self._audit_usecase.record(
             session=session,
@@ -73,8 +81,15 @@ class EmailAccountUsecase:
             return await self.get_email_account(
                 session=session, account_id=account_id, user_id=user_id
             )
-        if "password" in values:
-            values["password"] = encrypt(values["password"])
+        replace_secret = "password" in values
+        password = values.pop("password", None)
+        await update_profile_connection(
+            session=session,
+            connection_id=existing.connection_id,
+            name=values.get("name"),
+            secret=password,
+            replace_secret=replace_secret,
+        )
         smtp_use_tls = values.get("smtp_use_tls", existing.smtp_use_tls)
         smtp_use_ssl = values.get("smtp_use_ssl", existing.smtp_use_ssl)
         if smtp_use_tls and smtp_use_ssl:
@@ -92,11 +107,14 @@ class EmailAccountUsecase:
         self, session: AsyncSession, account_id: int, user_id: int
     ) -> None:
         """Delete one user-owned email account."""
-        deleted = await self._repository.delete_by(
+        account = await self._repository.get_by(
             session=session, id=account_id, user_id=user_id
         )
-        if not deleted:
+        if account is None:
             raise EmailAccountNotFoundError
+        await ConnectionRepository().delete_by(
+            session=session, id=account.connection_id, user_id=user_id
+        )
         await self._audit_usecase.record(
             session=session,
             event=AuditEvent(

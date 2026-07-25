@@ -3,12 +3,11 @@
 from channels.registry import build_channel_fields
 from enums import NodeType, PortType, ValidatorType
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 
@@ -30,10 +29,8 @@ DEFINITION = NodeDefinition(
     type=NodeType.OUTPUT,
     label="Output",
     icon_key="output",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=False,
-        input_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

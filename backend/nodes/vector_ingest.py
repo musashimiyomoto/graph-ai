@@ -12,7 +12,7 @@ tenant-owned SQL registry to opaque physical Qdrant namespaces.
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import upstream_text
 from rag.qdrant import get_qdrant_client
 from schemas import (
@@ -22,7 +22,6 @@ from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 from usecases.vector import VectorUsecase
 
@@ -104,11 +103,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.VECTOR_INGEST,
     label="Vector Ingest",
     icon_key="vector_ingest",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

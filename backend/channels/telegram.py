@@ -13,7 +13,9 @@ from channels.base import (
     ChannelReceiveContext,
     delivery_text,
 )
+from credentials import connection_secret
 from db.repositories import (
+    ConnectionRepository,
     NodeRepository,
     TelegramBotRepository,
     WorkflowRepository,
@@ -27,7 +29,6 @@ from schemas import (
     TriggerConversation,
     TriggerEvent,
 )
-from utils.encryption import decrypt
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ class _TelegramCheckpoint:
 class TelegramChannelAdapter:
     """Normalize Telegram updates and send completed workflow replies."""
 
-    async def receive(
+    async def receive(  # noqa: C901
         self, context: ChannelReceiveContext
     ) -> tuple[ChannelReceiveBatch, ...]:
         """Poll configured bots and normalize updates for their Input nodes."""
@@ -81,9 +82,20 @@ class TelegramChannelAdapter:
             ]
             if not triggered_nodes:
                 continue
+            connection = await ConnectionRepository().get_by(
+                session=context.session,
+                id=bot.connection_id,
+                user_id=bot.user_id,
+            )
+            bot_token = (
+                connection_secret(connection) if connection is not None else None
+            )
+            if bot_token is None:
+                logger.error("Telegram bot %s has no credential connection", bot.id)
+                continue
             try:
                 updates = await get_updates(
-                    bot_token=decrypt(bot.bot_token), offset=bot.last_update_id + 1
+                    bot_token=bot_token, offset=bot.last_update_id + 1
                 )
             except TelegramAPIError:
                 logger.exception("Failed to poll Telegram updates for bot %s", bot.id)
@@ -150,8 +162,16 @@ class TelegramChannelAdapter:
         text = delivery_text(context.execution)
         if bot is None or chat_id is None or text is None:
             return
+        connection = await ConnectionRepository().get_by(
+            session=context.session,
+            id=bot.connection_id,
+            user_id=bot.user_id,
+        )
+        bot_token = connection_secret(connection) if connection is not None else None
+        if bot_token is None:
+            return
         await send_message(
-            bot_token=decrypt(bot.bot_token),
+            bot_token=bot_token,
             chat_id=chat_id,
             text=text,
         )

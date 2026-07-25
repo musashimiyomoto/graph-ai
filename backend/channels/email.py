@@ -13,8 +13,14 @@ from channels.base import (
     ChannelReceiveContext,
     delivery_text,
 )
+from credentials import connection_secret
 from db.models import EmailAccount
-from db.repositories import EmailAccountRepository, NodeRepository, WorkflowRepository
+from db.repositories import (
+    ConnectionRepository,
+    EmailAccountRepository,
+    NodeRepository,
+    WorkflowRepository,
+)
 from enums import ExecutionSource, InputNodeFormat, NodeType, PortType
 from exceptions import EmailConnectionError
 from integrations.email import (
@@ -29,7 +35,6 @@ from schemas import (
     TriggerConversation,
     TriggerEvent,
 )
-from utils.encryption import decrypt
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +74,21 @@ class EmailChannelAdapter:
             ]
             if not triggered_nodes:
                 continue
+            connection = await ConnectionRepository().get_by(
+                session=context.session,
+                id=account.connection_id,
+                user_id=account.user_id,
+            )
+            password = connection_secret(connection) if connection is not None else None
+            if password is None:
+                logger.error(
+                    "Email account %s has no credential connection", account.id
+                )
+                continue
             try:
                 messages = await fetch_messages(
-                    config=_connection_config(account), last_uid=account.last_uid
+                    config=_connection_config(account, password),
+                    last_uid=account.last_uid,
                 )
             except EmailConnectionError:
                 logger.exception("Failed to poll email account %s", account.id)
@@ -144,8 +161,16 @@ class EmailChannelAdapter:
         text = delivery_text(context.execution)
         if not recipient or text is None:
             return
+        connection = await ConnectionRepository().get_by(
+            session=context.session,
+            id=account.connection_id,
+            user_id=account.user_id,
+        )
+        password = connection_secret(connection) if connection is not None else None
+        if password is None:
+            return
         await send_email(
-            config=_connection_config(account),
+            config=_connection_config(account, password),
             recipient=recipient,
             subject=_reply_subject(
                 context.output_node.data.get("email_subject"),
@@ -155,12 +180,12 @@ class EmailChannelAdapter:
         )
 
 
-def _connection_config(account: EmailAccount) -> EmailConnectionConfig:
+def _connection_config(account: EmailAccount, password: str) -> EmailConnectionConfig:
     """Build decrypted integration configuration for an email account."""
     return EmailConnectionConfig(
         email_address=account.email_address,
         username=account.username,
-        password=decrypt(account.password),
+        password=password,
         imap_host=account.imap_host,
         imap_port=account.imap_port,
         imap_use_ssl=account.imap_use_ssl,

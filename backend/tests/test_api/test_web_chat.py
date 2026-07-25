@@ -98,7 +98,6 @@ class TestWebChatAPI(BaseTestCase):
             json={
                 "value": "Hello",
                 "event_id": "message-disabled",
-                "conversation_id": "visitor-1",
             },
         )
 
@@ -113,7 +112,6 @@ class TestWebChatAPI(BaseTestCase):
         payload = {
             "value": "Hello",
             "event_id": "message-retry-1",
-            "conversation_id": "visitor-1",
         }
         url = f"{build_web_chat_path(workflow_id)}/executions"
 

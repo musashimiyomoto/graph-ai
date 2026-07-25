@@ -1,6 +1,6 @@
 """Telegram bot model."""
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.models import BaseWithID
@@ -21,15 +21,16 @@ class TelegramBot(BaseWithID):
         index=True,
         comment="Owner user ID",
     )
+    connection_id: Mapped[int] = mapped_column(
+        ForeignKey("connections.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        comment="Unified credential connection ID",
+    )
     name: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
         comment="Bot display name",
-    )
-    bot_token: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        comment="Encrypted Telegram bot token",
     )
     last_update_id: Mapped[int] = mapped_column(
         Integer,

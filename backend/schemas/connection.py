@@ -68,6 +68,18 @@ class ConnectionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_auth_fields(self) -> Self:
         """Require exactly the credential fields needed by the auth protocol."""
+        if self.auth_type is ConnectionAuthType.NONE:
+            if (
+                self.api_key is not None
+                or self.authorization_url
+                or self.token_url
+                or self.revocation_url
+                or self.client_id
+                or self.client_secret
+            ):
+                message = "Credential-free connections cannot include secrets"
+                raise ValueError(message)
+            return self
         if self.auth_type is ConnectionAuthType.API_KEY:
             if self.api_key is None:
                 message = "API-key connections require api_key"

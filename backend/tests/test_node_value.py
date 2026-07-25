@@ -7,16 +7,14 @@ from exceptions import ExecutionGraphValidationError
 from nodes import ArtifactReference, NodeValue
 
 
-def test_text_value_round_trips_through_legacy_boundary() -> None:
-    """Text stays lossless through the compatibility serializer."""
+def test_text_value_round_trips_through_typed_envelope() -> None:
+    """Text stays lossless through the typed envelope."""
     value = NodeValue.text("hello", metadata={"source": "test"})
 
     if value.kind is not PortType.TEXT:
         pytest.fail(f"Unexpected kind: {value.kind}")
     if value.require_text() != "hello":
         pytest.fail("Text value did not round-trip")
-    if value.to_legacy_text() != "hello":
-        pytest.fail("Legacy text serialization changed the value")
     if value.to_payload() != {
         "kind": "text",
         "value": "hello",
@@ -26,15 +24,15 @@ def test_text_value_round_trips_through_legacy_boundary() -> None:
         pytest.fail("Envelope payload did not preserve text metadata")
 
 
-def test_json_and_list_have_explicit_legacy_serialization() -> None:
-    """Structured inline values serialize only at the legacy boundary."""
+def test_json_and_list_keep_structured_payloads() -> None:
+    """Structured inline values remain native in their envelopes."""
     json_value = NodeValue.json({"answer": 42})
     list_value = NodeValue.list(["a", 2, True])
 
-    if json_value.to_legacy_text() != '{"answer": 42}':
-        pytest.fail("JSON compatibility serialization is incorrect")
-    if list_value.to_legacy_text() != '["a", 2, true]':
-        pytest.fail("List compatibility serialization is incorrect")
+    if json_value.to_payload()["value"] != {"answer": 42}:
+        pytest.fail("JSON payload changed its structure")
+    if list_value.to_payload()["value"] != ["a", 2, True]:
+        pytest.fail("List payload changed its structure")
 
 
 def test_text_handler_rejects_non_text_value() -> None:
@@ -62,8 +60,6 @@ def test_media_value_carries_artifact_reference_without_inline_bytes() -> None:
         "filename": "screen.png",
     }:
         pytest.fail("Artifact metadata was not preserved")
-    with pytest.raises(ExecutionGraphValidationError, match="legacy text boundary"):
-        value.to_legacy_text()
 
 
 def test_artifact_value_round_trips_through_persisted_payload() -> None:

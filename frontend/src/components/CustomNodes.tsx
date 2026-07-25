@@ -14,8 +14,6 @@ interface NodeData {
   // shown alongside the "double-click to open" hint below.
   childCount?: number
   graph: {
-    has_input: boolean
-    has_output: boolean
     output_handles?: string[] | null
     inputs?: NodePortSpec[]
     outputs?: NodePortSpec[]
@@ -90,7 +88,7 @@ export function GenericNode({ id, data }: NodeProps<NodeData>) {
           ) : null}
         </div>
       ) : null}
-      {data.graph.has_output && outputHandles && outputHandles.length > 0 ? (
+      {outputHandles && outputHandles.length > 0 ? (
         <>
           <div className="flex justify-around border-t border-white/10 pt-1 text-[10px] leading-none text-[var(--muted)]">
             {outputHandles.map((handle) => (

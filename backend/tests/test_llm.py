@@ -26,6 +26,7 @@ def _make_provider(provider_type: LLMProviderType) -> LLMProviderResponse:
     return LLMProviderResponse(
         id=1,
         user_id=1,
+        connection_id=1,
         name="provider",
         type=provider_type,
         base_url="https://example.com",

@@ -13,7 +13,7 @@ from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchVal
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError, VectorCollectionNotFoundError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from nodes.rendering import upstream_text
 from rag.embeddings import embed_texts
 from rag.qdrant import get_qdrant_client
@@ -23,7 +23,6 @@ from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 from usecases.vector import VectorUsecase
 
@@ -121,11 +120,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.VECTOR_SEARCH,
     label="Vector Search",
     icon_key="vector_search",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

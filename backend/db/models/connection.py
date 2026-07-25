@@ -15,7 +15,9 @@ class Connection(BaseWithID, BaseWithDate):
 
     __tablename__ = "connections"
     __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_connections_user_name"),
+        UniqueConstraint(
+            "user_id", "provider", "name", name="uq_connections_user_provider_name"
+        ),
     )
 
     user_id: Mapped[int] = mapped_column(

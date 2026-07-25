@@ -33,5 +33,5 @@ class ConnectionFactory(AsyncSQLAlchemyModelFactory):
     )
     scopes = LazyFunction(list)
     credentials = LazyFunction(
-        lambda: encrypt(json.dumps({"api_key": "factory-secret"}))
+        lambda: encrypt(json.dumps({"secret": "factory-secret"}))
     )

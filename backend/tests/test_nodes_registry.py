@@ -80,13 +80,17 @@ class TestCatalogPorts:
     def test_input_node_ports(self) -> None:
         """Input node has a text output and no input port."""
         graph = build_node_catalog()[NodeType.INPUT].graph
-        if graph.input_port is not None or graph.output_port is not PortType.TEXT:
+        if graph.inputs or len(graph.outputs) != 1:
+            pytest.fail("Input node port cardinality is wrong")
+        if graph.outputs[0].type is not PortType.TEXT:
             pytest.fail("Input node ports are wrong")
 
     def test_output_node_ports(self) -> None:
         """Output node has a text input and no output port."""
         graph = build_node_catalog()[NodeType.OUTPUT].graph
-        if graph.output_port is not None or graph.input_port is not PortType.TEXT:
+        if graph.outputs or len(graph.inputs) != 1:
+            pytest.fail("Output node port cardinality is wrong")
+        if graph.inputs[0].type is not PortType.TEXT:
             pytest.fail("Output node ports are wrong")
 
     def test_code_node_exposes_configurable_named_ports(self) -> None:
@@ -697,7 +701,11 @@ class TestCodeTransformNode:
         handler = CodeTransformNodeHandler()
         result = await handler.execute(
             _context(
-                {"code": "output = input.upper()"},
+                {
+                    "input_type": "text",
+                    "output_type": "text",
+                    "code": "output = input.upper()",
+                },
                 parent_values=["hello world"],
             )
         )
@@ -711,9 +719,11 @@ class TestCodeTransformNode:
         result = await handler.execute(
             _context(
                 {
+                    "input_type": "text",
+                    "output_type": "text",
                     "code": (
                         "data = json.loads(input)\noutput = str(data['a'] + data['b'])"
-                    )
+                    ),
                 },
                 parent_values=['{"a": 1, "b": 2}'],
             )
@@ -727,7 +737,11 @@ class TestCodeTransformNode:
         handler = CodeTransformNodeHandler()
         result = await handler.execute(
             _context(
-                {"code": "output = [x.strip() for x in input.split(',')]"},
+                {
+                    "input_type": "text",
+                    "output_type": "text",
+                    "code": "output = [x.strip() for x in input.split(',')]",
+                },
                 parent_values=["a, b ,c"],
             )
         )

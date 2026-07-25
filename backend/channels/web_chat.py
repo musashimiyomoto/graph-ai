@@ -125,7 +125,7 @@ class WebChatChannelAdapter:
         workflow_id: int,
         message: WebChatMessage,
     ) -> tuple[str, str]:
-        """Resolve a server-issued session or seed a backwards-compatible one."""
+        """Resolve a server-issued session or seed a new opaque identity."""
         if message.session_id is not None:
             conversation = await ConversationRepository().get_by(
                 session=session,
@@ -139,8 +139,6 @@ class WebChatChannelAdapter:
                 conversation.external_conversation_id,
                 conversation.actor_id or conversation.public_id,
             )
-        if message.conversation_id is not None:
-            return message.conversation_id, message.conversation_id
         seed = uuid4().hex
         return seed, seed
 

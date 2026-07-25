@@ -21,9 +21,9 @@ class Execution(BaseWithID):
         index=True,
         comment="Parent workflow ID",
     )
-    version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("workflow_versions.id", ondelete="SET NULL"),
-        nullable=True,
+    version_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_versions.id", ondelete="RESTRICT"),
+        nullable=False,
         index=True,
         comment="Pinned workflow version snapshot",
     )

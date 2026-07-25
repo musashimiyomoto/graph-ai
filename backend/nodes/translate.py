@@ -9,8 +9,8 @@ from constants import DEFAULT_TIMEOUT
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError, TranslationConnectionError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
-from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget, NodeGraphSpec
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
+from schemas import NodeFieldSpec, NodeFieldUI, NodeFieldWidget
 
 _GOOGLE = "google"
 _MYMEMORY = "mymemory"
@@ -188,11 +188,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.TRANSLATE,
     label="Translate",
     icon_key="translate",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

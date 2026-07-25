@@ -6,13 +6,12 @@ from constants import MAX_DELAY_SECONDS
 from enums import DelayMode, DelayUnit, NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldVisibility,
     NodeFieldWidget,
-    NodeGraphSpec,
 )
 
 _UNIT_SECONDS = {
@@ -120,11 +119,9 @@ DEFINITION = NodeDefinition(
     type=NodeType.DELAY,
     label="Delay / Wait",
     icon_key="delay",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

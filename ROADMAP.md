@@ -280,10 +280,8 @@ Second pass (closed out everything remaining):
       updated_at, `executions`.started_at/finished_at/heartbeat_at,
       `node_executions`.started_at/finished_at) is `timestamptz` instead of a
       naive `timestamp` whose correctness silently depended on the DB
-      session timezone matching the app's UTC assumption. Migration
-      `6b2f9a4c1e73` reinterprets the existing naive values as UTC
-      (`ALTER COLUMN ... USING col AT TIME ZONE 'UTC'`, metadata-only, no
-      data rewrite); verified both directions against the real dev DB.
+      session timezone matching the app's UTC assumption. The fresh database
+      baseline declares every application datetime as timezone-aware directly.
       `usecases/execution.py` no longer strips tzinfo off `datetime.now(tz=UTC)`
       before persisting — the tz-aware value round-trips correctly now, so
       the `.replace(tzinfo=None)` dance is gone from all 8 call sites (and
@@ -296,8 +294,7 @@ Second pass (closed out everything remaining):
       `session.rollback()` first, same lesson as the `BaseError` rollback
       fix above) so the API returns a clean 409 instead of a raw 500.
 - [x] **Decouple `node_executions` from live `nodes`** — `node_id` is no
-      longer an enforced foreign key (`db/models/node_execution.py`,
-      migration `8f3a5d1c7b92` drops `node_executions_node_id_fkey`); it's
+      longer an enforced foreign key (`db/models/node_execution.py`); it's
       now a plain historical reference, so rerunning a pinned version whose
       node was since *deleted* (not edited) no longer fails to INSERT its
       result row, and deleting a node no longer collaterally destroys
@@ -308,23 +305,18 @@ Second pass (closed out everything remaining):
       meaningful even after the live node is gone — exposed through
       `NodeExecutionResponse` and used as ChatPanel's node-label fallback
       (`meta?.label ?? nodeResult.node_label ?? Node #id`) ahead of the
-      already-existing raw-ID fallback. Verified both migration directions
-      against the real dev DB, plus a new test
+      already-existing raw-ID fallback. A test
       (`test_run_pinned_version_survives_deleted_node`) that deletes a node
       and reruns its pinned version end-to-end.
 - [x] **`BaseError` execution-failure path now rolls back the session** before
       marking `FAILED`, matching the generic-`Exception` branch beside it
       (`usecases/execution.py::run_execution`) — a poisoned transaction can
       no longer make the failure-status commit itself throw.
-- [x] **Global node-output size cap** — `_truncate_for_storage`
-      (`usecases/execution.py`, `MAX_NODE_OUTPUT_CHARS = 50_000` in
-      `constants/execution.py`) caps every node's persisted
-      `node_executions.output` with a visible `[truncated: N chars total]`
-      marker, applied uniformly regardless of node type. Deliberately scoped
-      to storage only — the in-memory value handed to downstream nodes (and
-      the final `executions.output_data` the user actually sees) stays
-      full-fidelity; HTTP node's separate 10k pipeline-level truncation is
-      unrelated and untouched.
+- [x] **Exact typed node checkpoints** — every persisted result is stored once
+      in `node_executions.output_values` as named `NodeValue` envelopes. The
+      checkpoint is the value used for resume and downstream propagation, so it
+      remains full-fidelity; HTTP Request's separate 10k response-body bound is
+      enforced before the value enters the graph.
 - [x] **Parallel wave partial-failure now aggregates all failures and writes
       SKIPPED rows for unreached nodes** — when multiple nodes in the same
       wave fail simultaneously, `_aggregate_wave_errors` combines every
@@ -345,8 +337,7 @@ Second pass (closed out everything remaining):
       `liveTokens` entry on receipt instead of letting the retry's deltas
       append after the failed attempt's partial text.
 - [x] **Stuck-execution timeout is now heartbeat-based, not absolute start-age**
-      — new `executions.heartbeat_at` column (migration
-      `4d8c2f0a7e91`), seeded at claim time and bumped in
+      — `executions.heartbeat_at` is seeded at claim time and bumped in
       `_record_node_result` every time a node completes.
       `reap_stuck_executions` now compares `heartbeat_at or started_at`
       against the cutoff, so a legitimately long multi-node run that's still
@@ -745,9 +736,7 @@ Second pass (closed out everything remaining):
       create and workflow/provider/bot create+delete. New `/usage` router:
       `GET /usage` (today's executions/tokens used + limit/remaining) and
       `GET /usage/audit` (paginated, tenant-scoped), both behind
-      `get_current_user`. New `QuotaExceededError` (429). Migration
-      `d7dc4089af97` adds the 6 token columns + the two tables; verified both
-      directions against the real dev DB.
+      `get_current_user`. New `QuotaExceededError` (429).
 - [x] **Metrics (Prometheus) + error tracking (Sentry)** — Prometheus via
       `prometheus-client` (`api/metrics.py`): an HTTP middleware in `main.py`
       (after CORS) records `graphai_http_requests_total` +
@@ -790,7 +779,7 @@ being implemented as an image-only exception in the string runtime.
       called graph with breadcrumbs back to the caller. Execution versions now
       recursively embed the full called-workflow dependency graph, so queued and
       pinned runs remain reproducible if a called workflow is edited or deleted;
-      legacy snapshots without embedded dependencies retain a live-graph fallback.
+      a missing embedded dependency makes the snapshot invalid.
 - [x] **Execution cancellation** — authenticated
       `POST /executions/{execution_id}/cancel` atomically moves only queued or
       running executions to the new terminal `CANCELLED` status (idempotent when
@@ -799,8 +788,7 @@ being implemented as an image-only exception in the string runtime.
       workers have abort support enabled and cannot overwrite the durable
       cancelled state if cancellation races completion. SSE treats cancellation
       as terminal, and Test Runs exposes a `Cancel run` action with a distinct
-      cancelled result state. Migration `f6b8c1d4e7a9` extends the shared
-      PostgreSQL execution-status enum.
+      cancelled result state.
 - [x] **Approval node** — a required-path `Approval` node durably checkpoints
       completed node results, moves the execution to `WAITING_APPROVAL`, and
       exposes its configured request plus upstream value in both Test Runs and
@@ -811,9 +799,7 @@ being implemented as an image-only exception in the string runtime.
       `REJECTED`, records usage and audit metadata, and sends no channel output.
       Pending approvals can also be cancelled. Approval nodes are top-level only
       and graph validation requires each one to lie on every input-to-output
-      path, avoiding ambiguous concurrent pause/failure races. Migration
-      `a7c9e2f4b6d8` adds the node/status enum values and execution checkpoint
-      metadata.
+      path, avoiding ambiguous concurrent pause/failure races.
 - [x] **Switch node** — route upstream text by exact value into the first of
       1–8 ordered, named branches, with optional case sensitivity and a
       reserved `default` fallback. Branch names are validated as stable edge
@@ -821,7 +807,6 @@ being implemented as an image-only exception in the string runtime.
       attached, and execution snapshots/checkpoint resumes preserve the same
       deterministic route. The inspector provides a structured branch editor
       and the canvas derives its output handles from persisted node data.
-      Migration `b8d1f3a5c7e9` adds the node enum value.
 - [x] **MCP tool nodes** — user-owned remote Streamable HTTP MCP servers are
       managed in Settings with SSRF-checked URLs and encrypted write-only HTTP
       headers. The `MCP Tool` node discovers the selected server's live tool
@@ -832,8 +817,7 @@ being implemented as an image-only exception in the string runtime.
       transfer. Settings also includes a searchable official MCP Registry
       catalog with one-hour backend caching; active/latest Streamable HTTP
       entries expose a configure flow that resolves URL variables and
-      secret headers before encrypted storage. Migration `c9e2a4f6b8d1` adds
-      MCP server storage and the node enum value.
+      secret headers before encrypted storage.
 - [x] **Session management** — short-lived access JWTs now identify a
       persistent browser session and are kept only in frontend memory. Opaque
       refresh tokens live in rotating HttpOnly/SameSite cookies while only
@@ -841,20 +825,17 @@ being implemented as an image-only exception in the string runtime.
       reload and transparently retries an expired authenticated request;
       logout revokes the current session, and Settings lists active clients
       with last-used/IP metadata and per-session revocation that immediately
-      invalidates its access tokens. Migration `d1f3a5c7e9b2` adds durable
-      session storage.
+      invalidates its access tokens.
 - [x] **Email verification and password recovery** — new registrations now stay
       inactive until a one-time email link is consumed; only SHA-256 token hashes
       are stored in the new `auth_action_tokens` table, links expire, resends
-      replace older links, and existing accounts are marked verified by migration
-      to avoid lockout. Forgot-password and resend endpoints return the same
+      replace older links. Forgot-password and resend endpoints return the same
       generic response whether an account exists or not, while password reset and
       authenticated password change both revoke every browser session. Account
       mail is delivered through configurable SMTP (log-only in local/test), the
       auth screen handles verification/recovery links and resend flows, and the
       Settings modal now has one Account Security section for password changes and
-      active-session management. Migration `e5b7c9d1f3a6` adds the verified-email
-      timestamp and one-time token storage.
+      active-session management.
 - [x] **Translate node** — translate upstream text into one of 18 target
       languages without consuming an LLM provider. The node auto-detects the
       source language and offers two no-key external services: Google's free
@@ -862,7 +843,7 @@ being implemented as an image-only exception in the string runtime.
       endpoint has local request-size validation, strict response parsing, and
       retryable timeout/transport/provider failures; the inspector clearly
       discloses that text is sent to the selected third party and that free
-      service limits apply. Migration `f7c9e1a3b5d8` adds the node enum value.
+      service limits apply.
 - [x] **Delay / Wait node** — pause execution for a relative duration
       (seconds/minutes/hours/days) or until an absolute timezone-aware ISO 8601
       timestamp, passing upstream text through unchanged. Waiting is a durable
@@ -876,8 +857,6 @@ being implemented as an image-only exception in the string runtime.
       exposes the pending timestamp/status in Test Runs, Activity Log, and node
       Details. Delay nodes are top-level only in v1 because loop iterations reuse
       a node ID and require a separate per-iteration continuation model.
-      Migration `a1d3f5b7c9e2` adds the node/status enum values and durable
-      wake-up timestamps.
 - **Vision support for the LLM node** — promoted into Phase 10's Multimodal LLM
   node after Phase 9 makes images and other artifacts first-class graph values.
 - [x] **Email channel** — incoming messages can trigger workflows through IMAP,
@@ -894,9 +873,9 @@ being implemented as an image-only exception in the string runtime.
 This phase is the prerequisite for the next product wave. It deliberately builds
 one reusable runtime contract for JSON, files, images, audio, channels, and state
 instead of adding each new capability as a special case in `execution.py` or
-`worker.py`. Work is ordered so each item can ship with backwards compatibility
-for persisted text-only workflow versions through one-time data migrations, not
-permanent format-specific runtime fields or adapter branches.
+`worker.py`. Revision `4973fcb4d537` is the sole fresh database baseline: it
+creates only the current schema and contains no data migrations, backfills,
+transitional columns, or runtime adapters for older contracts.
 
 - [x] **First-class `NodeValue` envelope** — `nodes/value.py` now defines validated
       inline text/JSON/list values and file/image/audio/video values backed by an
@@ -906,21 +885,20 @@ permanent format-specific runtime fields or adapter branches.
       propagation, Call Workflow, Loop, retries and checkpoint restoration now
       exchange `NodeValue`; every existing text handler uses explicit text accessors
       and constructors, so a future structured value cannot be silently coerced.
-      `node_executions.output` remains a backward-compatible text mirror while the
-      complete envelope is persisted independently. Added unit coverage for
-      validation, structured compatibility serialization, media references and
-      non-text rejection.
+      `node_executions.output_values` is the only persisted node-result contract,
+      keyed by stable output-port name. Added unit coverage for validation,
+      structured serialization, media references and non-text rejection.
 - [x] **Artifact storage and lifecycle** — MinIO provides the local S3-compatible
       byte store while PostgreSQL owns tenant-scoped metadata. Authenticated upload,
       list, signed-download and delete APIs enforce per-file/per-user byte limits;
       SHA-256 content addressing deduplicates within each tenant, and signed links
       cannot outlive retention. An hourly bounded GC removes expired objects and
-      rows. `node_executions.output_value` now stores the complete `NodeValue` JSONB
-      envelope (with fallback for legacy text checkpoints), keeping file/media bytes
-      out of PostgreSQL and worker messages. Execution details resolve authenticated
+      rows. `node_executions.output_values` stores complete named `NodeValue` JSONB
+      envelopes, keeping file/media bytes out of PostgreSQL and worker messages.
+      Execution details resolve authenticated
       signed URLs on demand and render only safe image/audio/video elements or a
       download link for generic files. Storage adapter, API ownership/quota/dedup/
-      expiry, envelope persistence/legacy resume and frontend preview coverage were
+      expiry, typed checkpoint resume and frontend preview coverage were
       added; all 427 backend and 72 frontend tests pass.
 - [x] **Real typed ports and explicit coercions** — `NodePortSpec` exposes named
       typed inputs/outputs through the node catalog, and Code / Transform can be
@@ -932,8 +910,8 @@ permanent format-specific runtime fields or adapter branches.
       conversions such as `text → json` on the edge. JSON/list outputs remain native
       tagged `NodeValue` values throughout scheduling and JSONB checkpoints,
       including resume after Approval, instead of being hidden inside strings.
-      Migration `c3f5a7b9d2e4` adds the persisted edge coercion; all 435 backend and
-      75 frontend tests pass, and a clean `alembic upgrade head`/`alembic check`
+      All 435 backend and 75 frontend tests pass, and a clean
+      `alembic upgrade head`/`alembic check`
       reports no schema drift.
 - [x] **Multiple ordinary input/output handles** — ordinary ports now have stable
       names, types and required/optional input semantics. Edges persist both source
@@ -945,8 +923,7 @@ permanent format-specific runtime fields or adapter branches.
       simultaneous typed `body`, `status` and `headers` outputs. Snapshots,
       export/import, duplication, undo/redo and copy/paste retain target handles;
       the editor renders and connects each typed port, and Execution Details shows
-      every named result. Migration `d4a6c8e0f2b1` adds persisted target handles
-      and per-handle output maps. All 440 backend and 77 frontend tests pass; the
+      every named result. All 440 backend and 77 frontend tests pass; the
       backend suite now uses pytest-xdist with isolated per-worker PostgreSQL/Redis
       databases on shared ephemeral containers, plus a serial fallback and a local
       no-coverage fast path.
@@ -958,9 +935,8 @@ permanent format-specific runtime fields or adapter branches.
       payloads use the explicit `discard` retention policy. External IDs are guarded
       by a partial unique index plus a PostgreSQL advisory transaction lock, so
       concurrent retries return/re-enqueue the same execution. Reply delivery reads
-      the envelope directly: migration `e5c7a9b1d3f6` backfills existing rows and
-      removes the duplicate `telegram_chat_id`, `email_reply_to` and `email_subject`
-      execution columns rather than preserving a runtime compatibility layer.
+      the envelope directly; there are no duplicate channel-specific execution
+      columns.
       Activity Log exposes normalized sender/thread context, and web chat generates
       stable client event/conversation IDs. All 446 backend and 77 frontend tests
       pass; clean upgrade/downgrade/re-upgrade and `alembic check` report no drift.
@@ -990,8 +966,7 @@ permanent format-specific runtime fields or adapter branches.
       optimistic concurrency (`expected_version`, including create-only `0`),
       append-only mutation history and tenant audit events. User scope remains
       channel-local (`channel:sender`) so cross-channel identity linking is still
-      opt-in. Migration `f8d1b3c5e7a9` backfills conversations from existing trigger
-      envelopes and clean upgrade/check/downgrade/re-upgrade reports no schema
+      opt-in. A clean upgrade/check/downgrade/re-upgrade reports no schema
       drift. All 455 backend and 78 frontend tests pass, alongside lint,
       typecheck and the production build.
 - [x] **Unified connections and OAuth foundation** — added a tenant-owned,
@@ -1005,9 +980,10 @@ permanent format-specific runtime fields or adapter branches.
       clearing local secrets. Server-called endpoints reuse SSRF protection and
       every mutation is tenant-authorized and audited. Settings now provides a
       common Connections UI for creation, OAuth authorization, health, refresh,
-      revoke and delete while existing provider/bot/account entities remain
-      compatibility facades. Migration `a9c2e4f6b8d0` cleanly upgrades, checks,
-      downgrades and re-upgrades without schema drift; all 459 backend and 83
+      revoke and delete. LLM, Telegram, email, PostgreSQL and MCP profiles contain
+      only adapter configuration and each references one unified `Connection` for
+      credentials. The baseline cleanly upgrades, checks, downgrades and re-upgrades
+      without schema drift; all 459 backend and 83
       frontend tests pass alongside lint, typecheck and production build.
 - [x] **Tenant-safe knowledge sources** — logical collection names now resolve
       through a tenant-owned PostgreSQL registry to opaque, owner-specific Qdrant
@@ -1018,10 +994,9 @@ permanent format-specific runtime fields or adapter branches.
       retention and connector metadata on existing chunks. Durable source records,
       incremental-sync cursors and an hourly bounded retention cleanup provide the
       primitives needed by Drive, Notion and Confluence. Settings exposes the new
-      source metadata and upload controls. Migration `b0d3f5a7c9e1` intentionally
-      creates a fresh tenant-safe schema without legacy Qdrant migration or
-      backfill; clean upgrade/check/downgrade/re-upgrade reports no drift. All 465
-      backend and 85 frontend tests pass, alongside lint, typecheck and production
+      source metadata and upload controls. The baseline creates the tenant-safe
+      schema directly; clean upgrade/check/downgrade/re-upgrade reports no drift. All 465
+      backend and 82 frontend tests pass, alongside lint, typecheck and production
       build.
 - [ ] **Artifact/channel safety and observability** — MIME sniffing, file-size and
       decompression limits, malware-scanner hook, SSRF/egress policy, per-connection

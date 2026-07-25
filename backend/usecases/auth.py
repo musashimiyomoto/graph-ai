@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from credentials import create_profile_connection
 from db.models import AuthActionToken
 from db.repositories import (
     AuthActionTokenRepository,
@@ -623,10 +624,18 @@ class AuthUsecase:
             },
         )
 
+        connection = await create_profile_connection(
+            session=session,
+            user_id=user.id,
+            name=LLMProviderType.OLLAMA.value,
+            provider=f"llm_{LLMProviderType.OLLAMA.value}",
+            secret=None,
+        )
         await self._llm_provider_repository.create(
             session=session,
             data={
                 "user_id": user.id,
+                "connection_id": connection.id,
                 "name": LLMProviderType.OLLAMA.value,
                 "type": LLMProviderType.OLLAMA,
                 "config": {},

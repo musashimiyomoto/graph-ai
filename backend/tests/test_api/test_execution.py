@@ -1001,7 +1001,9 @@ class TestNodeExecutionList(BaseTestCase):
             pytest.fail("Expected one node execution per node in the path")
         if any(item["status"] != ExecutionStatus.SUCCESS for item in data):
             pytest.fail("Expected all node executions to be SUCCESS")
-        if not any(item["output"] == "hello" for item in data):
+        if not any(
+            item["output_values"]["output"]["value"] == "hello" for item in data
+        ):
             pytest.fail("Expected a node execution to carry the propagated output")
         expected_value = {
             "kind": "text",
@@ -1009,7 +1011,7 @@ class TestNodeExecutionList(BaseTestCase):
             "artifact": None,
             "metadata": {},
         }
-        if any(item["output_value"] != expected_value for item in data):
+        if any(item["output_values"] != {"output": expected_value} for item in data):
             pytest.fail("Typed node output envelopes were not persisted and exposed")
 
     @pytest.mark.asyncio
@@ -1074,11 +1076,14 @@ class TestNodeExecutionList(BaseTestCase):
             session=self.session, execution_id=execution["id"]
         )
         code_row = next(row for row in rows if row.node_id == code_node.id)
-        if code_row.output_value is None:
+        if code_row.output_values is None:
             pytest.fail("Structured Code output envelope was not persisted")
-        if code_row.output_value.get("kind") != PortType.LIST:
+        code_output = code_row.output_values.get("output")
+        if not isinstance(code_output, dict):
+            pytest.fail("Code output port envelope was not persisted")
+        if code_output.get("kind") != PortType.LIST:
             pytest.fail("Code list output was hidden inside a text value")
-        if code_row.output_value.get("value") != [1, 2, 3]:
+        if code_output.get("value") != [1, 2, 3]:
             pytest.fail("Persisted list output changed its structure")
 
     @pytest.mark.asyncio
@@ -1311,8 +1316,8 @@ class TestNodeExecutionList(BaseTestCase):
             pytest.fail("Expected NOT_FOUND when reading another user's node results")
 
     @pytest.mark.asyncio
-    async def test_oversized_node_output_truncated_in_storage(self) -> None:
-        """A node's persisted output is capped, but the final answer isn't."""
+    async def test_large_node_output_remains_in_typed_checkpoint(self) -> None:
+        """The typed checkpoint preserves the exact value used for resume."""
         user, headers = await self.create_user_and_get_token()
         workflow = await WorkflowFactory.create_async(
             session=self.session, owner_id=user["id"]
@@ -1327,7 +1332,12 @@ class TestNodeExecutionList(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=NodeType.CODE_TRANSFORM,
-            data={"label": "Code", "code": "output = input * 60000"},
+            data={
+                "label": "Code",
+                "input_type": "text",
+                "output_type": "text",
+                "code": "output = input * 60000",
+            },
         )
         output_node = await NodeFactory.create_async(
             session=self.session,
@@ -1367,11 +1377,9 @@ class TestNodeExecutionList(BaseTestCase):
         data = await self.assert_response_list(response=response)
         code_result = next(item for item in data if item["node_id"] == code_node.id)
 
-        max_stored_chars = 50_000
-        if len(code_result["output"]) > max_stored_chars + 100:
-            pytest.fail("Persisted node output should be capped")
-        if "truncated" not in code_result["output"]:
-            pytest.fail("Truncated output should carry a visible marker")
+        stored_value = code_result["output_values"]["output"]["value"]
+        if len(stored_value) != full_length:
+            pytest.fail("Typed checkpoint must preserve the exact runtime value")
 
 
 class TestExecutionCondition(BaseTestCase):
@@ -1492,7 +1500,7 @@ class TestExecutionCondition(BaseTestCase):
             pytest.fail("True branch should have run successfully")
         if by_node[ids["false_node_id"]]["status"] != ExecutionStatus.SKIPPED:
             pytest.fail("False branch should have been skipped")
-        if by_node[ids["false_node_id"]]["output"] is not None:
+        if by_node[ids["false_node_id"]]["output_values"] is not None:
             pytest.fail("A skipped node should not have an output")
 
     @pytest.mark.asyncio
@@ -1727,7 +1735,12 @@ class TestExecutionLoop(BaseTestCase):
             session=self.session,
             workflow_id=workflow.id,
             type=NodeType.CODE_TRANSFORM,
-            data={"label": "Append x", "code": "output = input + 'x'"},
+            data={
+                "label": "Append x",
+                "input_type": "text",
+                "output_type": "text",
+                "code": "output = input + 'x'",
+            },
             parent_node_id=loop_node.id,
         )
         loop_output = await NodeFactory.create_async(
@@ -1812,7 +1825,11 @@ class TestExecutionLoop(BaseTestCase):
         )
         if [item["iteration"] for item in transform_rows] != [0, 1, 2]:
             pytest.fail(f"Expected iterations 0,1,2 for the body node, got {nodes}")
-        if [item["output"] for item in transform_rows] != ["[a]", "[b]", "[c]"]:
+        if [item["output_values"]["output"]["value"] for item in transform_rows] != [
+            "[a]",
+            "[b]",
+            "[c]",
+        ]:
             pytest.fail("Each iteration's transform output should match its element")
 
         loop_row = next(
@@ -1996,7 +2013,9 @@ class TestCallWorkflowExecution(BaseTestCase):
             session=self.session, execution_id=execution.id
         )
         if call_node_id is None or not any(
-            result.node_id == call_node_id and result.output == "called(hello)"
+            result.node_id == call_node_id
+            and result.output_values is not None
+            and result.output_values["output"]["value"] == "called(hello)"
             for result in results
         ):
             pytest.fail("Call Workflow node result was not recorded")
@@ -2738,32 +2757,6 @@ class TestExecutionParallel(BaseTestCase):
 class TestExecutionApproval(BaseTestCase):
     """Tests for approval pause, decision, and checkpoint resume."""
 
-    async def _downgrade_input_checkpoint(
-        self, execution_id: int, input_node_id: int
-    ) -> NodeExecutionRepository:
-        """Convert one typed checkpoint into its pre-JSONB legacy shape."""
-        repository = NodeExecutionRepository()
-        checkpoints = await repository.get_all(
-            session=self.session,
-            execution_id=execution_id,
-        )
-        input_checkpoint = next(
-            (row for row in checkpoints if row.node_id == input_node_id),
-            None,
-        )
-        if input_checkpoint is None:
-            message = "Expected an Input checkpoint before compatibility test"
-            raise AssertionError(message)
-        if input_checkpoint.output_value is None:
-            pytest.fail("Expected a typed Input checkpoint before compatibility test")
-        await repository.update_by(
-            session=self.session,
-            id=input_checkpoint.id,
-            data={"output_value": None},
-        )
-        await self.session.commit()
-        return repository
-
     async def _create_workflow(self, user_id: int) -> tuple[int, dict[str, int]]:
         """Create a linear Input -> Approval -> Output workflow."""
         workflow = await WorkflowFactory.create_async(
@@ -2855,7 +2848,7 @@ class TestExecutionApproval(BaseTestCase):
     async def test_approve_resumes_without_reexecuting_completed_nodes(
         self, test_engine: AsyncEngine
     ) -> None:
-        """Approval resumes from typed and legacy-compatible checkpoints."""
+        """Approval resumes from typed checkpoints."""
         user, headers = await self.create_user_and_get_token()
         workflow_id, node_ids = await self._create_workflow(user["id"])
         created_response = await self.client.post(
@@ -2881,12 +2874,6 @@ class TestExecutionApproval(BaseTestCase):
         if waiting.approval_input != "hello":
             pytest.fail("Paused execution should expose the upstream value")
 
-        # Simulate a checkpoint created before output_value JSONB existed. A
-        # rolling deployment must still resume it through the legacy text field.
-        repository = await self._downgrade_input_checkpoint(
-            execution_id=created["id"], input_node_id=node_ids["input"]
-        )
-
         approve_response = await self.client.post(
             url=f"/executions/{created['id']}/approve",
             headers=headers,
@@ -2907,7 +2894,7 @@ class TestExecutionApproval(BaseTestCase):
         if finalized.output_data != {"value": "hello"}:
             pytest.fail("Approval should pass its upstream value through unchanged")
 
-        rows = await repository.get_all(
+        rows = await NodeExecutionRepository().get_all(
             session=self.session,
             execution_id=created["id"],
         )

@@ -136,10 +136,6 @@ class NodeExecutionResponse(BaseModel):
         description="Loop iteration index (0-based); None for a top-level node",
     )
     status: ExecutionStatus = Field(default=..., description="Node execution status")
-    output: str | None = Field(default=None, description="Node output text")
-    output_value: NodeValuePayload | None = Field(
-        default=None, description="Typed node output envelope"
-    )
     output_values: dict[str, NodeValuePayload] | None = Field(
         default=None,
         description="Typed node output envelopes keyed by output port name",

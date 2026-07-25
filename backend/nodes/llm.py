@@ -2,12 +2,13 @@
 
 from pydantic import ValidationError
 
-from db.repositories import LLMProviderRepository
+from credentials import connection_secret
+from db.repositories import ConnectionRepository, LLMProviderRepository
 from enums import NodeType, PortType, ValidatorType
 from exceptions import ExecutionGraphValidationError
 from llm import create_llm_client
 from nodes.base import NodeExecutionContext, NodeExecutionResult
-from nodes.definition import NodeDefinition, NodeHandlerDeps
+from nodes.definition import NodeDefinition, NodeHandlerDeps, graph_spec
 from schemas import (
     ChatMessage,
     GenerationParams,
@@ -17,10 +18,8 @@ from schemas import (
     NodeFieldSpec,
     NodeFieldUI,
     NodeFieldWidget,
-    NodeGraphSpec,
     TokenUsage,
 )
-from utils.encryption import decrypt
 from utils.network import blocked_url_reason
 
 _GENERATION_PARAM_FIELDS = ("temperature", "max_tokens", "top_p")
@@ -59,16 +58,24 @@ def _build_generation_params(
 class LLMNodeHandler:
     """Handler for LLM nodes."""
 
-    def __init__(self, llm_provider_repository: LLMProviderRepository) -> None:
+    def __init__(
+        self,
+        llm_provider_repository: LLMProviderRepository,
+        connection_repository: ConnectionRepository,
+    ) -> None:
         """Initialize handler dependencies.
 
         Args:
             llm_provider_repository: Repository for LLM provider lookups.
+            connection_repository: Repository for encrypted connection lookups.
 
         """
         self._llm_provider_repository = llm_provider_repository
+        self._connection_repository = connection_repository
 
-    async def execute(self, context: NodeExecutionContext) -> NodeExecutionResult:
+    async def execute(  # noqa: C901
+        self, context: NodeExecutionContext
+    ) -> NodeExecutionResult:
         """Run one LLM node.
 
         Args:
@@ -113,7 +120,16 @@ class LLMNodeHandler:
         if block_reason is not None:
             raise ExecutionGraphValidationError(message=block_reason)
 
-        api_key = decrypt(llm_provider.api_key) if llm_provider.api_key else None
+        connection = await self._connection_repository.get_by(
+            session=context.session,
+            id=llm_provider.connection_id,
+            user_id=context.workflow_owner_id,
+        )
+        if connection is None:
+            raise ExecutionGraphValidationError(
+                message="LLM provider credential connection does not exist"
+            )
+        api_key = connection_secret(connection)
         client = create_llm_client(
             llm_provider=LLMProviderResponse.model_validate(llm_provider),
             api_key=api_key,
@@ -145,18 +161,19 @@ class LLMNodeHandler:
 
 def _build_handler(deps: NodeHandlerDeps) -> LLMNodeHandler:
     """Build an LLM node handler from shared dependencies."""
-    return LLMNodeHandler(llm_provider_repository=deps.llm_provider_repository)
+    return LLMNodeHandler(
+        llm_provider_repository=deps.llm_provider_repository,
+        connection_repository=deps.connection_repository,
+    )
 
 
 DEFINITION = NodeDefinition(
     type=NodeType.LLM,
     label="LLM",
     icon_key="llm",
-    graph=NodeGraphSpec(
-        has_input=True,
-        has_output=True,
-        input_port=PortType.TEXT,
-        output_port=PortType.TEXT,
+    graph=graph_spec(
+        input_type=PortType.TEXT,
+        output_type=PortType.TEXT,
     ),
     fields=(
         NodeFieldSpec(

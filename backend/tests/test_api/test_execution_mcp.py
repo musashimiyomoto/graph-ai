@@ -2,12 +2,12 @@
 
 import pytest
 
+from credentials import seal_credentials
 from db.repositories import MCPServerRepository
 from enums import ExecutionStatus, NodeType
-from tests.factories import EdgeFactory, NodeFactory, WorkflowFactory
+from tests.factories import ConnectionFactory, EdgeFactory, NodeFactory, WorkflowFactory
 from tests.test_api.base import BaseTestCase
 from tests.test_api.test_execution import run_execution
-from utils.encryption import encrypt
 
 
 class TestExecutionMCPTool(BaseTestCase):
@@ -24,13 +24,19 @@ class TestExecutionMCPTool(BaseTestCase):
             session=self.session,
             owner_id=user["id"],
         )
+        credential = await ConnectionFactory.create_async(
+            session=self.session,
+            user_id=user["id"],
+            provider="mcp",
+            credentials=seal_credentials({"secret": "{}"}),
+        )
         server = await MCPServerRepository().create(
             session=self.session,
             data={
                 "user_id": user["id"],
+                "connection_id": credential.id,
                 "name": "Tools",
                 "url": "https://mcp.example.com/mcp",
-                "headers": encrypt("{}"),
             },
         )
         input_node = await NodeFactory.create_async(
