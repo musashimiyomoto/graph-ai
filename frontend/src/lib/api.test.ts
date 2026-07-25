@@ -3,11 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   approveExecution,
   cancelExecution,
+  checkConnectionHealth,
+  createConnection,
   getChannelCatalog,
+  getConnections,
   getWorkflows,
   login,
   publicWebhookUrl,
+  refreshConnection,
+  revokeConnection,
   setToken,
+  startConnectionOAuth,
   rejectExecution,
   webChatEmbedSnippet,
 } from './api'
@@ -135,6 +141,79 @@ describe('api request()', () => {
     await expect(decide(42)).resolves.toEqual(execution)
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/executions/42/${action}`,
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('creates and lists unified connections without changing the payload', async () => {
+    const connection = { id: 7, name: 'GitHub', auth_type: 'oauth2' }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(connection))
+      .mockResolvedValueOnce(jsonResponse([connection]))
+    vi.stubGlobal('fetch', fetchMock)
+    const payload = {
+      name: 'GitHub',
+      provider: 'github',
+      auth_type: 'oauth2' as const,
+      authorization_url: 'https://github.com/login/oauth/authorize',
+      token_url: 'https://github.com/login/oauth/access_token',
+      client_id: 'client-id',
+      scopes: ['repo', 'read:user'],
+    }
+
+    await expect(createConnection(payload)).resolves.toEqual(connection)
+    await expect(getConnections()).resolves.toEqual([connection])
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/connections',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/connections',
+      expect.anything(),
+    )
+  })
+
+  it('starts OAuth with the public callback URL', async () => {
+    const started = {
+      authorization_url: 'https://provider.example/oauth?state=opaque',
+      expires_at: '2026-07-25T12:10:00Z',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(started))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      startConnectionOAuth(7, 'https://app.example/api/connections/oauth/callback'),
+    ).resolves.toEqual(started)
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/connections/7/oauth/start',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          redirect_uri: 'https://app.example/api/connections/oauth/callback',
+        }),
+      }),
+    )
+  })
+
+  it.each([
+    ['refresh', refreshConnection],
+    ['health', checkConnectionHealth],
+    ['revoke', revokeConnection],
+  ])('runs the connection %s lifecycle action', async (action, operation) => {
+    const connection = { id: 7, status: 'active' }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(connection))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(operation(7)).resolves.toEqual(connection)
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/connections/7/${action}`,
       expect.objectContaining({ method: 'POST' }),
     )
   })

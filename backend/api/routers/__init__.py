@@ -3,6 +3,7 @@
 from api.routers import (
     auth,
     channel,
+    connection,
     edge,
     execution,
     health,
@@ -21,6 +22,7 @@ from api.routers import (
 __all__ = [
     "auth",
     "channel",
+    "connection",
     "edge",
     "execution",
     "health",

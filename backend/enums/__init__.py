@@ -1,6 +1,7 @@
 """Enum exports for the backend domain."""
 
 from enums.auth import AuthActionPurpose
+from enums.connection import ConnectionAuthType, ConnectionStatus
 from enums.execution import ExecutionSource, ExecutionStatus
 from enums.llm_provider import LLMProviderType
 from enums.node import (
@@ -24,6 +25,8 @@ __all__ = [
     "AuthActionPurpose",
     "ConditionBranch",
     "ConditionType",
+    "ConnectionAuthType",
+    "ConnectionStatus",
     "DelayMode",
     "DelayUnit",
     "ExecutionSource",

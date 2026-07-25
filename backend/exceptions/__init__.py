@@ -17,6 +17,13 @@ from exceptions.auth import (
     PasswordUnchangedError,
 )
 from exceptions.base import BaseError
+from exceptions.connection import (
+    ConnectionAlreadyExistsError,
+    ConnectionNotFoundError,
+    ConnectionRevokedError,
+    OAuthExchangeError,
+    OAuthStateError,
+)
 from exceptions.edge import (
     EdgeAlreadyExistsError,
     EdgeHandleMismatchError,
@@ -97,6 +104,9 @@ __all__ = [
     "AuthSessionNotFoundError",
     "BaseError",
     "BlockedURLError",
+    "ConnectionAlreadyExistsError",
+    "ConnectionNotFoundError",
+    "ConnectionRevokedError",
     "CurrentPasswordError",
     "DocumentTooLargeError",
     "EdgeAlreadyExistsError",
@@ -126,6 +136,8 @@ __all__ = [
     "NodeDataValidationError",
     "NodeExecutionTimeoutError",
     "NodeNotFoundError",
+    "OAuthExchangeError",
+    "OAuthStateError",
     "PasswordUnchangedError",
     "PostgresConnectionAlreadyExistsError",
     "PostgresConnectionNotFoundError",

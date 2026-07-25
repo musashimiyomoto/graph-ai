@@ -4,6 +4,7 @@ from usecases.artifact import ArtifactUsecase
 from usecases.audit import AuditEvent, AuditUsecase
 from usecases.auth import AuthUsecase
 from usecases.channel import ChannelUsecase
+from usecases.connection import ConnectionUsecase
 from usecases.conversation import ConversationUsecase
 from usecases.edge import EdgeUsecase
 from usecases.email_account import EmailAccountUsecase
@@ -29,6 +30,7 @@ __all__ = [
     "AuditUsecase",
     "AuthUsecase",
     "ChannelUsecase",
+    "ConnectionUsecase",
     "ConversationUsecase",
     "EdgeUsecase",
     "EmailAccountUsecase",

@@ -467,6 +467,50 @@ export interface PostgresConnectionCreatePayload {
   dsn: string
 }
 
+export type ConnectionAuthType = 'api_key' | 'oauth2'
+
+export type ConnectionStatus = 'pending' | 'active' | 'unhealthy' | 'revoked'
+
+export interface Connection {
+  id: number
+  user_id: number
+  name: string
+  provider: string
+  auth_type: ConnectionAuthType
+  status: ConnectionStatus
+  config: Record<string, unknown>
+  scopes: string[]
+  has_credentials: boolean
+  token_expires_at: string | null
+  last_used_at: string | null
+  last_checked_at: string | null
+  last_error: string | null
+  revoked_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ConnectionCreatePayload {
+  name: string
+  provider: string
+  auth_type: ConnectionAuthType
+  scopes?: string[]
+  api_key?: string
+  header_name?: string
+  prefix?: string
+  authorization_url?: string
+  token_url?: string
+  revocation_url?: string
+  health_url?: string
+  client_id?: string
+  client_secret?: string
+}
+
+export interface ConnectionOAuthStartResponse {
+  authorization_url: string
+  expires_at: string
+}
+
 export interface MCPServer {
   id: number
   user_id: number

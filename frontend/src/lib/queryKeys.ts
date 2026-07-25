@@ -13,6 +13,7 @@ export const queryKeys = {
     ['llm-providers', providerId, 'models'] as const,
   telegramBots: () => ['telegram-bots'] as const,
   emailAccounts: () => ['email-accounts'] as const,
+  connections: () => ['connections'] as const,
   postgresConnections: () => ['postgres-connections'] as const,
   mcpServers: () => ['mcp-servers'] as const,
   mcpTools: (serverId: number) => ['mcp-servers', serverId, 'tools'] as const,

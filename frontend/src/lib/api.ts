@@ -3,6 +3,9 @@ import type {
   ArtifactDownload,
   AuthSession,
   ChannelCatalogItem,
+  Connection,
+  ConnectionCreatePayload,
+  ConnectionOAuthStartResponse,
   EdgeCreatePayload,
   EdgeResponse,
   EmailAccount,
@@ -604,6 +607,56 @@ export async function createPostgresConnection(
 
 export async function deletePostgresConnection(connectionId: number): Promise<void> {
   await request(`/postgres-connections/${connectionId}`, { method: 'DELETE' })
+}
+
+export async function getConnections(): Promise<Connection[]> {
+  return request<Connection[]>('/connections')
+}
+
+export async function createConnection(
+  payload: ConnectionCreatePayload,
+): Promise<Connection> {
+  return request<Connection>('/connections', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function startConnectionOAuth(
+  connectionId: number,
+  redirectUri: string,
+): Promise<ConnectionOAuthStartResponse> {
+  return request<ConnectionOAuthStartResponse>(
+    `/connections/${connectionId}/oauth/start`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ redirect_uri: redirectUri }),
+    },
+  )
+}
+
+export async function refreshConnection(connectionId: number): Promise<Connection> {
+  return request<Connection>(`/connections/${connectionId}/refresh`, {
+    method: 'POST',
+  })
+}
+
+export async function checkConnectionHealth(
+  connectionId: number,
+): Promise<Connection> {
+  return request<Connection>(`/connections/${connectionId}/health`, {
+    method: 'POST',
+  })
+}
+
+export async function revokeConnection(connectionId: number): Promise<Connection> {
+  return request<Connection>(`/connections/${connectionId}/revoke`, {
+    method: 'POST',
+  })
+}
+
+export async function deleteConnection(connectionId: number): Promise<void> {
+  await request(`/connections/${connectionId}`, { method: 'DELETE' })
 }
 
 export async function getMCPServers(): Promise<MCPServer[]> {

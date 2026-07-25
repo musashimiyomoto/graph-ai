@@ -994,11 +994,21 @@ permanent format-specific runtime fields or adapter branches.
       envelopes and clean upgrade/check/downgrade/re-upgrade reports no schema
       drift. All 455 backend and 78 frontend tests pass, alongside lint,
       typecheck and the production build.
-- [ ] **Unified connections and OAuth foundation** — evolve one-off provider/bot/
-      account settings toward a common encrypted Connection model supporting API
-      keys, OAuth 2.0 authorization-code refresh, health checks, scopes, ownership,
-      last-used metadata and revocation. Existing entities can remain compatibility
-      facades until their adapters migrate.
+- [x] **Unified connections and OAuth foundation** — added a tenant-owned,
+      provider-neutral `Connection` model for API keys and OAuth 2.0 authorization
+      code with PKCE. All API keys, client secrets and access/refresh tokens share
+      one encrypted credential envelope; public responses expose only safe config,
+      scopes, lifecycle status, expiry, last-used/check/error and revocation
+      metadata. OAuth state is short-lived, single-use and SHA-256 hashed at rest;
+      token refresh is explicit or health-check driven, refresh failures persist
+      unhealthy metadata, and revocation attempts the provider before always
+      clearing local secrets. Server-called endpoints reuse SSRF protection and
+      every mutation is tenant-authorized and audited. Settings now provides a
+      common Connections UI for creation, OAuth authorization, health, refresh,
+      revoke and delete while existing provider/bot/account entities remain
+      compatibility facades. Migration `a9c2e4f6b8d0` cleanly upgrades, checks,
+      downgrades and re-upgrades without schema drift; all 459 backend and 83
+      frontend tests pass alongside lint, typecheck and production build.
 - [ ] **Tenant-safe knowledge sources** — namespace Qdrant collections by owner,
       migrate existing collections without data loss, attach source/revision/ACL
       metadata, and add retention and incremental-sync primitives needed by Drive,

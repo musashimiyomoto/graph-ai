@@ -5,6 +5,7 @@ from db.models.audit_log import AuditLog
 from db.models.auth_action_token import AuthActionToken
 from db.models.auth_session import AuthSession
 from db.models.base import Base, BaseWithDate, BaseWithID
+from db.models.connection import Connection, ConnectionOAuthState
 from db.models.conversation import Conversation
 from db.models.edge import Edge
 from db.models.email_account import EmailAccount
@@ -30,6 +31,8 @@ __all__ = [
     "Base",
     "BaseWithDate",
     "BaseWithID",
+    "Connection",
+    "ConnectionOAuthState",
     "Conversation",
     "Edge",
     "EmailAccount",

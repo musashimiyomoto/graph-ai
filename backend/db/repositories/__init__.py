@@ -4,6 +4,10 @@ from db.repositories.artifact import ArtifactRepository
 from db.repositories.audit_log import AuditLogRepository
 from db.repositories.auth_action_token import AuthActionTokenRepository
 from db.repositories.auth_session import AuthSessionRepository
+from db.repositories.connection import (
+    ConnectionOAuthStateRepository,
+    ConnectionRepository,
+)
 from db.repositories.conversation import ConversationRepository
 from db.repositories.edge import EdgeRepository
 from db.repositories.email_account import EmailAccountRepository
@@ -29,6 +33,8 @@ __all__ = [
     "AuditLogRepository",
     "AuthActionTokenRepository",
     "AuthSessionRepository",
+    "ConnectionOAuthStateRepository",
+    "ConnectionRepository",
     "ConversationRepository",
     "EdgeRepository",
     "EmailAccountRepository",

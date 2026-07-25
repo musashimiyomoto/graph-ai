@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useChannelCatalog } from '../hooks/useChannelCatalog'
 import type { ApiError } from '../lib/types'
 import { AccountSecuritySettings } from './AccountSecuritySettings'
+import { ConnectionSettings } from './ConnectionSettings'
 import { EmailSettings } from './EmailSettings'
 import { Modal } from './Modal'
 import { MCPServerSettings } from './MCPServerSettings'
@@ -27,6 +28,7 @@ interface SettingsSection {
 }
 
 const CORE_SECTIONS_BEFORE_CHANNELS: SettingsSection[] = [
+  { id: 'connections', label: 'Connections', Component: ConnectionSettings },
   { id: 'providers', label: 'LLM Providers', Component: ProviderSettings },
   { id: 'account', label: 'Account Security', Component: AccountSecuritySettings },
 ]

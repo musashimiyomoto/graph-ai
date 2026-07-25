@@ -2,6 +2,7 @@
 
 from tests.factories.artifact import ArtifactFactory
 from tests.factories.auth_action_token import AuthActionTokenFactory
+from tests.factories.connection import ConnectionFactory
 from tests.factories.conversation import ConversationFactory
 from tests.factories.edge import EdgeFactory
 from tests.factories.email_account import EmailAccountFactory
@@ -18,6 +19,7 @@ from tests.factories.workflow import WorkflowFactory
 __all__ = [
     "ArtifactFactory",
     "AuthActionTokenFactory",
+    "ConnectionFactory",
     "ConversationFactory",
     "EdgeFactory",
     "EmailAccountFactory",

@@ -15,6 +15,7 @@ from api.routers import (
     artifact,
     auth,
     channel,
+    connection,
     edge,
     email_account,
     execution,
@@ -132,6 +133,7 @@ app.include_router(router=health.router)
 app.include_router(router=artifact.router)
 app.include_router(router=auth.router)
 app.include_router(router=channel.router)
+app.include_router(router=connection.router)
 app.include_router(router=user.router)
 app.include_router(router=workflow.router)
 app.include_router(router=workflow_template.router)

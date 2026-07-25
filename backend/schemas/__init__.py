@@ -21,6 +21,13 @@ from schemas.channel import (
     ChannelCatalogItemResponse,
     ChannelSettingsResponse,
 )
+from schemas.connection import (
+    ConnectionCreate,
+    ConnectionOAuthCallbackResponse,
+    ConnectionOAuthStart,
+    ConnectionOAuthStartResponse,
+    ConnectionResponse,
+)
 from schemas.edge import EdgeCreate, EdgeResponse, EdgeUpdate
 from schemas.email_account import (
     EmailAccountCreate,
@@ -137,6 +144,11 @@ __all__ = [
     "ChatMessage",
     "ChatResponse",
     "ChatStreamChunk",
+    "ConnectionCreate",
+    "ConnectionOAuthCallbackResponse",
+    "ConnectionOAuthStart",
+    "ConnectionOAuthStartResponse",
+    "ConnectionResponse",
     "EdgeCreate",
     "EdgeResponse",
     "EdgeUpdate",
