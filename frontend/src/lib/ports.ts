@@ -32,7 +32,7 @@ export function resolvePortType(
   return typeof configured === 'string' &&
     port.allowed_types.includes(configured as PortType)
     ? (configured as PortType)
-    : port.type
+    : null
 }
 
 export function portForHandle(

@@ -9,7 +9,14 @@ actual work — and needs no LLM provider, so it runs immediately after
 creation.
 """
 
-from enums import ConditionType, InputNodeFormat, LoopMode, NodeType, OutputNodeFormat
+from enums import (
+    ConditionType,
+    InputNodeFormat,
+    LoopMode,
+    NodeType,
+    OutputNodeFormat,
+    PortType,
+)
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -55,7 +62,12 @@ _GRAPH = WorkflowGraphTransfer(
         ),
         WorkflowGraphNode(
             type=NodeType.CODE_TRANSFORM,
-            data={"label": "Shrink", "code": _SHRINK_CODE},
+            data={
+                "label": "Shrink",
+                "input_type": PortType.TEXT.value,
+                "output_type": PortType.TEXT.value,
+                "code": _SHRINK_CODE,
+            },
             position_x=560.0,
             position_y=160.0,
             parent_index=_LOOP_INDEX,
@@ -69,7 +81,12 @@ _GRAPH = WorkflowGraphTransfer(
         ),
         WorkflowGraphNode(
             type=NodeType.CODE_TRANSFORM,
-            data={"label": "Strip Marker", "code": _STRIP_MARKER_CODE},
+            data={
+                "label": "Strip Marker",
+                "input_type": PortType.TEXT.value,
+                "output_type": PortType.TEXT.value,
+                "code": _STRIP_MARKER_CODE,
+            },
             position_x=560.0,
             position_y=0.0,
         ),

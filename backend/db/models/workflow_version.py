@@ -33,5 +33,7 @@ class WorkflowVersion(BaseWithID, BaseWithDate):
     graph: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
-        comment="Snapshot of the graph: {'nodes': [...], 'edges': [...]}",
+        comment=(
+            "Snapshot with nodes, edges, and recursively embedded called_workflows"
+        ),
     )

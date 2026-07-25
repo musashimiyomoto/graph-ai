@@ -153,7 +153,10 @@ def resolve_port_type(
     """Resolve one fixed or node-configured port's effective value type."""
     if port.type_field is None:
         return port.type
-    raw_type = node_data.get(port.type_field, port.type.value)
+    if port.type_field not in node_data:
+        message = f"Node port '{port.name}' is missing its configured type"
+        raise ValueError(message)
+    raw_type = node_data[port.type_field]
     try:
         resolved = PortType(raw_type)
     except ValueError as exc:

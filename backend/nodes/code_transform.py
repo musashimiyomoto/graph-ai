@@ -252,7 +252,7 @@ DEFINITION = NodeDefinition(
         ),
         NodeFieldSpec(
             name="input_type",
-            required=False,
+            required=True,
             validators={
                 ValidatorType.SELECT.value: [
                     item.value for item in _STRUCTURED_PORT_TYPES
@@ -267,7 +267,7 @@ DEFINITION = NodeDefinition(
         ),
         NodeFieldSpec(
             name="output_type",
-            required=False,
+            required=True,
             validators={
                 ValidatorType.SELECT.value: [
                     item.value for item in _STRUCTURED_PORT_TYPES

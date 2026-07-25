@@ -50,6 +50,18 @@ frontend/
 - Auth token lifecycle is managed through `setToken(...)` in `src/lib/api.ts` and auth hooks.
 - When backend contracts change, update `src/lib/types.ts`, `src/lib/api.ts`, and affected hooks/components together.
 
+## Compatibility and reset policy
+
+- The project is pre-user and the frontend supports only the current backend contract.
+  Backward compatibility is not required unless the user explicitly changes this policy.
+- Remove superseded fields, aliases, parsers, UI branches, and fallback handling instead
+  of accepting both old and current payload shapes.
+- Update API types, request builders, state, components, and tests atomically to the
+  current contract; do not keep dual representations for older data.
+- If disposable local/test database state conflicts with the current frontend/backend
+  contract, reset that data on the backend and rerun integration tests instead of adding
+  a frontend compatibility adapter.
+
 ## Code style rules
 
 - Functional components only.

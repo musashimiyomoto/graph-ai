@@ -66,7 +66,11 @@ def _extra_fields_by_type(
             "tool_name": "search",
             "arguments": '{"query": "{{input}}"}',
         },
-        NodeType.CODE_TRANSFORM: {"code": "output = input"},
+        NodeType.CODE_TRANSFORM: {
+            "input_type": "text",
+            "output_type": "text",
+            "code": "output = input",
+        },
         NodeType.VECTOR_INGEST: {"collection": "docs"},
         NodeType.VECTOR_SEARCH: {"collection": "docs", "top_k": 4},
         NodeType.TABLE: {
@@ -245,6 +249,27 @@ class TestNodeCreate(BaseTestCase):
             pytest.fail("Node workflow_id did not match request")
         if data["type"] != node_type:
             pytest.fail(f"Node type did not match: {data['type']} != {node_type}")
+
+    @pytest.mark.asyncio
+    async def test_code_transform_requires_explicit_port_types(self) -> None:
+        """Code nodes reject payloads that omit their current typed-port contract."""
+        user, headers = await self.create_user_and_get_token()
+        workflow = await WorkflowFactory.create_async(
+            session=self.session,
+            owner_id=user["id"],
+        )
+        response = await self.client.post(
+            url=self.url,
+            json={
+                "workflow_id": workflow.id,
+                "type": NodeType.CODE_TRANSFORM,
+                "data": {"label": "Code", "code": "output = input"},
+            },
+            headers=headers,
+        )
+
+        if response.status_code != HTTPStatus.UNPROCESSABLE_ENTITY:
+            pytest.fail("Code node accepted missing input_type/output_type")
 
     @pytest.mark.asyncio
     async def test_llm_provider_not_found(self) -> None:

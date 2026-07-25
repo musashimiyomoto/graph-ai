@@ -2329,11 +2329,13 @@ class TestExecutionReaper(BaseTestCase):
             workflow_id=workflow.id,
             status=ExecutionStatus.RUNNING,
             started_at=stale_started,
+            heartbeat_at=stale_started,
         )
         fresh = await ExecutionFactory.create_async(
             session=self.session,
             workflow_id=workflow.id,
             status=ExecutionStatus.RUNNING,
+            heartbeat_at=datetime.now(tz=UTC),
         )
         stale_id = stale.id
         fresh_id = fresh.id
@@ -3301,6 +3303,31 @@ class TestExecutionStream(BaseTestCase):
 
         if response.status_code != HTTPStatus.NOT_FOUND:
             pytest.fail("Expected NOT_FOUND streaming another user's execution")
+
+
+class TestExecutionSnapshotContract:
+    """Tests for the current immutable workflow snapshot shape."""
+
+    @pytest.mark.parametrize(
+        ("graph", "message"),
+        [
+            ({"nodes": [], "edges": []}, "missing required fields"),
+            (
+                {"nodes": {}, "edges": [], "called_workflows": {}},
+                "nodes and edges must be arrays",
+            ),
+            (
+                {"nodes": [], "edges": [], "called_workflows": []},
+                "called_workflows must be an object",
+            ),
+        ],
+    )
+    def test_rejects_non_current_snapshot_shape(
+        self, graph: dict[str, object], message: str
+    ) -> None:
+        """Snapshots must use the complete current contract without defaults."""
+        with pytest.raises(ExecutionGraphValidationError, match=message):
+            ExecutionUsecase()._build_graph_from_snapshot(graph)  # noqa: SLF001
 
 
 class TestExecutionVersioning(BaseTestCase):

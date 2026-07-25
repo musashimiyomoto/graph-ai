@@ -368,6 +368,7 @@ export interface ChannelCatalogItem {
 export interface LlmProvider {
   id: number
   user_id: number
+  connection_id: number
   name: string
   type: string
   base_url: string
@@ -413,6 +414,7 @@ export interface OllamaPullEvent {
 export interface TelegramBot {
   id: number
   user_id: number
+  connection_id: number
   name: string
   enabled: boolean
 }
@@ -425,6 +427,7 @@ export interface TelegramBotCreatePayload {
 export interface EmailAccount {
   id: number
   user_id: number
+  connection_id: number
   name: string
   email_address: string
   username: string
@@ -455,6 +458,7 @@ export interface EmailAccountCreatePayload {
 export interface PostgresConnection {
   id: number
   user_id: number
+  connection_id: number
   name: string
 }
 
@@ -510,6 +514,7 @@ export interface ConnectionOAuthStartResponse {
 export interface MCPServer {
   id: number
   user_id: number
+  connection_id: number
   name: string
   url: string
   has_headers: boolean

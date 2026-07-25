@@ -995,7 +995,7 @@ transitional columns, or runtime adapters for older contracts.
       incremental-sync cursors and an hourly bounded retention cleanup provide the
       primitives needed by Drive, Notion and Confluence. Settings exposes the new
       source metadata and upload controls. The baseline creates the tenant-safe
-      schema directly; clean upgrade/check/downgrade/re-upgrade reports no drift. All 465
+      schema directly; clean upgrade/check/downgrade/re-upgrade reports no drift. All 470
       backend and 82 frontend tests pass, alongside lint, typecheck and production
       build.
 - [ ] **Artifact/channel safety and observability** — MIME sniffing, file-size and

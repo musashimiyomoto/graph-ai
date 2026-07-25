@@ -9,7 +9,7 @@ from collections import deque
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -549,8 +549,6 @@ class ExecutionUsecase:
             "status": ExecutionStatus.RUNNING,
             "heartbeat_at": claim_time,
         }
-        if execution.heartbeat_at is None:
-            claim_data["started_at"] = claim_time
         return await self._execution_repository.update_status_if(
             session=session,
             execution_id=execution.id,
@@ -681,11 +679,10 @@ class ExecutionUsecase:
     ) -> int:
         """Mark executions stuck in RUNNING beyond the timeout as FAILED.
 
-        Staleness is measured from ``heartbeat_at`` (bumped each time a node
-        completes), not ``started_at`` — a long multi-node run that's still
-        making progress keeps refreshing its heartbeat and won't be reaped
-        just for having run for a while. Falls back to ``started_at`` for a
-        run that hasn't completed a single node yet.
+        Staleness is measured from ``heartbeat_at`` (set when the worker claims
+        the execution and bumped each time a node completes), not ``started_at``.
+        A long multi-node run that's still making progress keeps refreshing its
+        heartbeat and won't be reaped just for having run for a while.
 
         Also re-enqueues executions stuck in ``CREATED`` beyond a much
         shorter timeout, plus due ``WAITING_DELAY`` checkpoints whose deferred
@@ -714,11 +711,7 @@ class ExecutionUsecase:
         running = await self._execution_repository.get_all(
             session=session, status=ExecutionStatus.RUNNING
         )
-        stuck = [
-            execution
-            for execution in running
-            if (execution.heartbeat_at or execution.started_at) < cutoff
-        ]
+        stuck = [execution for execution in running if execution.heartbeat_at < cutoff]
         for execution in stuck:
             logger.warning("Reaping stuck execution %s", execution.id)
             await self._mark_execution_failed(
@@ -854,32 +847,56 @@ class ExecutionUsecase:
             ExecutionGraphValidationError: If the snapshot graph is invalid.
 
         """
-        raw_nodes = graph.get("nodes", [])
-        raw_edges = graph.get("edges", [])
-        raw_called_workflows = graph.get("called_workflows", {})
-        nodes = list(raw_nodes) if isinstance(raw_nodes, list) else []
-        edges = list(raw_edges) if isinstance(raw_edges, list) else []
-        called_workflows = (
-            dict(raw_called_workflows) if isinstance(raw_called_workflows, dict) else {}
-        )
+        required_keys = {"nodes", "edges", "called_workflows"}
+        missing_keys = required_keys - graph.keys()
+        if missing_keys:
+            missing = ", ".join(sorted(missing_keys))
+            raise ExecutionGraphValidationError(
+                message=f"Workflow snapshot is missing required fields: {missing}"
+            )
+
+        raw_nodes = graph["nodes"]
+        raw_edges = graph["edges"]
+        raw_called_workflows = graph["called_workflows"]
+        if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
+            raise ExecutionGraphValidationError(
+                message="Workflow snapshot nodes and edges must be arrays"
+            )
+        if not isinstance(raw_called_workflows, dict):
+            raise ExecutionGraphValidationError(
+                message="Workflow snapshot called_workflows must be an object"
+            )
+
         graph_source = _GraphSource(
-            all_nodes=[NodeResponse.model_validate(node) for node in nodes],
-            all_edges=[EdgeResponse.model_validate(edge) for edge in edges],
+            all_nodes=[NodeResponse.model_validate(node) for node in raw_nodes],
+            all_edges=[EdgeResponse.model_validate(edge) for edge in raw_edges],
         )
         top_level = self._build_scoped_graph_context(
             graph_source=graph_source, parent_node_id=None
         )
         called_graphs: dict[int, _LoadedGraph] = {}
-        for raw_workflow_id, called_graph in called_workflows.items():
+        for raw_workflow_id, called_graph in raw_called_workflows.items():
             if not isinstance(called_graph, dict):
-                continue
+                raise ExecutionGraphValidationError(
+                    message="Called workflow snapshot must be an object"
+                )
+            if not isinstance(raw_workflow_id, str):
+                raise ExecutionGraphValidationError(
+                    message="Called workflow snapshot IDs must be strings"
+                )
             try:
                 workflow_id = int(raw_workflow_id)
-            except (TypeError, ValueError):
-                continue
-            if workflow_id <= 0:
-                continue
-            called_graphs[workflow_id] = self._build_graph_from_snapshot(called_graph)
+            except ValueError as exc:
+                raise ExecutionGraphValidationError(
+                    message="Called workflow snapshot ID must be a positive integer"
+                ) from exc
+            if workflow_id <= 0 or str(workflow_id) != raw_workflow_id:
+                raise ExecutionGraphValidationError(
+                    message="Called workflow snapshot ID must be a positive integer"
+                )
+            called_graphs[workflow_id] = self._build_graph_from_snapshot(
+                cast("dict[str, object]", called_graph)
+            )
         return _LoadedGraph(
             top_level=top_level,
             source=graph_source,

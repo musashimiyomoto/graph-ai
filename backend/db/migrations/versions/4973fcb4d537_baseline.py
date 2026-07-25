@@ -1169,7 +1169,9 @@ def upgrade() -> None:  # noqa: PLR0915
             "graph",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
-            comment="Snapshot of the graph: {'nodes': [...], 'edges': [...]}",
+            comment=(
+                "Snapshot with nodes, edges, and recursively embedded called_workflows"
+            ),
         ),
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False, comment="ID"),
         sa.Column(
@@ -1392,9 +1394,10 @@ def upgrade() -> None:  # noqa: PLR0915
         sa.Column(
             "heartbeat_at",
             sa.DateTime(timezone=True),
-            nullable=True,
+            server_default=sa.text("now()"),
+            nullable=False,
             comment=(
-                "Last node-completion time, bumped as the run progresses so the "
+                "Last execution progress time, bumped as the run progresses so the "
                 "stuck-execution reaper can tell a long-but-active run from one "
                 "that's actually stalled"
             ),

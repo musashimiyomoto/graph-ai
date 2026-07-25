@@ -43,7 +43,7 @@ describe('typed ports', () => {
     ).toBe('list')
   })
 
-  it('falls back to the declared type for stale configuration', () => {
+  it('rejects configuration outside the current dynamic port contract', () => {
     expect(
       resolvePortType(
         {
@@ -56,7 +56,7 @@ describe('typed ports', () => {
         },
         { input_type: 'video' },
       ),
-    ).toBe('text')
+    ).toBeNull()
   })
 
   it('requires a concrete conversion only for convertible mismatches', () => {

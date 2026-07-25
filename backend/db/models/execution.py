@@ -94,12 +94,13 @@ class Execution(BaseWithID):
         comment="Execution start time",
     )
     finished_at: Mapped[datetime | None] = mapped_column(comment="Execution end time")
-    heartbeat_at: Mapped[datetime | None] = mapped_column(
+    heartbeat_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(),
         comment=(
-            "Last node-completion time, bumped as the run progresses so the "
+            "Last execution progress time, bumped as the run progresses so the "
             "stuck-execution reaper can tell a long-but-active run from one "
             "that's actually stalled"
-        )
+        ),
     )
 
 

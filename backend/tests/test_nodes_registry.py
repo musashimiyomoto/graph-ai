@@ -25,6 +25,7 @@ from nodes import (
     required_port_coercion,
 )
 from nodes.base import NodeExecutionContext
+from nodes.definition import resolve_port_type
 from rag.ingest import ChunkPayload, ingest_document
 from schemas import KnowledgeIngestOptions, VectorUploadResponse
 from tests.fakes import FakeQdrantClient
@@ -141,6 +142,12 @@ class TestPortCompatibility:
             pytest.fail("Declared text -> json coercion should be compatible")
         if ports_compatible(PortType.TEXT, PortType.JSON, PortCoercion.TEXT_TO_LIST):
             pytest.fail("A wrong coercion was accepted")
+
+    def test_dynamic_port_requires_current_configuration(self) -> None:
+        """A configurable port does not infer a type for incomplete node data."""
+        port = build_node_catalog()[NodeType.CODE_TRANSFORM].graph.inputs[0]
+        with pytest.raises(ValueError, match="missing its configured type"):
+            resolve_port_type(port, {})
 
     def test_coercion_preserves_structured_runtime_value(self) -> None:
         """Edge conversion parses text into JSON rather than hiding it in text."""
@@ -681,7 +688,7 @@ class TestSwitchNode:
 
     @pytest.mark.asyncio
     async def test_invalid_configuration_is_rejected(self) -> None:
-        """Runtime validation protects executions using old invalid snapshots."""
+        """Runtime validation rejects a malformed Switch configuration."""
         handler = SwitchNodeHandler()
         with pytest.raises(ExecutionGraphValidationError):
             await handler.execute(

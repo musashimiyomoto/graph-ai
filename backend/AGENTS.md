@@ -56,6 +56,20 @@ backend/
 - Cross-package imports should go through package exports (`__init__.py`) where available.
 - Keep one entity per file per layer (`node.py`, `edge.py`, `execution.py`, etc.).
 
+## Compatibility and database reset policy
+
+- The project is pre-user and supports only the current code and schema. Backward
+  compatibility is not a requirement unless the user explicitly changes this policy.
+- Do not add legacy fields, aliases, dual reads/writes, fallback branches, adapters,
+  backfills, or transitional migrations for older contracts.
+- When a model or API contract changes, remove the superseded shape and update all
+  callers, fixtures, tests, and the baseline schema directly.
+- If persisted local development or test data conflicts with the current schema,
+  delete the affected rows or recreate the local/test database, then rerun migrations
+  and tests. Do not preserve disposable data with compatibility code.
+- Never apply this reset policy to production or external data stores without an
+  explicit user request.
+
 ## Execution pipeline rules
 
 - Execution creation is initiated via `ExecutionUsecase.create_execution`.
