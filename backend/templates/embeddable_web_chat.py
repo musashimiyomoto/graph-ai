@@ -46,5 +46,7 @@ DEFINITION = TemplateDefinition(
         "A website chat widget backed by an LLM workflow. Pick a provider, then "
         "copy the embed snippet from the workflow menu."
     ),
+    category="Channels",
+    setup_steps=("Choose an LLM provider and model.",),
     graph=_GRAPH,
 )

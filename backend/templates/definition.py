@@ -18,4 +18,6 @@ class TemplateDefinition:
     key: str
     name: str
     description: str
+    category: str
+    setup_steps: tuple[str, ...]
     graph: WorkflowGraphTransfer

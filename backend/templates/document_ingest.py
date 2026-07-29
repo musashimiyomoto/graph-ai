@@ -51,5 +51,7 @@ DEFINITION = TemplateDefinition(
         f'the "{_COLLECTION_NAME}" collection — the same one the RAG '
         "Chatbot template queries. No provider needed."
     ),
+    category="Knowledge",
+    setup_steps=(),
     graph=_GRAPH,
 )

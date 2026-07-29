@@ -48,5 +48,7 @@ DEFINITION = TemplateDefinition(
         "A minimal chat flow: your message goes straight to an LLM and its "
         "reply comes back as output. Pick a provider after creating it."
     ),
+    category="AI & Text",
+    setup_steps=("Choose an LLM provider and model.",),
     graph=_GRAPH,
 )

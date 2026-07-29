@@ -58,5 +58,10 @@ DEFINITION = TemplateDefinition(
         "your bot on the Input and Output nodes, and an LLM provider, "
         "after creating it."
     ),
+    category="Channels",
+    setup_steps=(
+        "Choose the Telegram bot on the Input and Output nodes.",
+        "Choose an LLM provider and model.",
+    ),
     graph=_GRAPH,
 )

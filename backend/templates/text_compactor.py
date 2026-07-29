@@ -114,5 +114,7 @@ DEFINITION = TemplateDefinition(
         "until it fits, using the Loop node's condition mode. No LLM "
         "provider needed — try it right after creating it."
     ),
+    category="AI & Text",
+    setup_steps=(),
     graph=_GRAPH,
 )

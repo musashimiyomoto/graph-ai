@@ -116,15 +116,19 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Add account
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <label className="pixel-label">
             Name
-            <input className="pixel-input" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              className="pixel-input medium"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </label>
           <label className="pixel-label">
             Email address
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               type="email"
               value={emailAddress}
               onChange={(e) => setEmailAddress(e.target.value)}
@@ -133,7 +137,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             Username
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={username}
               autoComplete="username"
               onChange={(e) => setUsername(e.target.value)}
@@ -142,7 +146,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             Password
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               type="password"
               value={password}
               autoComplete="new-password"
@@ -152,7 +156,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             IMAP host
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={imapHost}
               onChange={(e) => setImapHost(e.target.value)}
             />
@@ -160,7 +164,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             IMAP port
             <input
-              className="pixel-input"
+              className="pixel-input compact"
               type="number"
               min={1}
               max={65535}
@@ -171,7 +175,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             SMTP host
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={smtpHost}
               onChange={(e) => setSmtpHost(e.target.value)}
             />
@@ -179,7 +183,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             SMTP port
             <input
-              className="pixel-input"
+              className="pixel-input compact"
               type="number"
               min={1}
               max={65535}
@@ -190,7 +194,7 @@ export function EmailSettings({ onError }: EmailSettingsProps) {
           <label className="pixel-label">
             SMTP security
             <select
-              className="pixel-input"
+              className="pixel-input compact"
               value={smtpSecurity}
               onChange={(e) => setSmtpSecurity(e.target.value as SmtpSecurity)}
             >

@@ -178,11 +178,11 @@ export function ProviderSettings({ onError }: ProviderSettingsProps) {
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Add provider
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="pixel-form-stack">
           <label className="pixel-label">
             Name
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Provider"
@@ -191,7 +191,7 @@ export function ProviderSettings({ onError }: ProviderSettingsProps) {
           <label className="pixel-label">
             Type
             <select
-              className="pixel-input"
+              className="pixel-input compact"
               value={type}
               onChange={(e) => handleTypeChange(e.target.value as ProviderType)}
             >

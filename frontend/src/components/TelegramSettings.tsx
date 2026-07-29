@@ -88,11 +88,11 @@ export function TelegramSettings({ onError }: TelegramSettingsProps) {
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Add bot
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="pixel-form-stack">
           <label className="pixel-label">
             Name
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Bot"

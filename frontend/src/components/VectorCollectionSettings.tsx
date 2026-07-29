@@ -241,7 +241,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Upload document
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="pixel-form-stack">
           <label className="pixel-label">
             Collection
             <VectorCollectionInput
@@ -255,7 +255,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
             File
             <input
               ref={fileInputRef}
-              className="pixel-input"
+              className="pixel-input medium"
               type="file"
               accept=".pdf,.docx,.txt,.md"
               onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
@@ -264,7 +264,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
           <label className="pixel-label">
             Source (optional)
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={uploadSource}
               onChange={(e) => setUploadSource(e.target.value)}
               placeholder="Defaults to the file name"
@@ -273,7 +273,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
           <label className="pixel-label">
             Source type
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={uploadSourceType}
               onChange={(e) => setUploadSourceType(e.target.value.toLowerCase())}
               placeholder="upload, drive, notion, confluence"
@@ -282,7 +282,7 @@ export function VectorCollectionSettings({ onError }: VectorCollectionSettingsPr
           <label className="pixel-label">
             External ID (optional)
             <input
-              className="pixel-input"
+              className="pixel-input compact"
               value={uploadExternalId}
               onChange={(e) => setUploadExternalId(e.target.value)}
               placeholder="Provider object ID"

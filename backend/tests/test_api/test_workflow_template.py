@@ -20,7 +20,7 @@ class TestWorkflowTemplateList(BaseTestCase):
 
     @pytest.mark.asyncio
     async def test_lists_all_registered_templates(self) -> None:
-        """Every registered template shows up with its key/name/description."""
+        """Every registered template exposes complete picker metadata."""
         _, headers = await self.create_user_and_get_token()
 
         response = await self.client.get(url=self.url, headers=headers)
@@ -37,7 +37,24 @@ class TestWorkflowTemplateList(BaseTestCase):
             pytest.fail(f"Template keys mismatch: {keys} != {expected_keys}")
 
         for item in data:
-            self.assert_has_keys(item, {"key", "name", "description"})
+            self.assert_has_keys(
+                item,
+                {
+                    "key",
+                    "name",
+                    "description",
+                    "category",
+                    "setup_steps",
+                    "node_count",
+                },
+            )
+            definition = get_template_definition(item["key"])
+            if item["category"] != definition.category:
+                pytest.fail("Template category did not match its definition")
+            if item["setup_steps"] != list(definition.setup_steps):
+                pytest.fail("Template setup steps did not match its definition")
+            if item["node_count"] != len(definition.graph.nodes):
+                pytest.fail("Template node count did not match its graph")
 
 
 def test_email_auto_responder_template_uses_email_channel() -> None:

@@ -1,12 +1,16 @@
-import { type ReactNode, useEffect, useState } from 'react'
-
-import type { ApiError } from '../lib/types'
-import { SettingsModal } from './SettingsModal'
-import { UserMenu } from './UserMenu'
+import { type ReactNode, useEffect } from 'react'
 
 // Auto-dismiss the error banner after this long so a transient failure
 // doesn't linger on screen forever if the user doesn't notice it.
 const ERROR_BANNER_TIMEOUT_MS = 8000
+
+export type WorkspaceView =
+  | 'editor'
+  | 'test-runs'
+  | 'activity-log'
+  | 'templates'
+  | 'settings'
+  | 'profile'
 
 interface AppShellProps {
   email: string
@@ -23,13 +27,9 @@ interface AppShellProps {
   onUndo: () => void
   onRedo: () => void
   onAutoLayout: () => void
-  onOpenTestRuns: () => void
-  onOpenActivityLog: () => void
+  activeView: WorkspaceView
+  onChangeView: (view: WorkspaceView) => void
   onDismissError: () => void
-  onLogout: () => void
-  onDeleteAccount: () => void
-  onPasswordChanged: () => void
-  onError: (err: ApiError) => void
   children: ReactNode
 }
 
@@ -50,17 +50,11 @@ export function AppShell({
   onUndo,
   onRedo,
   onAutoLayout,
-  onOpenTestRuns,
-  onOpenActivityLog,
+  activeView,
+  onChangeView,
   onDismissError,
-  onLogout,
-  onDeleteAccount,
-  onPasswordChanged,
-  onError,
   children,
 }: AppShellProps) {
-  const [showSettings, setShowSettings] = useState(false)
-
   useEffect(() => {
     if (!error) {
       return
@@ -101,65 +95,60 @@ export function AppShell({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="pixel-icon"
-              disabled={!canUndo}
-              title="Undo (Ctrl+Z)"
-              onClick={onUndo}
-            >
-              Undo
-            </button>
-            <button
-              type="button"
-              className="pixel-icon"
-              disabled={!canRedo}
-              title="Redo (Ctrl+Shift+Z)"
-              onClick={onRedo}
-            >
-              Redo
-            </button>
-            <button
-              type="button"
-              className="pixel-icon"
-              title="Auto-layout"
-              onClick={onAutoLayout}
-            >
-              Auto-layout
-            </button>
-          </div>
-          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
-            <button type="button" className="pixel-icon" onClick={onOpenTestRuns}>
-              Test Runs
-            </button>
-            <button type="button" className="pixel-icon" onClick={onOpenActivityLog}>
-              Activity Log
-            </button>
-          </div>
-          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
-            <button
-              type="button"
-              className="pixel-icon"
-              onClick={() => setShowSettings(true)}
-            >
-              Settings
-            </button>
-            <UserMenu
-              email={email}
-              onLogout={onLogout}
-              onDeleteAccount={onDeleteAccount}
-            />
-          </div>
+          {activeView === 'editor' ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="pixel-icon"
+                disabled={!canUndo}
+                title="Undo (Ctrl+Z)"
+                onClick={onUndo}
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                className="pixel-icon"
+                disabled={!canRedo}
+                title="Redo (Ctrl+Shift+Z)"
+                onClick={onRedo}
+              >
+                Redo
+              </button>
+              <button
+                type="button"
+                className="pixel-icon"
+                title="Auto-layout"
+                onClick={onAutoLayout}
+              >
+                Auto-layout
+              </button>
+            </div>
+          ) : null}
+          <nav className="flex items-center gap-2 border-l border-white/10 pl-3" aria-label="Workspace">
+            {(
+              [
+                ['editor', 'Editor'],
+                ['test-runs', 'Test Runs'],
+                ['activity-log', 'Activity'],
+                ['settings', 'Settings'],
+                ['profile', 'Profile'],
+              ] as const
+            ).map(([view, label]) => (
+              <button
+                key={view}
+                type="button"
+                className={`pixel-icon ${activeView === view ? 'is-active' : ''}`}
+                aria-current={activeView === view ? 'page' : undefined}
+                title={view === 'profile' ? email : undefined}
+                onClick={() => onChangeView(view)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
-      {showSettings ? (
-        <SettingsModal
-          onClose={() => setShowSettings(false)}
-          onError={onError}
-          onPasswordChanged={onPasswordChanged}
-        />
-      ) : null}
       {error ? (
         <div className="pixel-banner flex items-center justify-between gap-3">
           <span>{error}</span>
@@ -174,7 +163,11 @@ export function AppShell({
       ) : null}
       <main
         className={`grid h-[calc(100vh-84px)] gap-3 px-4 pt-4 pb-4 ${
-          showInspector ? 'grid-cols-[280px_1fr_320px]' : 'grid-cols-[280px_1fr]'
+          activeView !== 'editor'
+            ? 'grid-cols-1'
+            : showInspector
+              ? 'grid-cols-[280px_1fr_320px]'
+              : 'grid-cols-[280px_1fr]'
         }`}
       >
         {children}

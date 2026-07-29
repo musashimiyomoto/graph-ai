@@ -299,11 +299,11 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Add connection
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="pixel-form-stack">
           <label className="pixel-label">
             Name
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="GitHub production"
@@ -312,7 +312,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
           <label className="pixel-label">
             Provider key
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={provider}
               onChange={(event) => setProvider(event.target.value.toLowerCase())}
               placeholder="github"
@@ -321,7 +321,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
           <label className="pixel-label">
             Authentication
             <select
-              className="pixel-input"
+              className="pixel-input compact"
               value={authType}
               onChange={(event) =>
                 setAuthType(event.target.value as ConnectionAuthType)
@@ -335,7 +335,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
           <label className="pixel-label">
             Scopes (space or comma separated)
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={scopes}
               onChange={(event) => setScopes(event.target.value)}
               placeholder="repo, read:user"
@@ -347,7 +347,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
               <label className="pixel-label">
                 API key
                 <input
-                  className="pixel-input"
+                  className="pixel-input medium"
                   type="password"
                   value={apiKey}
                   autoComplete="off"
@@ -357,7 +357,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
               <label className="pixel-label">
                 Header name
                 <input
-                  className="pixel-input"
+                  className="pixel-input medium"
                   value={headerName}
                   onChange={(event) => setHeaderName(event.target.value)}
                 />
@@ -365,7 +365,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
               <label className="pixel-label">
                 Value prefix
                 <input
-                  className="pixel-input"
+                  className="pixel-input compact"
                   value={prefix}
                   onChange={(event) => setPrefix(event.target.value)}
                   placeholder="Bearer"
@@ -377,7 +377,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
               <label className="pixel-label">
                 Authorization URL
                 <input
-                  className="pixel-input"
+                  className="pixel-input medium"
                   type="url"
                   value={authorizationUrl}
                   onChange={(event) => setAuthorizationUrl(event.target.value)}
@@ -387,7 +387,7 @@ export function ConnectionSettings({ onError }: ConnectionSettingsProps) {
               <label className="pixel-label">
                 Token URL
                 <input
-                  className="pixel-input"
+                  className="pixel-input medium"
                   type="url"
                   value={tokenUrl}
                   onChange={(event) => setTokenUrl(event.target.value)}

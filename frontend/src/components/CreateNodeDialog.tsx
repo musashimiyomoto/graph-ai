@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 
 import type { NodeCatalogItem } from '../lib/types'
 import { validateFields } from '../lib/validation'
-import { Modal } from './Modal'
 import { NodeFieldsForm } from './NodeFieldsForm'
 
 interface CreateNodeDialogProps {
@@ -50,8 +49,22 @@ export function CreateNodeDialog({
   }
 
   return (
-    <Modal onClose={onCancel} maxWidth="max-w-xl">
-      <div className="pixel-section-title">Create {nodeSpec.label} Node</div>
+    <aside className="pixel-panel pixel-scroll overflow-y-auto p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="pixel-section-title">Create node</div>
+          <div className="mt-2 text-lg text-[var(--text)]">{nodeSpec.label}</div>
+        </div>
+        <button
+          type="button"
+          className="pixel-icon"
+          aria-label="Cancel node creation"
+          disabled={submitting}
+          onClick={onCancel}
+        >
+          ✕
+        </button>
+      </div>
       <div className="mt-4 flex flex-col gap-3">
         <NodeFieldsForm
           fields={fields}
@@ -92,6 +105,6 @@ export function CreateNodeDialog({
           {submitting ? 'Creating...' : 'Create'}
         </button>
       </div>
-    </Modal>
+    </aside>
   )
 }

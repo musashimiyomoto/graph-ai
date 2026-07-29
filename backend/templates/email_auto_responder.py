@@ -65,5 +65,10 @@ DEFINITION = TemplateDefinition(
         "and emails it back to the sender. Pick an email account on the Input "
         "and Output nodes, and an LLM provider, after creating it."
     ),
+    category="Channels",
+    setup_steps=(
+        "Choose the inbox account on the Input and Output nodes.",
+        "Choose an LLM provider and model.",
+    ),
     graph=_GRAPH,
 )

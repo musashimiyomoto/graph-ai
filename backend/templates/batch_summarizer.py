@@ -79,5 +79,7 @@ DEFINITION = TemplateDefinition(
         "of one-sentence LLM summaries, one per item. Pick a provider and "
         "model on the Summarize node after creating it."
     ),
+    category="AI & Text",
+    setup_steps=("Choose an LLM provider and model.",),
     graph=_GRAPH,
 )

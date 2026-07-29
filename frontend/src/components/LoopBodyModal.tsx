@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react'
 import type { Edge, Node as FlowNode, NodeChange } from 'reactflow'
 
 import type { NodeCatalogItem, NodeType, PortCoercion } from '../lib/types'
@@ -40,13 +39,10 @@ interface LoopBodyModalProps {
   onClose: () => void
 }
 
-// Full-screen overlay for editing a Loop node's body — rather than swapping
-// out the main canvas (which made it easy to forget you'd navigated away
-// from the top-level graph), this makes the nested-editing context visually
-// explicit and gives it an obvious close affordance. z-40, one below the
-// generic Modal's z-50, so CreateNodeDialog still layers correctly on top
-// when creating a node from inside here.
+// Inline workspace for a Loop body. The persistent scope header and explicit
+// back action keep the nested context clear without covering the application.
 export function LoopBodyModal({
+  loopNodeId,
   loopLabel,
   activeWorkflowId,
   nodes,
@@ -72,72 +68,55 @@ export function LoopBodyModal({
   onOpenCalledWorkflow,
   onClose,
 }: LoopBodyModalProps) {
-  const backdropRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
   return (
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-40 flex flex-col gap-3 bg-[var(--bg)] p-4"
-      onMouseDown={(event) => {
-        if (event.target === backdropRef.current) {
-          onClose()
-        }
-      }}
-    >
-      <div className="pixel-panel flex items-center justify-between gap-3 px-4 py-2">
-        <div className="flex items-center gap-3">
-          <button type="button" className="pixel-icon" title="Close (Esc)" onClick={onClose}>
-            ✕ Close
+    <>
+      <aside className="pixel-panel pixel-scroll overflow-y-auto">
+        <div className="border-b border-white/10 p-3">
+          <button type="button" className="pixel-button ghost small w-full" onClick={onClose}>
+            ← Workflow graph
           </button>
-          <div className="font-pixel text-xs uppercase text-[var(--accent)]">
+          <div className="mt-3 text-xs uppercase tracking-wider text-[var(--accent)]">
             Loop: {loopLabel}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="pixel-icon"
-            disabled={!canUndo}
-            title="Undo (Ctrl+Z)"
-            onClick={onUndo}
-          >
-            Undo
-          </button>
-          <button
-            type="button"
-            className="pixel-icon"
-            disabled={!canRedo}
-            title="Redo (Ctrl+Shift+Z)"
-            onClick={onRedo}
-          >
-            Redo
-          </button>
-          <button type="button" className="pixel-icon" title="Auto-layout" onClick={onAutoLayout}>
-            Auto-layout
-          </button>
+        <NodePalette nodeCatalog={creatableNodeCatalog} onAddNode={onAddNode} />
+      </aside>
+      <section className="flex min-w-0 flex-col gap-3 overflow-hidden">
+        <div className="pixel-panel flex items-center justify-between gap-3 px-4 py-2">
+          <div className="text-sm text-[var(--muted)]">Editing loop body</div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="pixel-icon"
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              onClick={onUndo}
+            >
+              Undo
+            </button>
+            <button
+              type="button"
+              className="pixel-icon"
+              disabled={!canRedo}
+              title="Redo (Ctrl+Shift+Z)"
+              onClick={onRedo}
+            >
+              Redo
+            </button>
+            <button
+              type="button"
+              className="pixel-icon"
+              title="Auto-layout"
+              onClick={onAutoLayout}
+            >
+              Auto-layout
+            </button>
+          </div>
         </div>
-      </div>
-      <div
-        className={`grid flex-1 gap-3 overflow-hidden ${
-          selectedNode ? 'grid-cols-[280px_1fr_320px]' : 'grid-cols-[280px_1fr]'
-        }`}
-      >
-        <aside className="pixel-panel pixel-scroll overflow-y-auto">
-          <NodePalette nodeCatalog={creatableNodeCatalog} onAddNode={onAddNode} />
-        </aside>
+        <div className="min-h-0 flex-1">
         <GraphCanvas
           activeWorkflowId={activeWorkflowId}
-          activeParentNodeId={null}
+          activeParentNodeId={loopNodeId}
           nodes={nodes}
           edges={edges}
           nodeCatalog={nodeCatalog}
@@ -153,15 +132,16 @@ export function LoopBodyModal({
           onDrillIntoLoop={() => {}}
           onOpenCalledWorkflow={onOpenCalledWorkflow}
         />
-        {selectedNode ? (
-          <InspectorPanel
-            node={selectedNode}
-            nodeCatalog={nodeCatalog}
-            currentWorkflowId={activeWorkflowId}
-            onSaveNode={onSaveNode}
-          />
-        ) : null}
-      </div>
-    </div>
+        </div>
+      </section>
+      {selectedNode ? (
+        <InspectorPanel
+          node={selectedNode}
+          nodeCatalog={nodeCatalog}
+          currentWorkflowId={activeWorkflowId}
+          onSaveNode={onSaveNode}
+        />
+      ) : null}
+    </>
   )
 }

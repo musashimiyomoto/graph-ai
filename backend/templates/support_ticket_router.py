@@ -84,5 +84,7 @@ DEFINITION = TemplateDefinition(
         "standard, friendly response. Pick a provider on both LLM nodes "
         "after creating it."
     ),
+    category="AI & Text",
+    setup_steps=("Choose an LLM provider and model on both reply nodes.",),
     graph=_GRAPH,
 )

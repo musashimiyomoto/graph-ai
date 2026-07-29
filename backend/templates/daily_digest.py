@@ -86,5 +86,10 @@ DEFINITION = TemplateDefinition(
         "LLM-summarized digest over Telegram. Pick a provider and bot, and "
         "pin a chat ID on the Output node, after creating it."
     ),
+    category="Automation",
+    setup_steps=(
+        "Choose an LLM provider and model.",
+        "Choose a Telegram bot and destination chat.",
+    ),
     graph=_GRAPH,
 )

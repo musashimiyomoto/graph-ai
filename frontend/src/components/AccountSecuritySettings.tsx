@@ -42,11 +42,11 @@ export function AccountSecuritySettings({
     <div className="flex flex-col gap-6">
       <section>
         <div className="pixel-section-title mb-3">Change password</div>
-        <form className="flex flex-col gap-3" onSubmit={(event) => void handleSubmit(event)}>
+        <form className="pixel-form-stack" onSubmit={(event) => void handleSubmit(event)}>
           <label className="pixel-label">
             Current password
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               type="password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
@@ -57,7 +57,7 @@ export function AccountSecuritySettings({
           <label className="pixel-label">
             New password
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
@@ -69,7 +69,7 @@ export function AccountSecuritySettings({
           <label className="pixel-label">
             Confirm new password
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               type="password"
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}

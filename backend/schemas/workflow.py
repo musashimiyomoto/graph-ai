@@ -102,6 +102,11 @@ class WorkflowTemplateResponse(BaseModel):
     key: str = Field(default=..., description="Stable template identifier")
     name: str = Field(default=..., description="Display name")
     description: str = Field(default=..., description="What this template does")
+    category: str = Field(default=..., description="Catalog category")
+    setup_steps: list[str] = Field(
+        default=..., description="Configuration required before the first run"
+    )
+    node_count: int = Field(default=..., description="Number of graph nodes", ge=1)
 
 
 class WorkflowTemplateInstantiateRequest(BaseModel):

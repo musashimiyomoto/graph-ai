@@ -62,5 +62,10 @@ DEFINITION = TemplateDefinition(
         "the HTTP Request node's URL/headers for the endpoint to watch, "
         "and pin a provider/bot/chat ID after creating it."
     ),
+    category="Automation",
+    setup_steps=(
+        "Set the endpoint URL and any required headers.",
+        "Choose a Telegram bot and destination chat.",
+    ),
     graph=_GRAPH,
 )

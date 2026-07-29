@@ -77,11 +77,11 @@ export function PostgresConnectionSettings({
         <div className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]">
           Add connection
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="pixel-form-stack">
           <label className="pixel-label">
             Name
             <input
-              className="pixel-input"
+              className="pixel-input medium"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Analytics database"

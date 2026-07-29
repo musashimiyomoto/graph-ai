@@ -68,5 +68,10 @@ DEFINITION = TemplateDefinition(
         "Collections before using this flow, and pick an LLM provider after "
         "creating it."
     ),
+    category="Knowledge",
+    setup_steps=(
+        "Upload documents to the template's knowledge collection.",
+        "Choose an LLM provider and model.",
+    ),
     graph=_GRAPH,
 )

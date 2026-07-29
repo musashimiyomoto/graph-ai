@@ -45,7 +45,7 @@ interface NodePaletteProps {
 }
 
 // The draggable/clickable list of creatable node types — shared by the main
-// WorkflowSidebar (top-level scope) and LoopBodyModal (a loop's body scope),
+// WorkflowSidebar (top-level scope) and the Loop workspace (a loop's body scope),
 // each passing in an already scope-filtered catalog.
 export function NodePalette({ nodeCatalog, onAddNode }: NodePaletteProps) {
   return (

@@ -2,15 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { ActivityLog } from './components/ActivityLog'
 import { AppShell } from './components/AppShell'
+import type { WorkspaceView } from './components/AppShell'
 import { AuthScreen } from './components/AuthScreen'
 import { ChatPanel } from './components/ChatPanel'
 import { CreateNodeDialog } from './components/CreateNodeDialog'
 import { GraphCanvas } from './components/GraphCanvas'
 import { HistoryOverlay } from './components/HistoryOverlay'
-import type { HistoryTabId } from './components/HistoryOverlay'
 import { InspectorPanel } from './components/InspectorPanel'
 import { LoopBodyModal } from './components/LoopBodyModal'
 import { NewFromTemplateDialog } from './components/NewFromTemplateDialog'
+import { ProfilePage } from './components/ProfilePage'
+import { SettingsPage } from './components/SettingsPage'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
 import { useActivityLog } from './hooks/useActivityLog'
 import { useAuthSession } from './hooks/useAuthSession'
@@ -34,9 +36,8 @@ interface NodeCreateDraft {
 export function App() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
-  const [historyTab, setHistoryTab] = useState<HistoryTabId | null>(null)
+  const [activeView, setActiveView] = useState<WorkspaceView>('editor')
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
-  const [showNewFromTemplate, setShowNewFromTemplate] = useState<boolean>(false)
   const [workflowNavigationIds, setWorkflowNavigationIds] = useState<number[]>([])
   // Which Loop node's body the canvas is currently showing, or null for the
   // top-level graph — set by double-clicking into a Loop node.
@@ -192,6 +193,7 @@ export function App() {
     (workflowId: number) => {
       setWorkflowNavigationIds([])
       setActiveWorkflowId(workflowId)
+      setActiveView('editor')
     },
     [setActiveWorkflowId],
   )
@@ -258,7 +260,7 @@ export function App() {
     [nodes, activeParentNodeId],
   )
   // The main Inspector only shows a top-level selection — a loop-body
-  // selection is shown by LoopBodyModal's own Inspector instead.
+  // selection is shown by the inline Loop workspace's own Inspector instead.
   const mainSelectedNode = activeParentNodeId === null ? selectedNode : null
   // How many nodes live in each Loop's body — shown on the Loop node itself
   // so it's obvious there's something to drill into (see CustomNodes.tsx).
@@ -272,9 +274,8 @@ export function App() {
     }
     return counts
   }, [nodes])
-  // The main canvas always shows the top-level graph — drilling into a Loop
-  // opens LoopBodyModal on top instead of swapping this view out, so it's
-  // never possible to "forget" you're looking at a nested scope.
+  // The top-level graph and Loop body use separate workspace layouts. The
+  // Loop layout keeps an explicit scope header and back action visible.
   const topLevelNodes = useMemo(
     () =>
       nodes
@@ -382,6 +383,7 @@ export function App() {
     clearWorkflowState()
     setNodeCreateDraft(null)
     setWorkflowNavigationIds([])
+    setActiveView('editor')
     logoutAuth()
   }, [clearExecutions, clearGraphState, clearWorkflowState, logoutAuth])
 
@@ -392,6 +394,7 @@ export function App() {
     clearWorkflowState()
     setNodeCreateDraft(null)
     setWorkflowNavigationIds([])
+    setActiveView('editor')
   }, [clearExecutions, clearGraphState, clearWorkflowState, deleteAccountAuth])
 
   // App-wide graph-editor shortcuts. Skipped while focused in an editable
@@ -511,6 +514,17 @@ export function App() {
     [createNodeWithData, handleError, nodeCreateDraft],
   )
 
+  const handleChangeView = useCallback(
+    (view: WorkspaceView) => {
+      setActiveView(view)
+      if (view !== 'editor') {
+        setNodeCreateDraft(null)
+        handleSelectionChange([], [])
+      }
+    },
+    [handleSelectionChange],
+  )
+
   if (!token) {
     return (
       <AuthScreen
@@ -532,28 +546,28 @@ export function App() {
   }
 
   return (
-    <>
       <AppShell
         email={email}
         workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
         workflowBreadcrumbs={workflowBreadcrumbs}
         onNavigateBreadcrumb={handleNavigateBreadcrumb}
-        showInspector={mainSelectedNode !== null}
+        showInspector={
+          nodeCreateDraft !== null ||
+          (activeParentNodeId === null ? mainSelectedNode !== null : selectedNode !== null)
+        }
         error={error}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={() => void undo()}
         onRedo={() => void redo()}
         onAutoLayout={() => void handleAutoLayout()}
-        onOpenTestRuns={() => setHistoryTab('test-runs')}
-        onOpenActivityLog={() => setHistoryTab('activity-log')}
+        activeView={activeView}
+        onChangeView={handleChangeView}
         onDismissError={() => setError(null)}
-        onLogout={handleLogout}
-        onDeleteAccount={handleDeleteAccount}
-        onPasswordChanged={handlePasswordChanged}
-        onError={handleError}
       >
-        <WorkflowSidebar
+        {activeView === 'editor' && activeParentNodeId === null ? (
+          <>
+          <WorkflowSidebar
           workflows={workflows}
           activeWorkflowId={activeWorkflowId}
           activeWorkflowStatus={lastExecution?.status ?? null}
@@ -573,7 +587,7 @@ export function App() {
           onCopyWebhook={handleCopyWebhook}
           onCopyWebChat={handleCopyWebChat}
           onImportWorkflow={(file) => void handleImportWorkflow(file)}
-          onOpenNewFromTemplate={() => setShowNewFromTemplate(true)}
+          onOpenNewFromTemplate={() => setActiveView('templates')}
           onAddNode={handleAddTopLevelNode}
         />
         <GraphCanvas
@@ -597,7 +611,16 @@ export function App() {
           }}
           onOpenCalledWorkflow={handleOpenCalledWorkflow}
         />
-        {mainSelectedNode ? (
+        {nodeCreateDraft ? (
+          <CreateNodeDialog
+            key={`${nodeCreateDraft.type}:${nodeCreateDraft.position.x}:${nodeCreateDraft.position.y}`}
+            nodeSpec={createNodeSpec}
+            initialData={createNodeInitialData}
+            currentWorkflowId={activeWorkflowId}
+            onCancel={() => setNodeCreateDraft(null)}
+            onConfirm={confirmCreateNode}
+          />
+        ) : mainSelectedNode ? (
           <InspectorPanel
             node={mainSelectedNode}
             nodeCatalog={nodeCatalog}
@@ -605,10 +628,12 @@ export function App() {
             onSaveNode={handleUpdateNodeData}
           />
         ) : null}
-      </AppShell>
+          </>
+        ) : null}
 
-      {activeParentNodeId !== null && activeParentNode ? (
-        <LoopBodyModal
+        {activeView === 'editor' && activeParentNodeId !== null && activeParentNode ? (
+          <>
+          <LoopBodyModal
           key={activeParentNodeId}
           loopNodeId={activeParentNodeId}
           loopLabel={String(activeParentNode.data?.label ?? 'Loop')}
@@ -617,7 +642,7 @@ export function App() {
           edges={loopBodyEdges}
           nodeCatalog={nodeCatalog}
           creatableNodeCatalog={loopBodyNodeCatalog}
-          selectedNode={selectedNode}
+          selectedNode={nodeCreateDraft ? null : selectedNode}
           selectedCount={selectedNodeIds.length}
           canUndo={canUndo}
           canRedo={canRedo}
@@ -639,14 +664,25 @@ export function App() {
             setActiveParentNodeId(null)
           }}
         />
-      ) : null}
+        {nodeCreateDraft ? (
+          <CreateNodeDialog
+            key={`${nodeCreateDraft.type}:${nodeCreateDraft.position.x}:${nodeCreateDraft.position.y}`}
+            nodeSpec={createNodeSpec}
+            initialData={createNodeInitialData}
+            currentWorkflowId={activeWorkflowId}
+            onCancel={() => setNodeCreateDraft(null)}
+            onConfirm={confirmCreateNode}
+          />
+        ) : null}
+          </>
+        ) : null}
 
-      {historyTab ? (
+      {activeView === 'test-runs' || activeView === 'activity-log' ? (
         <HistoryOverlay
-          title={historyTab === 'test-runs' ? 'Test Runs' : 'Activity Log'}
-          onClose={() => setHistoryTab(null)}
+          title={activeView === 'test-runs' ? 'Test Runs' : 'Activity Log'}
+          onClose={() => setActiveView('editor')}
         >
-          {historyTab === 'test-runs' ? (
+          {activeView === 'test-runs' ? (
             <ChatPanel
               workflowName={activeWorkflow?.name ?? 'Untitled workflow'}
               hasWorkflow={activeWorkflowId !== null}
@@ -681,28 +717,27 @@ export function App() {
         </HistoryOverlay>
       ) : null}
 
-      <CreateNodeDialog
-        key={
-          nodeCreateDraft
-            ? `${nodeCreateDraft.type}:${nodeCreateDraft.position.x}:${nodeCreateDraft.position.y}`
-            : 'no-draft'
-        }
-        nodeSpec={createNodeSpec}
-        initialData={createNodeInitialData}
-        currentWorkflowId={activeWorkflowId}
-        onCancel={() => setNodeCreateDraft(null)}
-        onConfirm={confirmCreateNode}
-      />
-
-      {showNewFromTemplate ? (
+      {activeView === 'templates' ? (
         <NewFromTemplateDialog
-          onCancel={() => setShowNewFromTemplate(false)}
-          onConfirm={async (templateKey) => {
-            await handleInstantiateTemplate(templateKey)
-            setShowNewFromTemplate(false)
+          onCancel={() => setActiveView('editor')}
+          onConfirm={async (templateKey, name) => {
+            await handleInstantiateTemplate(templateKey, name)
+            setActiveView('editor')
           }}
         />
       ) : null}
-    </>
+
+      {activeView === 'settings' ? <SettingsPage onError={handleError} /> : null}
+
+      {activeView === 'profile' ? (
+        <ProfilePage
+          email={email}
+          onError={handleError}
+          onPasswordChanged={handlePasswordChanged}
+          onLogout={handleLogout}
+          onDeleteAccount={handleDeleteAccount}
+        />
+      ) : null}
+      </AppShell>
   )
 }

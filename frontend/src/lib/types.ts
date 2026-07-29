@@ -178,6 +178,9 @@ export interface WorkflowTemplate {
   key: string
   name: string
   description: string
+  category: string
+  setup_steps: string[]
+  node_count: number
 }
 
 export interface TokenStreamEvent {

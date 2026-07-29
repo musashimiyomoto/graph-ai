@@ -366,6 +366,9 @@ class WorkflowTransferUsecase:
                 key=definition.key,
                 name=definition.name,
                 description=definition.description,
+                category=definition.category,
+                setup_steps=list(definition.setup_steps),
+                node_count=len(definition.graph.nodes),
             )
             for definition in TEMPLATE_DEFINITIONS
         ]

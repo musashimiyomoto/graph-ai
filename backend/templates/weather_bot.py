@@ -67,5 +67,7 @@ DEFINITION = TemplateDefinition(
         "keyless wttr.in API) plus a short LLM comment on what to wear. "
         "Pick a provider on the Add Commentary node after creating it."
     ),
+    category="AI & Text",
+    setup_steps=("Choose an LLM provider and model.",),
     graph=_GRAPH,
 )

@@ -228,7 +228,7 @@ export function MCPServerSettings({ onError }: MCPServerSettingsProps) {
                 </button>
               ) : null}
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="pixel-form-stack">
               {catalogServer ? (
                 <div className="text-xs text-[var(--accent-2)]">
                   Configuring {catalogServer.registry_name} v{catalogServer.version}
@@ -237,7 +237,7 @@ export function MCPServerSettings({ onError }: MCPServerSettingsProps) {
               <label className="pixel-label">
                 Name
                 <input
-                  className="pixel-input"
+                  className="pixel-input medium"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Company tools"
