@@ -75,12 +75,15 @@ This copies `.env.example` → `.env` and runs `docker compose up --build`.
 | Backend (Swagger)| http://localhost:5000/docs         |
 | Metrics          | http://localhost:5000/metrics      |
 | ARQ dashboard    | http://localhost:8000              |
+| Mailpit inbox    | http://localhost:8025              |
 | Qdrant dashboard | http://localhost:6333/dashboard    |
 | MinIO API        | http://localhost:9000              |
 | MinIO console    | http://localhost:9001              |
 | Ollama           | http://localhost:11434             |
 
-Postgres (`5432`) and Redis (`6379`) are also exposed for local tooling.
+Postgres (`5432`), Redis (`6379`), and Mailpit SMTP (`1025`) are also exposed
+for local tooling. Account verification and password-reset emails sent by the
+Docker backend are captured in the Mailpit inbox.
 
 Inbound webhook calls must include a provider-stable `Idempotency-Key` header.
 Retries with the same key return the original execution instead of queuing a
