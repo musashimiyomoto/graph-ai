@@ -21,7 +21,10 @@ interface UseWorkflowTransferResult {
   handleDuplicateWorkflow: (workflowId: number) => Promise<void>
   handleExportWorkflow: (workflowId: number) => Promise<void>
   handleImportWorkflow: (file: File) => Promise<void>
-  handleInstantiateTemplate: (templateKey: string, name?: string) => Promise<void>
+  handleInstantiateTemplate: (
+    templateKey: string,
+    name?: string,
+  ) => Promise<Workflow | null>
 }
 
 function downloadJson(filename: string, data: unknown): void {
@@ -120,14 +123,16 @@ export function useWorkflowTransfer({
   )
 
   const handleInstantiateTemplate = useCallback(
-    async (templateKey: string, name?: string): Promise<void> => {
+    async (templateKey: string, name?: string): Promise<Workflow | null> => {
       setLoading(true)
       try {
         const created = await instantiateWorkflowTemplate(templateKey, name)
         addWorkflowToCache(created)
         setError(null)
+        return created
       } catch (error) {
         handleError(error as ApiError)
+        return null
       } finally {
         setLoading(false)
       }

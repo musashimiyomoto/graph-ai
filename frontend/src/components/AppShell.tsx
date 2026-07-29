@@ -131,6 +131,7 @@ export function AppShell({
                 ['editor', 'Editor'],
                 ['test-runs', 'Test Runs'],
                 ['activity-log', 'Activity'],
+                ['templates', 'Templates'],
                 ['settings', 'Settings'],
                 ['profile', 'Profile'],
               ] as const

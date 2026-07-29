@@ -13,6 +13,7 @@ import { LoopBodyModal } from './components/LoopBodyModal'
 import { NewFromTemplateDialog } from './components/NewFromTemplateDialog'
 import { ProfilePage } from './components/ProfilePage'
 import { SettingsPage } from './components/SettingsPage'
+import { TemplateSetupPanel } from './components/TemplateSetupPanel'
 import { WorkflowSidebar } from './components/WorkflowSidebar'
 import { useActivityLog } from './hooks/useActivityLog'
 import { useAuthSession } from './hooks/useAuthSession'
@@ -23,7 +24,14 @@ import { useWorkflowState } from './hooks/useWorkflowState'
 import { useWorkflowTransfer } from './hooks/useWorkflowTransfer'
 import { publicWebhookUrl, webChatEmbedSnippet } from './lib/api'
 import { resolvePortType } from './lib/ports'
-import type { ApiError, NodeMeta, NodeType, Workflow } from './lib/types'
+import type {
+  ApiError,
+  NodeMeta,
+  NodeType,
+  SettingsSectionId,
+  Workflow,
+  WorkflowTemplate,
+} from './lib/types'
 
 interface NodeCreateDraft {
   type: NodeType
@@ -38,6 +46,10 @@ export function App() {
   const [loading, setLoading] = useState<boolean>(false)
   const [activeView, setActiveView] = useState<WorkspaceView>('editor')
   const [nodeCreateDraft, setNodeCreateDraft] = useState<NodeCreateDraft | null>(null)
+  const [settingsSectionId, setSettingsSectionId] =
+    useState<SettingsSectionId>('connections')
+  const [templateSetupGuide, setTemplateSetupGuide] =
+    useState<WorkflowTemplate | null>(null)
   const [workflowNavigationIds, setWorkflowNavigationIds] = useState<number[]>([])
   // Which Loop node's body the canvas is currently showing, or null for the
   // top-level graph — set by double-clicking into a Loop node.
@@ -90,6 +102,7 @@ export function App() {
     handleError,
     onWorkflowCreated: (created) => {
       setWorkflowNavigationIds([])
+      setTemplateSetupGuide(null)
       setActiveWorkflowId(created.id)
     },
   })
@@ -192,6 +205,7 @@ export function App() {
   const handleSelectWorkflow = useCallback(
     (workflowId: number) => {
       setWorkflowNavigationIds([])
+      setTemplateSetupGuide(null)
       setActiveWorkflowId(workflowId)
       setActiveView('editor')
     },
@@ -382,6 +396,7 @@ export function App() {
     clearGraphState()
     clearWorkflowState()
     setNodeCreateDraft(null)
+    setTemplateSetupGuide(null)
     setWorkflowNavigationIds([])
     setActiveView('editor')
     logoutAuth()
@@ -393,6 +408,7 @@ export function App() {
     clearGraphState()
     clearWorkflowState()
     setNodeCreateDraft(null)
+    setTemplateSetupGuide(null)
     setWorkflowNavigationIds([])
     setActiveView('editor')
   }, [clearExecutions, clearGraphState, clearWorkflowState, deleteAccountAuth])
@@ -525,6 +541,14 @@ export function App() {
     [handleSelectionChange],
   )
 
+  const handleOpenSettings = useCallback(
+    (sectionId: SettingsSectionId) => {
+      setSettingsSectionId(sectionId)
+      handleChangeView('settings')
+    },
+    [handleChangeView],
+  )
+
   if (!token) {
     return (
       <AuthScreen
@@ -553,7 +577,9 @@ export function App() {
         onNavigateBreadcrumb={handleNavigateBreadcrumb}
         showInspector={
           nodeCreateDraft !== null ||
-          (activeParentNodeId === null ? mainSelectedNode !== null : selectedNode !== null)
+          (activeParentNodeId === null
+            ? mainSelectedNode !== null || templateSetupGuide !== null
+            : selectedNode !== null)
         }
         error={error}
         canUndo={canUndo}
@@ -626,6 +652,12 @@ export function App() {
             nodeCatalog={nodeCatalog}
             currentWorkflowId={activeWorkflowId}
             onSaveNode={handleUpdateNodeData}
+          />
+        ) : templateSetupGuide ? (
+          <TemplateSetupPanel
+            template={templateSetupGuide}
+            onOpenSettings={handleOpenSettings}
+            onDismiss={() => setTemplateSetupGuide(null)}
           />
         ) : null}
           </>
@@ -720,14 +752,26 @@ export function App() {
       {activeView === 'templates' ? (
         <NewFromTemplateDialog
           onCancel={() => setActiveView('editor')}
-          onConfirm={async (templateKey, name) => {
-            await handleInstantiateTemplate(templateKey, name)
+          onOpenSettings={handleOpenSettings}
+          onConfirm={async (template, name) => {
+            const created = await handleInstantiateTemplate(template.key, name)
+            if (!created) {
+              return
+            }
+            setTemplateSetupGuide(
+              template.setup_steps.length > 0 ? template : null,
+            )
             setActiveView('editor')
           }}
         />
       ) : null}
 
-      {activeView === 'settings' ? <SettingsPage onError={handleError} /> : null}
+      {activeView === 'settings' ? (
+        <SettingsPage
+          onError={handleError}
+          initialSectionId={settingsSectionId}
+        />
+      ) : null}
 
       {activeView === 'profile' ? (
         <ProfilePage

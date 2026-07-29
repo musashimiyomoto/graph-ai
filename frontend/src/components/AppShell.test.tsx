@@ -40,6 +40,8 @@ describe('AppShell', () => {
     )
     await user.click(screen.getByRole('button', { name: 'Profile' }))
     expect(onChangeView).toHaveBeenCalledWith('profile')
+    await user.click(screen.getByRole('button', { name: 'Templates' }))
+    expect(onChangeView).toHaveBeenCalledWith('templates')
   })
 
   it('keeps editor controls out of non-editor pages', () => {

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from enums import TemplateSettingsSection
 from schemas import WorkflowGraphTransfer
 
 
@@ -20,4 +21,5 @@ class TemplateDefinition:
     description: str
     category: str
     setup_steps: tuple[str, ...]
+    settings_sections: tuple[TemplateSettingsSection, ...]
     graph: WorkflowGraphTransfer

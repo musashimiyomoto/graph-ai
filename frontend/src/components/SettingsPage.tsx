@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useChannelCatalog } from '../hooks/useChannelCatalog'
-import type { ApiError } from '../lib/types'
+import type { ApiError, SettingsSectionId } from '../lib/types'
 import { ConnectionSettings } from './ConnectionSettings'
 import { EmailSettings } from './EmailSettings'
 import { MCPServerSettings } from './MCPServerSettings'
@@ -12,6 +12,7 @@ import { VectorCollectionSettings } from './VectorCollectionSettings'
 
 interface SettingsPageProps {
   onError: (err: ApiError) => void
+  initialSectionId?: SettingsSectionId
 }
 
 interface SettingsSection {
@@ -64,8 +65,11 @@ const CHANNEL_SETTINGS_COMPONENTS: Partial<
   email: EmailSettings,
 }
 
-export function SettingsPage({ onError }: SettingsPageProps) {
-  const [activeSectionId, setActiveSectionId] = useState('connections')
+export function SettingsPage({
+  onError,
+  initialSectionId = 'connections',
+}: SettingsPageProps) {
+  const [activeSectionId, setActiveSectionId] = useState(initialSectionId)
   const { channelCatalog } = useChannelCatalog({ handleError: onError })
   const sections = useMemo<SettingsSection[]>(() => {
     const channelSections = channelCatalog.flatMap((channel) => {
@@ -93,6 +97,10 @@ export function SettingsPage({ onError }: SettingsPageProps) {
   }, [channelCatalog])
   const activeSection =
     sections.find((section) => section.id === activeSectionId) ?? sections[0]
+
+  useEffect(() => {
+    setActiveSectionId(initialSectionId)
+  }, [initialSectionId])
 
   return (
     <section className="pixel-panel grid min-h-0 grid-cols-[240px_1fr] overflow-hidden">

@@ -116,5 +116,6 @@ DEFINITION = TemplateDefinition(
     ),
     category="AI & Text",
     setup_steps=(),
+    settings_sections=(),
     graph=_GRAPH,
 )

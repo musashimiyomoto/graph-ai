@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from enums import NodeType, PortCoercion
+from enums import NodeType, PortCoercion, TemplateSettingsSection
 from utils.web_chat import build_web_chat_path
 from utils.webhooks import build_webhook_path
 
@@ -105,6 +105,10 @@ class WorkflowTemplateResponse(BaseModel):
     category: str = Field(default=..., description="Catalog category")
     setup_steps: list[str] = Field(
         default=..., description="Configuration required before the first run"
+    )
+    settings_sections: list[TemplateSettingsSection] = Field(
+        default=...,
+        description="Settings pages containing resources required by the template",
     )
     node_count: int = Field(default=..., description="Number of graph nodes", ge=1)
 

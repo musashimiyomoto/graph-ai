@@ -1,6 +1,6 @@
 """Embeddable web-chat template: Input(web_chat) -> LLM -> Output(web_chat)."""
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -47,6 +47,11 @@ DEFINITION = TemplateDefinition(
         "copy the embed snippet from the workflow menu."
     ),
     category="Channels",
-    setup_steps=("Choose an LLM provider and model.",),
+    setup_steps=(
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Select the Chat Assistant node and choose its provider and model.",
+        "Open the workflow menu and copy the web-chat embed snippet.",
+    ),
+    settings_sections=(TemplateSettingsSection.PROVIDERS,),
     graph=_GRAPH,
 )

@@ -6,7 +6,7 @@ the "documents" collection once via the Vector Collections upload UI
 (Settings), then use this flow to query it.
 """
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -70,8 +70,13 @@ DEFINITION = TemplateDefinition(
     ),
     category="Knowledge",
     setup_steps=(
-        "Upload documents to the template's knowledge collection.",
-        "Choose an LLM provider and model.",
+        'Create or upload documents to the "documents" collection in Settings -> Knowledge Sources.',
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Select the Answer node and choose its provider and model.",
+    ),
+    settings_sections=(
+        TemplateSettingsSection.VECTORS,
+        TemplateSettingsSection.PROVIDERS,
     ),
     graph=_GRAPH,
 )

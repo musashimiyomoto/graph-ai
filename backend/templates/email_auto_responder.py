@@ -6,7 +6,7 @@ the Output node replies to the sender and derives a conventional reply subject
 from the incoming message.
 """
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -67,8 +67,13 @@ DEFINITION = TemplateDefinition(
     ),
     category="Channels",
     setup_steps=(
-        "Choose the inbox account on the Input and Output nodes.",
-        "Choose an LLM provider and model.",
+        "Add an inbox in Settings -> Email Accounts.",
+        "Select the Support Inbox and Email Reply nodes and choose that account.",
+        "Add an LLM provider in Settings -> LLM Providers, then select it on the Draft Reply node.",
+    ),
+    settings_sections=(
+        TemplateSettingsSection.EMAIL,
+        TemplateSettingsSection.PROVIDERS,
     ),
     graph=_GRAPH,
 )

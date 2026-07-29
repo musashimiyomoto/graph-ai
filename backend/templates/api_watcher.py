@@ -6,7 +6,13 @@ Telegram. Edit the URL/headers on the HTTP Request node for the endpoint to
 watch, and the cron expression on the Input node for how often.
 """
 
-from enums import HttpMethod, InputNodeFormat, NodeType, OutputNodeFormat
+from enums import (
+    HttpMethod,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+    TemplateSettingsSection,
+)
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -64,8 +70,9 @@ DEFINITION = TemplateDefinition(
     ),
     category="Automation",
     setup_steps=(
-        "Set the endpoint URL and any required headers.",
-        "Choose a Telegram bot and destination chat.",
+        "Select Check Endpoint and set its URL and any required headers.",
+        "Add a bot in Settings -> Telegram Bots, then choose it and a destination chat on Notify.",
     ),
+    settings_sections=(TemplateSettingsSection.TELEGRAM,),
     graph=_GRAPH,
 )

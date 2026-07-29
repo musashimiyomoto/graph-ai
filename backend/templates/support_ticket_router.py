@@ -7,7 +7,13 @@ for it — the other is recorded as SKIPPED and contributes nothing (see
 `ExecutionUsecase._resolve_live_parents`).
 """
 
-from enums import ConditionType, InputNodeFormat, NodeType, OutputNodeFormat
+from enums import (
+    ConditionType,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+    TemplateSettingsSection,
+)
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -85,6 +91,10 @@ DEFINITION = TemplateDefinition(
         "after creating it."
     ),
     category="AI & Text",
-    setup_steps=("Choose an LLM provider and model on both reply nodes.",),
+    setup_steps=(
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Select both Escalate and Standard Reply and choose their provider and model.",
+    ),
+    settings_sections=(TemplateSettingsSection.PROVIDERS,),
     graph=_GRAPH,
 )

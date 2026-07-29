@@ -5,7 +5,7 @@ user picks their bot (and an LLM provider) after creating the workflow, same
 as any node whose datasource reference starts unset.
 """
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -60,8 +60,13 @@ DEFINITION = TemplateDefinition(
     ),
     category="Channels",
     setup_steps=(
-        "Choose the Telegram bot on the Input and Output nodes.",
-        "Choose an LLM provider and model.",
+        "Add a bot token in Settings -> Telegram Bots.",
+        "Select the Telegram Message and Telegram Reply nodes and choose the bot.",
+        "Add an LLM provider in Settings -> LLM Providers, then select it on the Assistant node.",
+    ),
+    settings_sections=(
+        TemplateSettingsSection.TELEGRAM,
+        TemplateSettingsSection.PROVIDERS,
     ),
     graph=_GRAPH,
 )

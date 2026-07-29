@@ -15,6 +15,7 @@ const TEMPLATES: WorkflowTemplate[] = [
     description: 'A minimal LLM chat flow.',
     category: 'AI & Text',
     setup_steps: ['Choose an LLM provider and model.'],
+    settings_sections: ['providers'],
     node_count: 3,
   },
   {
@@ -23,6 +24,7 @@ const TEMPLATES: WorkflowTemplate[] = [
     description: 'Draft and send email replies.',
     category: 'Channels',
     setup_steps: ['Choose an email account.'],
+    settings_sections: ['email'],
     node_count: 3,
   },
   {
@@ -31,6 +33,7 @@ const TEMPLATES: WorkflowTemplate[] = [
     description: 'Shorten a long text without an LLM.',
     category: 'AI & Text',
     setup_steps: [],
+    settings_sections: [],
     node_count: 7,
   },
 ]
@@ -46,8 +49,15 @@ describe('NewFromTemplateDialog', () => {
   it('filters by category and creates the selected template with a custom name', async () => {
     const user = userEvent.setup()
     const onConfirm = vi.fn().mockResolvedValue(undefined)
+    const onOpenSettings = vi.fn()
 
-    render(<NewFromTemplateDialog onCancel={vi.fn()} onConfirm={onConfirm} />)
+    render(
+      <NewFromTemplateDialog
+        onCancel={vi.fn()}
+        onConfirm={onConfirm}
+        onOpenSettings={onOpenSettings}
+      />,
+    )
 
     await user.click(screen.getByRole('button', { name: 'Channels' }))
     expect(screen.queryByRole('button', { name: /Simple Chatbot/ })).not.toBeInTheDocument()
@@ -59,14 +69,36 @@ describe('NewFromTemplateDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Create workflow' }))
 
     await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledWith('email-auto-responder', 'Support Inbox')
+      expect(onConfirm).toHaveBeenCalledWith(TEMPLATES[1], 'Support Inbox')
     })
+  })
+
+  it('opens the settings page required by the selected template', async () => {
+    const user = userEvent.setup()
+    const onOpenSettings = vi.fn()
+
+    render(
+      <NewFromTemplateDialog
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        onOpenSettings={onOpenSettings}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Open LLM Providers' }))
+    expect(onOpenSettings).toHaveBeenCalledWith('providers')
   })
 
   it('searches setup metadata and identifies templates ready to run', async () => {
     const user = userEvent.setup()
 
-    render(<NewFromTemplateDialog onCancel={vi.fn()} onConfirm={vi.fn()} />)
+    render(
+      <NewFromTemplateDialog
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    )
 
     await user.type(screen.getByLabelText('Search templates'), 'without an llm')
     expect(screen.getByRole('button', { name: /Text Compactor/ })).toBeInTheDocument()

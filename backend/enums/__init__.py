@@ -19,6 +19,7 @@ from enums.node import (
     TableSource,
 )
 from enums.state import StateHistoryOperation, StateScope
+from enums.template import TemplateSettingsSection
 from enums.validator import ValidatorType
 
 __all__ = [
@@ -42,5 +43,6 @@ __all__ = [
     "StateHistoryOperation",
     "StateScope",
     "TableSource",
+    "TemplateSettingsSection",
     "ValidatorType",
 ]

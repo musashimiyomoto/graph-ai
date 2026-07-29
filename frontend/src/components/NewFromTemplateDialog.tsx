@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { useWorkflowTemplates } from '../hooks/useWorkflowTemplates'
-import type { WorkflowTemplate } from '../lib/types'
+import { getSettingsSectionLabel } from '../lib/settingsSections'
+import type { SettingsSectionId, WorkflowTemplate } from '../lib/types'
 
 interface NewFromTemplateDialogProps {
   onCancel: () => void
-  onConfirm: (templateKey: string, name: string) => Promise<void>
+  onConfirm: (template: WorkflowTemplate, name: string) => Promise<void>
+  onOpenSettings: (sectionId: SettingsSectionId) => void
 }
 
 const ALL_CATEGORIES = 'All'
@@ -34,6 +36,7 @@ function filterTemplates(
 export function NewFromTemplateDialog({
   onCancel,
   onConfirm,
+  onOpenSettings,
 }: NewFromTemplateDialogProps) {
   const { templates, loading } = useWorkflowTemplates()
   const [creatingKey, setCreatingKey] = useState<string | null>(null)
@@ -92,7 +95,7 @@ export function NewFromTemplateDialog({
     }
     setCreatingKey(selectedTemplate.key)
     try {
-      await onConfirm(selectedTemplate.key, name)
+      await onConfirm(selectedTemplate, name)
     } finally {
       setCreatingKey(null)
     }
@@ -232,6 +235,21 @@ export function NewFromTemplateDialog({
                         Ready to run — no connections required.
                       </div>
                     )}
+                    {selectedTemplate.settings_sections.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {selectedTemplate.settings_sections.map((sectionId) => (
+                          <button
+                            key={sectionId}
+                            type="button"
+                            className="pixel-button ghost small"
+                            disabled={creatingKey !== null}
+                            onClick={() => onOpenSettings(sectionId)}
+                          >
+                            Open {getSettingsSectionLabel(sectionId)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
 
                   <label className="mt-6 block text-xs text-[var(--muted)]">

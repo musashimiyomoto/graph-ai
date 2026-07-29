@@ -6,7 +6,13 @@ pin first. Demonstrates HTTP Request's `{{input}}` URL substitution feeding
 straight into an LLM for a bit of natural-language framing.
 """
 
-from enums import HttpMethod, InputNodeFormat, NodeType, OutputNodeFormat
+from enums import (
+    HttpMethod,
+    InputNodeFormat,
+    NodeType,
+    OutputNodeFormat,
+    TemplateSettingsSection,
+)
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -68,6 +74,10 @@ DEFINITION = TemplateDefinition(
         "Pick a provider on the Add Commentary node after creating it."
     ),
     category="AI & Text",
-    setup_steps=("Choose an LLM provider and model.",),
+    setup_steps=(
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Select Add Commentary and choose its provider and model.",
+    ),
+    settings_sections=(TemplateSettingsSection.PROVIDERS,),
     graph=_GRAPH,
 )

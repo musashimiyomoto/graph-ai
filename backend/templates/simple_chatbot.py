@@ -5,7 +5,7 @@ llm_provider_id is left unset (same as any freshly imported graph); the user
 picks their provider in the node inspector after creating the workflow.
 """
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -49,6 +49,10 @@ DEFINITION = TemplateDefinition(
         "reply comes back as output. Pick a provider after creating it."
     ),
     category="AI & Text",
-    setup_steps=("Choose an LLM provider and model.",),
+    setup_steps=(
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Select the Assistant node and choose its provider and model.",
+    ),
+    settings_sections=(TemplateSettingsSection.PROVIDERS,),
     graph=_GRAPH,
 )

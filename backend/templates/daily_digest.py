@@ -11,7 +11,7 @@ reaches someone; pin a chat ID (or provider/bot) after creating it, same as
 any node whose reference starts unset.
 """
 
-from enums import InputNodeFormat, NodeType, OutputNodeFormat
+from enums import InputNodeFormat, NodeType, OutputNodeFormat, TemplateSettingsSection
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -88,8 +88,12 @@ DEFINITION = TemplateDefinition(
     ),
     category="Automation",
     setup_steps=(
-        "Choose an LLM provider and model.",
-        "Choose a Telegram bot and destination chat.",
+        "Add an LLM provider in Settings -> LLM Providers, then select it on the Summarize node.",
+        "Add a bot in Settings -> Telegram Bots, then choose it and a destination chat on Deliver Digest.",
+    ),
+    settings_sections=(
+        TemplateSettingsSection.PROVIDERS,
+        TemplateSettingsSection.TELEGRAM,
     ),
     graph=_GRAPH,
 )

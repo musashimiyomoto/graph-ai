@@ -53,5 +53,6 @@ DEFINITION = TemplateDefinition(
     ),
     category="Knowledge",
     setup_steps=(),
+    settings_sections=(),
     graph=_GRAPH,
 )

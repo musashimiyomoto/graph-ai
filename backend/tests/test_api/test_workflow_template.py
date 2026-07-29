@@ -45,6 +45,7 @@ class TestWorkflowTemplateList(BaseTestCase):
                     "description",
                     "category",
                     "setup_steps",
+                    "settings_sections",
                     "node_count",
                 },
             )
@@ -53,8 +54,36 @@ class TestWorkflowTemplateList(BaseTestCase):
                 pytest.fail("Template category did not match its definition")
             if item["setup_steps"] != list(definition.setup_steps):
                 pytest.fail("Template setup steps did not match its definition")
+            if item["settings_sections"] != list(definition.settings_sections):
+                pytest.fail("Template settings sections did not match its definition")
             if item["node_count"] != len(definition.graph.nodes):
                 pytest.fail("Template node count did not match its graph")
+
+
+@pytest.mark.parametrize(
+    ("key", "expected_types"),
+    [
+        (
+            "quick-translate",
+            [NodeType.INPUT, NodeType.TRANSLATE, NodeType.OUTPUT],
+        ),
+        (
+            "approval-gate",
+            [NodeType.INPUT, NodeType.APPROVAL, NodeType.OUTPUT],
+        ),
+        (
+            "webhook-telegram-alert",
+            [NodeType.INPUT, NodeType.TEMPLATE, NodeType.OUTPUT],
+        ),
+    ],
+)
+def test_new_starter_templates_have_expected_graphs(
+    key: str, expected_types: list[NodeType]
+) -> None:
+    """The expanded catalog uses the intended small vertical slices."""
+    definition = get_template_definition(key)
+    if [node.type for node in definition.graph.nodes] != expected_types:
+        pytest.fail(f"Unexpected graph for {key}")
 
 
 def test_email_auto_responder_template_uses_email_channel() -> None:

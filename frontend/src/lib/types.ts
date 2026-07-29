@@ -174,12 +174,22 @@ export interface WorkflowExport {
   graph: WorkflowGraphTransfer
 }
 
+export type SettingsSectionId =
+  | 'connections'
+  | 'providers'
+  | 'telegram'
+  | 'email'
+  | 'postgres'
+  | 'mcp'
+  | 'vectors'
+
 export interface WorkflowTemplate {
   key: string
   name: string
   description: string
   category: string
   setup_steps: string[]
+  settings_sections: SettingsSectionId[]
   node_count: number
 }
 

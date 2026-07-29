@@ -7,7 +7,13 @@ Loop node: LOOP_INPUT -> LLM -> LOOP_OUTPUT nested inside the Loop's body,
 scoped via `parent_index`.
 """
 
-from enums import InputNodeFormat, LoopMode, NodeType, OutputNodeFormat
+from enums import (
+    InputNodeFormat,
+    LoopMode,
+    NodeType,
+    OutputNodeFormat,
+    TemplateSettingsSection,
+)
 from schemas import WorkflowGraphEdge, WorkflowGraphNode, WorkflowGraphTransfer
 from templates.definition import TemplateDefinition
 
@@ -80,6 +86,10 @@ DEFINITION = TemplateDefinition(
         "model on the Summarize node after creating it."
     ),
     category="AI & Text",
-    setup_steps=("Choose an LLM provider and model.",),
+    setup_steps=(
+        "Add an LLM provider in Settings -> LLM Providers.",
+        "Open Summarize Each, select the Summarize node, and choose its provider and model.",
+    ),
+    settings_sections=(TemplateSettingsSection.PROVIDERS,),
     graph=_GRAPH,
 )

@@ -6,6 +6,7 @@ TemplateDefinition next to its graph and adding it to this list.
 
 from exceptions import WorkflowTemplateNotFoundError
 from templates.api_watcher import DEFINITION as API_WATCHER_DEFINITION
+from templates.approval_gate import DEFINITION as APPROVAL_GATE_DEFINITION
 from templates.batch_summarizer import DEFINITION as BATCH_SUMMARIZER_DEFINITION
 from templates.daily_digest import DEFINITION as DAILY_DIGEST_DEFINITION
 from templates.definition import TemplateDefinition
@@ -17,6 +18,7 @@ from templates.embeddable_web_chat import (
     DEFINITION as EMBEDDABLE_WEB_CHAT_DEFINITION,
 )
 from templates.rag_chatbot import DEFINITION as RAG_CHATBOT_DEFINITION
+from templates.quick_translate import DEFINITION as QUICK_TRANSLATE_DEFINITION
 from templates.simple_chatbot import DEFINITION as SIMPLE_CHATBOT_DEFINITION
 from templates.support_ticket_router import (
     DEFINITION as SUPPORT_TICKET_ROUTER_DEFINITION,
@@ -24,6 +26,9 @@ from templates.support_ticket_router import (
 from templates.telegram_echo_bot import DEFINITION as TELEGRAM_ECHO_BOT_DEFINITION
 from templates.text_compactor import DEFINITION as TEXT_COMPACTOR_DEFINITION
 from templates.weather_bot import DEFINITION as WEATHER_BOT_DEFINITION
+from templates.webhook_telegram_alert import (
+    DEFINITION as WEBHOOK_TELEGRAM_ALERT_DEFINITION,
+)
 
 TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
     SIMPLE_CHATBOT_DEFINITION,
@@ -36,7 +41,10 @@ TEMPLATE_DEFINITIONS: tuple[TemplateDefinition, ...] = (
     SUPPORT_TICKET_ROUTER_DEFINITION,
     BATCH_SUMMARIZER_DEFINITION,
     TEXT_COMPACTOR_DEFINITION,
+    QUICK_TRANSLATE_DEFINITION,
+    APPROVAL_GATE_DEFINITION,
     API_WATCHER_DEFINITION,
+    WEBHOOK_TELEGRAM_ALERT_DEFINITION,
     WEATHER_BOT_DEFINITION,
 )
 
